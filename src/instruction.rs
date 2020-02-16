@@ -177,6 +177,8 @@ enum Instruction {
     Cpl,
     Daa,
     Dec(Operand),
+    Defb(Operand),
+    Defw(Operand),
     Di,
     Djnz(Operand),
     Ei,
@@ -534,6 +536,119 @@ impl Instruction {
 
                 Instruction::Set(destination, bit, operand)
             }
+            (Prefix::ED, 1, _, 0) => {
+                let destination = Operand::decode_register(y);
+                let port = Operand::RegisterIndirect(cpu::Register::C);
+
+                Instruction::In(destination, port)
+            }
+            (Prefix::ED, 1, _, 1) => {
+                let port = Operand::RegisterIndirect(cpu::Register::C);
+                let source = Operand::decode_register(y);
+
+                Instruction::Out(port, source)
+            }
+            (Prefix::ED, 1, _, 2) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                let destination = Operand::Register(cpu::Register::HL);
+                let source = Operand::decode_register_pair(p, false);
+
+                match q {
+                    0 => Instruction::Sbc(destination, source),
+                    1 => Instruction::Adc(destination, source),
+                    _ => unreachable!(),
+                }
+            }
+            (Prefix::ED, 1, _, 3) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                let address = Operand::Direct16(memory.read_word(next_address));
+                next_address += 2;
+
+                let register = Operand::decode_register_pair(p, false);
+
+                match q {
+                    0 => Instruction::Ld(address, register),
+                    1 => Instruction::Ld(register, address),
+                    _ => unreachable!(),
+                }
+            }
+            (Prefix::ED, 1, _, 4) => {
+                Instruction::Neg
+            }
+            (Prefix::ED, 1, _, 5) => {
+                match y {
+                    1 => Instruction::Reti,
+                    _ => Instruction::Retn,
+                }
+            }
+            (Prefix::ED, 1, _, 6) => {
+                let mode = match y {
+                    0 => InterruptMode::Mode0,
+                    1 => InterruptMode::Mode0, // TODO: verify this. could be mode 1
+                    2 => InterruptMode::Mode1,
+                    3 => InterruptMode::Mode2,
+                    4 => InterruptMode::Mode0,
+                    5 => InterruptMode::Mode0, // TODO: verify this. could be mode 1
+                    6 => InterruptMode::Mode1,
+                    7 => InterruptMode::Mode2,
+                    _ => unreachable!(),
+                };
+
+                Instruction::Im(mode)
+            }
+            (Prefix::ED, 1, _, 7) => {
+                match y {
+                    0 => Instruction::Ld(Operand::Register(cpu::Register::I), Operand::Register(cpu::Register::A)),
+                    1 => Instruction::Ld(Operand::Register(cpu::Register::R), Operand::Register(cpu::Register::A)),
+                    2 => Instruction::Ld(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::I)),
+                    3 => Instruction::Ld(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::R)),
+                    4 => Instruction::Rrd,
+                    5 => Instruction::Rld,
+                    6 => Instruction::Nop,
+                    7 => Instruction::Nop,
+                    _ => unreachable!(),
+                }
+            }
+            (Prefix::ED, 2, _, _) => {
+                match z {
+                    0 => match y {
+                        4 => Instruction::Ldi,
+                        5 => Instruction::Ldd,
+                        6 => Instruction::Ldir,
+                        7 => Instruction::Lddr,
+                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                    }
+                    1 => match y {
+                        4 => Instruction::Cpi,
+                        5 => Instruction::Cpd,
+                        6 => Instruction::Cpir,
+                        7 => Instruction::Cpdr,
+                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                    }
+                    2 => match y {
+                        4 => Instruction::Ini,
+                        5 => Instruction::Ind,
+                        6 => Instruction::Inir,
+                        7 => Instruction::Indr,
+                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                    }
+                    3 => match y {
+                        4 => Instruction::Outi,
+                        5 => Instruction::Outd,
+                        6 => Instruction::Otir,
+                        7 => Instruction::Otdr,
+                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                    }
+                    _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                }
+            }
+            (Prefix::ED, _, _, _) => {
+                Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+            }
             _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
         };
 
@@ -584,6 +699,8 @@ impl Instruction {
             Instruction::Cpl => unimplemented!(),
             Instruction::Daa => unimplemented!(),
             Instruction::Dec(_) => unimplemented!(),
+            Instruction::Defb(_) => unimplemented!(),
+            Instruction::Defw(_) => unimplemented!(),
             Instruction::Di => unimplemented!(),
             Instruction::Djnz(_) => unimplemented!(),
             Instruction::Ei => unimplemented!(),
@@ -662,14 +779,20 @@ impl fmt::Display for Instruction {
             Instruction::Cpl => write!(f, "cpl"),
             Instruction::Daa => write!(f, "daa"),
             Instruction::Dec(destination) => write!(f, "dec {}", destination),
+            Instruction::Defb(value) => write!(f, "defb {}", value),
+            Instruction::Defw(value) => write!(f, "defw {}", value),
             Instruction::Di => write!(f, "di"),
-            Instruction::Djnz(Operand::Immediate16(target)) => write!(f, "djnz {:#06x}", target),
+            Instruction::Djnz(target) => write!(f, "djnz {}", target),
             Instruction::Ei => write!(f, "ei"),
             Instruction::Ex(Operand::Register(cpu::Register::AF), _) => write!(f, "ex af,af'"),
             Instruction::Ex(left, right) => write!(f, "ex {},{}", left, right),
             Instruction::Exx => write!(f, "exx"),
             Instruction::Halt => write!(f, "halt"),
-            Instruction::Im(_) => unimplemented!(),
+            Instruction::Im(mode) => match mode {
+                InterruptMode::Mode0 => write!(f, "im 0"),
+                InterruptMode::Mode1 => write!(f, "im 1"),
+                InterruptMode::Mode2 => write!(f, "im 2"),
+            }
             Instruction::In(destination, port) => write!(f, "in {},{}", destination, port),
             Instruction::Inc(destination) => write!(f, "inc {}", destination),
             Instruction::Ind => unimplemented!(),
@@ -689,7 +812,7 @@ impl fmt::Display for Instruction {
             Instruction::Lddr => unimplemented!(),
             Instruction::Ldi => unimplemented!(),
             Instruction::Ldir => unimplemented!(),
-            Instruction::Neg => unimplemented!(),
+            Instruction::Neg => write!(f, "neg"),
             Instruction::Nop => write!(f, "nop"),
             Instruction::Or(value) => write!(f, "or {}", value),
             Instruction::Out(port, source) => write!(f, "out {},{}", port, source),
@@ -710,8 +833,8 @@ impl fmt::Display for Instruction {
                 JumpTest::Unconditional => write!(f, "ret"),
                 _ => write!(f, "ret {}", jump_test),
             }
-            Instruction::Reti => unimplemented!(),
-            Instruction::Retn => unimplemented!(),
+            Instruction::Reti => write!(f, "reti"),
+            Instruction::Retn => write!(f, "retn"),
             Instruction::Rl(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rl {}", operand),
@@ -728,7 +851,7 @@ impl fmt::Display for Instruction {
                 _ => write!(f, "rlc {}", operand),
             }
             Instruction::Rlca => write!(f, "rlca"),
-            Instruction::Rld => unimplemented!(),
+            Instruction::Rld => write!(f, "rld"),
             Instruction::Rr(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rr {}", operand),
@@ -745,7 +868,7 @@ impl fmt::Display for Instruction {
             }
             Instruction::Rra => write!(f, "rra"),
             Instruction::Rrca => write!(f, "rrca"),
-            Instruction::Rrd => unimplemented!(),
+            Instruction::Rrd => write!(f, "rrd"),
             Instruction::Rst(target) => write!(f, "rst {}", target),
             Instruction::Sbc(destination, value) => write!(f, "sbc {},{}", destination, value),
             Instruction::Scf => write!(f, "scf"),
@@ -786,7 +909,6 @@ impl fmt::Display for Instruction {
             }
             Instruction::Sub(value) => write!(f, "sub {}", value),
             Instruction::Xor(value) => write!(f, "xor {}", value),
-            _ => unreachable!(),
         }
     }
 }
