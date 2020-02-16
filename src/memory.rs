@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::fs::*;
+use std::io;
 
-trait Read {
+pub trait Read {
     fn read_byte(&self, address: usize) -> u8;
 
     fn read_word(&self, address: usize) -> u16 {
@@ -10,7 +12,7 @@ trait Read {
     }
 }
 
-trait Write {
+pub trait Write {
     fn write_byte(&mut self, address: usize, value: u8);
 
     fn write_word(&mut self, address: usize, value: u16) {
@@ -27,7 +29,7 @@ struct ROM {
 impl ROM {
     fn from_file(path: &str) -> ROM {
         // TODO: better error handling
-        // TODO: check ROM size
+        // TODO: check ROM size (should be 16k)
         ROM { data: std::fs::read(path).expect(&format!("ROM file \"{}\" could not be read.", path)) }
     }
 }
@@ -46,6 +48,17 @@ impl RAM {
     fn new(size: usize) -> RAM {
         RAM { data: vec![0; size] }
     }
+
+    fn from_file(path: &str) -> RAM {
+        // TODO: better error handling
+        // TODO: check RAM size (should be 64k)
+        RAM { data: read(path).expect(&format!("ROM file \"{}\" could not be read.", path)) }
+    }
+
+    fn write_to_file(&self, file: &mut File) {
+        // TODO: better error handling
+        io::Write::write_all(file, &self.data);
+    }
 }
 
 impl Read for RAM {
@@ -60,7 +73,7 @@ impl Write for RAM {
     }
 }
 
-struct Memory {
+pub struct Memory {
     ram: RAM,
     lower_rom: ROM,
     lower_rom_enabled: bool,
