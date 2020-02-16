@@ -207,27 +207,28 @@ enum Instruction {
     Outi,
     Pop(Operand),
     Push(Operand),
-    Res(Operand, Operand),
+    Res(Operand, Operand, Operand),
     Ret(JumpTest),
     Reti,
     Retn,
-    Rl(Operand),
+    Rl(Operand, Operand),
     Rla,
-    Rlc(Operand),
+    Rlc(Operand, Operand),
     Rlca,
     Rld,
-    Rr(Operand),
-    Rrc(Operand),
+    Rr(Operand, Operand),
+    Rrc(Operand, Operand),
     Rra,
     Rrca,
     Rrd,
     Rst(Operand),
     Sbc(Operand, Operand),
     Scf,
-    Set(Operand, Operand),
-    Sla(Operand),
-    Sra(Operand),
-    Srl(Operand),
+    Set(Operand, Operand, Operand),
+    Sla(Operand, Operand),
+    Sll(Operand, Operand),
+    Sra(Operand, Operand),
+    Srl(Operand, Operand),
     Sub(Operand),
     Xor(Operand),
 }
@@ -507,6 +508,32 @@ impl Instruction {
             (Prefix::None, 3, _, 7) => {
                 Instruction::Rst(Operand::Immediate8(y * 8))
             }
+            (Prefix::CB, 0, _, _) => {
+                let destination = Operand::decode_register(z);
+                let operand = Operand::decode_register(z);
+
+                Instruction::decode_bitshift(y, destination, operand)
+            }
+            (Prefix::CB, 1, _, _) => {
+                let bit = Operand::Bit(y);
+                let operand = Operand::decode_register(z);
+
+                Instruction::Bit(bit, operand)
+            }
+            (Prefix::CB, 2, _, _) => {
+                let bit = Operand::Bit(y);
+                let destination = Operand::decode_register(z);
+                let operand = Operand::decode_register(z);
+
+                Instruction::Res(destination, bit, operand)
+            }
+            (Prefix::CB, 3, _, _) => {
+                let bit = Operand::Bit(y);
+                let destination = Operand::decode_register(z);
+                let operand = Operand::decode_register(z);
+
+                Instruction::Set(destination, bit, operand)
+            }
             _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
         };
 
@@ -523,6 +550,20 @@ impl Instruction {
             5 => Instruction::Xor(operand),
             6 => Instruction::Or(operand),
             7 => Instruction::Cp(operand),
+            _ => unreachable!(),
+        }
+    }
+
+    fn decode_bitshift(encoded: u8, destination: Operand, operand: Operand) -> Instruction {
+        match encoded {
+            0 => Instruction::Rlc(destination, operand),
+            1 => Instruction::Rrc(destination, operand),
+            2 => Instruction::Rl(destination, operand),
+            3 => Instruction::Rr(destination, operand),
+            4 => Instruction::Sla(destination, operand),
+            5 => Instruction::Sra(destination, operand),
+            6 => Instruction::Sll(destination, operand),
+            7 => Instruction::Srl(destination, operand),
             _ => unreachable!(),
         }
     }
@@ -573,27 +614,28 @@ impl Instruction {
             Instruction::Outi => unimplemented!(),
             Instruction::Pop(_) => unimplemented!(),
             Instruction::Push(_) => unimplemented!(),
-            Instruction::Res(_, _) => unimplemented!(),
+            Instruction::Res(_, _, _) => unimplemented!(),
             Instruction::Ret(_) => unimplemented!(),
             Instruction::Reti => unimplemented!(),
             Instruction::Retn => unimplemented!(),
-            Instruction::Rl(_) => unimplemented!(),
+            Instruction::Rl(_, _) => unimplemented!(),
             Instruction::Rla => unimplemented!(),
-            Instruction::Rlc(_) => unimplemented!(),
+            Instruction::Rlc(_, _) => unimplemented!(),
             Instruction::Rlca => unimplemented!(),
             Instruction::Rld => unimplemented!(),
-            Instruction::Rr(_) => unimplemented!(),
-            Instruction::Rrc(_) => unimplemented!(),
+            Instruction::Rr(_, _) => unimplemented!(),
+            Instruction::Rrc(_, _) => unimplemented!(),
             Instruction::Rra => unimplemented!(),
             Instruction::Rrca => unimplemented!(),
             Instruction::Rrd => unimplemented!(),
             Instruction::Rst(_) => unimplemented!(),
             Instruction::Sbc(_, _) => unimplemented!(),
             Instruction::Scf => unimplemented!(),
-            Instruction::Set(_, _) => unimplemented!(),
-            Instruction::Sla(_) => unimplemented!(),
-            Instruction::Sra(_) => unimplemented!(),
-            Instruction::Srl(_) => unimplemented!(),
+            Instruction::Set(_, _, _) => unimplemented!(),
+            Instruction::Sla(_, _) => unimplemented!(),
+            Instruction::Sll(_, _) => unimplemented!(),
+            Instruction::Sra(_, _) => unimplemented!(),
+            Instruction::Srl(_, _) => unimplemented!(),
             Instruction::Sub(_) => unimplemented!(),
             Instruction::Xor(_) => unimplemented!(),
         }
@@ -657,31 +699,92 @@ impl fmt::Display for Instruction {
             Instruction::Outi => unimplemented!(),
             Instruction::Pop(destination) => write!(f, "pop {}", destination),
             Instruction::Push(source) => write!(f, "push {}", source),
-            Instruction::Res(_, _) => unimplemented!(),
+            Instruction::Res(destination, bit, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "res {},{}", bit, operand),
+                    _ => write!(f, "res {},{}->{}", bit, operand, destination),
+                }
+                _ => write!(f, "res {},{}", bit, operand),
+            }
             Instruction::Ret(jump_test) => match jump_test {
                 JumpTest::Unconditional => write!(f, "ret"),
                 _ => write!(f, "ret {}", jump_test),
             }
             Instruction::Reti => unimplemented!(),
             Instruction::Retn => unimplemented!(),
-            Instruction::Rl(_) => unimplemented!(),
+            Instruction::Rl(destination, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rl {}", operand),
+                    _ => write!(f, "rl {}->{}", operand, destination),
+                }
+                _ => write!(f, "rl {}", operand),
+            }
             Instruction::Rla => write!(f, "rla"),
-            Instruction::Rlc(_) => unimplemented!(),
+            Instruction::Rlc(destination, operand) => match operand { // TODO: extract this into reusable method. how to handle helpers in traits?
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rlc {}", operand),
+                    _ => write!(f, "rlc {}->{}", operand, destination),
+                }
+                _ => write!(f, "rlc {}", operand),
+            }
             Instruction::Rlca => write!(f, "rlca"),
             Instruction::Rld => unimplemented!(),
-            Instruction::Rr(_) => unimplemented!(),
-            Instruction::Rrc(_) => unimplemented!(),
+            Instruction::Rr(destination, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rr {}", operand),
+                    _ => write!(f, "rr {}->{}", operand, destination),
+                }
+                _ => write!(f, "rr {}", operand),
+            }
+            Instruction::Rrc(destination, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rrc {}", operand),
+                    _ => write!(f, "rrc {}->{}", operand, destination),
+                }
+                _ => write!(f, "rrc {}", operand),
+            }
             Instruction::Rra => write!(f, "rra"),
             Instruction::Rrca => write!(f, "rrca"),
             Instruction::Rrd => unimplemented!(),
             Instruction::Rst(target) => write!(f, "rst {}", target),
             Instruction::Sbc(destination, value) => write!(f, "sbc {},{}", destination, value),
             Instruction::Scf => write!(f, "scf"),
-            Instruction::Set(_, _) => unimplemented!(),
-            Instruction::Sla(_) => unimplemented!(),
-            Instruction::Sra(_) => unimplemented!(),
-            Instruction::Srl(_) => unimplemented!(),
-            Instruction::Sub(value) => write!(f, "sub"),
+            Instruction::Set(destination, bit, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "set {},{}", bit, operand),
+                    _ => write!(f, "set {},{}->{}", bit, operand, destination),
+                }
+                _ => write!(f, "set {},{}", bit, operand),
+            }
+            Instruction::Sla(destination, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "sla {}", operand),
+                    _ => write!(f, "sla {}->{}", operand, destination),
+                }
+                _ => write!(f, "sla {}", operand),
+            }
+            Instruction::Sll(destination, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "sll {}", operand),
+                    _ => write!(f, "sll {}->{}", operand, destination),
+                }
+                _ => write!(f, "sll {}", operand),
+            }
+            Instruction::Sra(destination, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "sra {}", operand),
+                    _ => write!(f, "sra {}->{}", operand, destination),
+                }
+                _ => write!(f, "sra {}", operand),
+            }
+            Instruction::Srl(destination, operand) => match operand {
+                Operand::Indexed(_, _) => match destination {
+                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "srl {}", operand),
+                    _ => write!(f, "srl {}->{}", operand, destination),
+                }
+                _ => write!(f, "srl {}", operand),
+            }
+            Instruction::Sub(value) => write!(f, "sub {}", value),
             Instruction::Xor(value) => write!(f, "xor {}", value),
             _ => unreachable!(),
         }
