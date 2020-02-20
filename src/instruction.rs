@@ -657,174 +657,6 @@ impl Instruction {
             (Prefix::ED, _, _, _) => {
                 Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
             }
-            (Prefix::DD, 0, _, 1) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                match q {
-                    0 => {
-                        let destination = Operand::decode_register_pair(p, false);
-                        match destination {
-                            Operand::Register(cpu::Register::HL) => {
-                                let value = memory.read_word(next_address);
-                                next_address += 2;
-
-                                Instruction::Ld(Operand::Register(cpu::Register::IX), Operand::Immediate16(value))
-                            }
-                            _ => {
-                                next_address -= 1;
-                                Instruction::Defb(Operand::Immediate8(0xdd))
-                            }
-                        }
-                    }
-                    1 => {
-                        let source = Operand::decode_register_pair(p, false);
-                        match source {
-                            Operand::Register(cpu::Register::HL) => {
-                                Instruction::Add(Operand::Register(cpu::Register::IX), Operand::Register(cpu::Register::IX))
-                            }
-                            register => {
-                                Instruction::Add(Operand::Register(cpu::Register::IX), register)
-                            }
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::DD, 0, _, 2) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                match p {
-                    2 => {
-                        let address = memory.read_word(next_address);
-                        next_address += 2;
-
-                        match q {
-                            0 => Instruction::Ld(Operand::Direct16(address), Operand::Register(cpu::Register::IX)),
-                            1 => Instruction::Ld(Operand::Register(cpu::Register::IX), Operand::Direct16(address)),
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => {
-                            next_address -= 1;
-                            Instruction::Defb(Operand::Immediate8(0xdd))
-                    }
-                }
-            }
-            (Prefix::DD, 0, _, 3) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                match p {
-                    2 => { // TODO: use decoded HL register?
-                        match q {
-                            0 => Instruction::Inc(Operand::Register(cpu::Register::IX)),
-                            1 => Instruction::Dec(Operand::Register(cpu::Register::IX)),
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => {
-                            next_address -= 1;
-                            Instruction::Defb(Operand::Immediate8(0xdd))
-                    }
-                }
-            }
-            (Prefix::DD, 0, _, 4) => {
-                let register = Operand::decode_register(y);
-
-                match register {
-                    Operand::Register(cpu::Register::H) => {
-                        Instruction::Inc(Operand::Register(cpu::Register::IXH))
-                    }
-                    Operand::Register(cpu::Register::L) => {
-                        Instruction::Inc(Operand::Register(cpu::Register::IXL))
-                    }
-                    Operand::RegisterIndirect(cpu::Register::HL) => {
-                        let displacement = memory.read_byte(next_address) as i8;
-                        next_address += 1;
-
-                        Instruction::Inc(Operand::Indexed(cpu::Register::IX, displacement))
-                    }
-                    _ => {
-                            next_address -= 1;
-                            Instruction::Defb(Operand::Immediate8(0xdd))
-                    }
-                }
-            }
-            (Prefix::DD, 0, _, 5) => {
-                let register = Operand::decode_register(y);
-
-                match register {
-                    Operand::Register(cpu::Register::H) => {
-                        Instruction::Dec(Operand::Register(cpu::Register::IXH))
-                    }
-                    Operand::Register(cpu::Register::L) => {
-                        Instruction::Dec(Operand::Register(cpu::Register::IXL))
-                    }
-                    Operand::RegisterIndirect(cpu::Register::HL) => {
-                        let displacement = memory.read_byte(next_address) as i8;
-                        next_address += 1;
-
-                        Instruction::Dec(Operand::Indexed(cpu::Register::IX, displacement))
-                    }
-                    _ => {
-                            next_address -= 1;
-                            Instruction::Defb(Operand::Immediate8(0xdd))
-                    }
-                }
-            }
-            (Prefix::DD, 0, _, 6) => {
-                let register = Operand::decode_register(y);
-
-                match register {
-                    Operand::Register(cpu::Register::H) => {
-                        let value = memory.read_byte(next_address);
-                        next_address += 1;
-
-                        Instruction::Ld(Operand::Register(cpu::Register::IXH), Operand::Immediate8(value))
-                    }
-                    Operand::Register(cpu::Register::L) => {
-                        let value = memory.read_byte(next_address);
-                        next_address += 1;
-
-                        Instruction::Ld(Operand::Register(cpu::Register::IXL), Operand::Immediate8(value))
-                    }
-                    Operand::RegisterIndirect(cpu::Register::HL) => {
-                        let displacement = memory.read_byte(next_address) as i8;
-                        next_address += 1;
-
-                        let value = memory.read_byte(next_address);
-                        next_address += 1;
-
-                        Instruction::Ld(Operand::Indexed(cpu::Register::IX, displacement), Operand::Immediate8(value))
-                    }
-                    _ => {
-                            next_address -= 1;
-                            Instruction::Defb(Operand::Immediate8(0xdd))
-                    }
-                }
-            }
-            (Prefix::DD, 1, _, _) => {
-                let destination = Operand::decode_register(y);
-                let source = Operand::decode_register(y);
-
-                match (destination, source) {
-                    (Operand::RegisterIndirect(cpu::Register::HL), Operand::RegisterIndirect(cpu::Register::HL)) => {
-                        unimplemented!() // defb
-                    }
-                    (Operand::RegisterIndirect(cpu::Register::HL), _) => {
-
-                    }
-                    (_, Operand::RegisterIndirect(cpu::Register::HL)) => {
-
-                    }
-                }
-            }
-            (Prefix::DD, _, _, _) => {
-                next_address -= 1;
-                Instruction::Defb(Operand::Immediate8(0xdd))
-            }
             _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
         };
 
@@ -1124,7 +956,7 @@ where M: Read
         }
     }
 
-    fn decode_at(&self, address: usize) -> (Instruction, usize) {
+    fn decode_at(&mut self, address: usize) -> (Instruction, usize) {
         self.next_address = address;
 
         let opcode = self.memory.read_byte(self.next_address);
@@ -1139,7 +971,7 @@ where M: Read
         }
     }
 
-    fn decode_next(&self) -> (Instruction, usize) {
+    fn decode_next(&mut self) -> (Instruction, usize) {
         self.decode_at(self.next_address)
     }
 
@@ -1151,7 +983,7 @@ where M: Read
         Instruction::Nop
     }
 
-    fn decode_prefixed(&self, mode: DecoderMode) -> Instruction {
+    fn decode_prefixed(&mut self, mode: DecoderMode) -> Instruction {
         self.mode = mode;
 
         let opcode = self.memory.read_byte(self.next_address);
@@ -1181,7 +1013,7 @@ where M: Read
         }
     }
 
-    fn decode_instruction(&self, opcode: u8) -> Instruction {
+    fn decode_instruction(&mut self, opcode: u8) -> Instruction {
         let x = opcode >> 6;
         let y = (opcode >> 3) & 7;
         let z = opcode & 7;
