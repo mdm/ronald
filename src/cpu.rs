@@ -14,7 +14,11 @@ pub enum Register {
     I,
     R,
     IX,
+    IXH,
+    IXL,
     IY,
+    IYH,
+    IYL,
     SP,
     PC,
 }

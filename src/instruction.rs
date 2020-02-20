@@ -76,7 +76,11 @@ impl fmt::Display for Operand {
                 cpu::Register::I => write!(f, "i"),
                 cpu::Register::R => write!(f, "r"),
                 cpu::Register::IX => write!(f, "ix"),
+                cpu::Register::IXH => write!(f, "ixh"),
+                cpu::Register::IXL => write!(f, "ixl"),
                 cpu::Register::IY => write!(f, "iy"),
+                cpu::Register::IYH => write!(f, "iyh"),
+                cpu::Register::IYL => write!(f, "iyl"),
                 cpu::Register::SP => write!(f, "sp"),
                 cpu::Register::PC => write!(f, "pc"),
             }
@@ -96,7 +100,11 @@ impl fmt::Display for Operand {
                 cpu::Register::I => write!(f, "(i)"),
                 cpu::Register::R => write!(f, "(r)"),
                 cpu::Register::IX => write!(f, "(ix)"),
+                cpu::Register::IXH => write!(f, "(ixh)"),
+                cpu::Register::IXL => write!(f, "(ixl)"),
                 cpu::Register::IY => write!(f, "(iy)"),
+                cpu::Register::IYH => write!(f, "(iyh)"),
+                cpu::Register::IYL => write!(f, "(iyl)"),
                 cpu::Register::SP => write!(f, "(sp)"),
                 cpu::Register::PC => write!(f, "(pc)"),
             }
@@ -278,7 +286,7 @@ impl Instruction {
                 }
             }
             _ => Prefix::None
-        };
+        };  
 
         let x = opcode >> 6;
         let y = (opcode >> 3) & 7;
@@ -649,6 +657,174 @@ impl Instruction {
             (Prefix::ED, _, _, _) => {
                 Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
             }
+            (Prefix::DD, 0, _, 1) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                match q {
+                    0 => {
+                        let destination = Operand::decode_register_pair(p, false);
+                        match destination {
+                            Operand::Register(cpu::Register::HL) => {
+                                let value = memory.read_word(next_address);
+                                next_address += 2;
+
+                                Instruction::Ld(Operand::Register(cpu::Register::IX), Operand::Immediate16(value))
+                            }
+                            _ => {
+                                next_address -= 1;
+                                Instruction::Defb(Operand::Immediate8(0xdd))
+                            }
+                        }
+                    }
+                    1 => {
+                        let source = Operand::decode_register_pair(p, false);
+                        match source {
+                            Operand::Register(cpu::Register::HL) => {
+                                Instruction::Add(Operand::Register(cpu::Register::IX), Operand::Register(cpu::Register::IX))
+                            }
+                            register => {
+                                Instruction::Add(Operand::Register(cpu::Register::IX), register)
+                            }
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            (Prefix::DD, 0, _, 2) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                match p {
+                    2 => {
+                        let address = memory.read_word(next_address);
+                        next_address += 2;
+
+                        match q {
+                            0 => Instruction::Ld(Operand::Direct16(address), Operand::Register(cpu::Register::IX)),
+                            1 => Instruction::Ld(Operand::Register(cpu::Register::IX), Operand::Direct16(address)),
+                            _ => unreachable!(),
+                        }
+                    }
+                    _ => {
+                            next_address -= 1;
+                            Instruction::Defb(Operand::Immediate8(0xdd))
+                    }
+                }
+            }
+            (Prefix::DD, 0, _, 3) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                match p {
+                    2 => { // TODO: use decoded HL register?
+                        match q {
+                            0 => Instruction::Inc(Operand::Register(cpu::Register::IX)),
+                            1 => Instruction::Dec(Operand::Register(cpu::Register::IX)),
+                            _ => unreachable!(),
+                        }
+                    }
+                    _ => {
+                            next_address -= 1;
+                            Instruction::Defb(Operand::Immediate8(0xdd))
+                    }
+                }
+            }
+            (Prefix::DD, 0, _, 4) => {
+                let register = Operand::decode_register(y);
+
+                match register {
+                    Operand::Register(cpu::Register::H) => {
+                        Instruction::Inc(Operand::Register(cpu::Register::IXH))
+                    }
+                    Operand::Register(cpu::Register::L) => {
+                        Instruction::Inc(Operand::Register(cpu::Register::IXL))
+                    }
+                    Operand::RegisterIndirect(cpu::Register::HL) => {
+                        let displacement = memory.read_byte(next_address) as i8;
+                        next_address += 1;
+
+                        Instruction::Inc(Operand::Indexed(cpu::Register::IX, displacement))
+                    }
+                    _ => {
+                            next_address -= 1;
+                            Instruction::Defb(Operand::Immediate8(0xdd))
+                    }
+                }
+            }
+            (Prefix::DD, 0, _, 5) => {
+                let register = Operand::decode_register(y);
+
+                match register {
+                    Operand::Register(cpu::Register::H) => {
+                        Instruction::Dec(Operand::Register(cpu::Register::IXH))
+                    }
+                    Operand::Register(cpu::Register::L) => {
+                        Instruction::Dec(Operand::Register(cpu::Register::IXL))
+                    }
+                    Operand::RegisterIndirect(cpu::Register::HL) => {
+                        let displacement = memory.read_byte(next_address) as i8;
+                        next_address += 1;
+
+                        Instruction::Dec(Operand::Indexed(cpu::Register::IX, displacement))
+                    }
+                    _ => {
+                            next_address -= 1;
+                            Instruction::Defb(Operand::Immediate8(0xdd))
+                    }
+                }
+            }
+            (Prefix::DD, 0, _, 6) => {
+                let register = Operand::decode_register(y);
+
+                match register {
+                    Operand::Register(cpu::Register::H) => {
+                        let value = memory.read_byte(next_address);
+                        next_address += 1;
+
+                        Instruction::Ld(Operand::Register(cpu::Register::IXH), Operand::Immediate8(value))
+                    }
+                    Operand::Register(cpu::Register::L) => {
+                        let value = memory.read_byte(next_address);
+                        next_address += 1;
+
+                        Instruction::Ld(Operand::Register(cpu::Register::IXL), Operand::Immediate8(value))
+                    }
+                    Operand::RegisterIndirect(cpu::Register::HL) => {
+                        let displacement = memory.read_byte(next_address) as i8;
+                        next_address += 1;
+
+                        let value = memory.read_byte(next_address);
+                        next_address += 1;
+
+                        Instruction::Ld(Operand::Indexed(cpu::Register::IX, displacement), Operand::Immediate8(value))
+                    }
+                    _ => {
+                            next_address -= 1;
+                            Instruction::Defb(Operand::Immediate8(0xdd))
+                    }
+                }
+            }
+            (Prefix::DD, 1, _, _) => {
+                let destination = Operand::decode_register(y);
+                let source = Operand::decode_register(y);
+
+                match (destination, source) {
+                    (Operand::RegisterIndirect(cpu::Register::HL), Operand::RegisterIndirect(cpu::Register::HL)) => {
+                        unimplemented!() // defb
+                    }
+                    (Operand::RegisterIndirect(cpu::Register::HL), _) => {
+
+                    }
+                    (_, Operand::RegisterIndirect(cpu::Register::HL)) => {
+
+                    }
+                }
+            }
+            (Prefix::DD, _, _, _) => {
+                next_address -= 1;
+                Instruction::Defb(Operand::Immediate8(0xdd))
+            }
             _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
         };
 
@@ -909,6 +1085,334 @@ impl fmt::Display for Instruction {
             }
             Instruction::Sub(value) => write!(f, "sub {}", value),
             Instruction::Xor(value) => write!(f, "xor {}", value),
+        }
+    }
+}
+
+enum DecoderMode {
+    Default,
+    PatchIX,
+    PatchIY,
+}
+
+impl DecoderMode {
+    fn into_instruction(&self) -> Instruction {
+        match self {
+            DecoderMode::PatchIX => Instruction::Defb(Operand::Immediate8(0xdd)),
+            DecoderMode::PatchIY => Instruction::Defb(Operand::Immediate8(0xfd)),
+            _ => unreachable!(),
+        }
+    }
+}
+
+struct Decoder<'m, M> {
+    memory: &'m M,
+    next_address: usize,
+    mode: DecoderMode,
+    patched: bool,
+}
+
+impl<'m, M> Decoder<'m, M>
+where M: Read
+{ // based on http://z80.info/decoding.htm
+    fn new(memory: &M) -> Decoder<M> {
+        Decoder {
+            memory,
+            next_address: 0,
+            mode: DecoderMode::Default,
+            patched: false
+        }
+    }
+
+    fn decode_at(&self, address: usize) -> (Instruction, usize) {
+        self.next_address = address;
+
+        let opcode = self.memory.read_byte(self.next_address);
+        self.next_address += 1;
+
+        match opcode {
+            0xcb => (self.decode_cb_instruction(), self.next_address),
+            0xed => (self.decode_ed_instruction(), self.next_address),
+            0xdd => (self.decode_prefixed(DecoderMode::PatchIX), self.next_address),
+            0xfd => (self.decode_prefixed(DecoderMode::PatchIY), self.next_address),
+            _ => (self.decode_instruction(opcode), self.next_address),
+        }
+    }
+
+    fn decode_next(&self) -> (Instruction, usize) {
+        self.decode_at(self.next_address)
+    }
+
+    fn decode_cb_instruction(&self) -> Instruction {
+        Instruction::Nop
+    }
+
+    fn decode_ed_instruction(&self) -> Instruction {
+        Instruction::Nop
+    }
+
+    fn decode_prefixed(&self, mode: DecoderMode) -> Instruction {
+        self.mode = mode;
+
+        let opcode = self.memory.read_byte(self.next_address);
+
+        match opcode {
+            0xcb => {
+                self.next_address += 1;
+                self.decode_cb_instruction()
+            }
+            0xed => self.mode.into_instruction(),
+            0xdd => self.mode.into_instruction(),
+            0xfd => self.mode.into_instruction(),
+            _ => {
+                self.next_address += 1;
+                self.patched = false;
+
+                let start = self.next_address;
+                let instruction = self.decode_instruction(opcode);
+
+                if self.patched {
+                    instruction
+                } else {
+                    self.next_address = start;
+                    self.mode.into_instruction()
+                }
+            }
+        }
+    }
+
+    fn decode_instruction(&self, opcode: u8) -> Instruction {
+        let x = opcode >> 6;
+        let y = (opcode >> 3) & 7;
+        let z = opcode & 7;
+
+        match (x, y, z) {
+            (0, 0, 0) =>
+                Instruction::Nop,
+            (0, 1, 0) =>
+                Instruction::Ex(
+                    Operand::Register(cpu::Register::AF),
+                    // this instruction swaps AF and AF', but using AF below uniquely identifies the instruction
+                    Operand::Register(cpu::Register::AF),
+                ),
+            (0, 2, 0) => {
+                let displacement = self.memory.read_byte(self.next_address) as i8;
+                self.next_address += 1;
+                Instruction::Djnz(
+                    Operand::Immediate16((self.next_address as u16).wrapping_add(displacement as u16))
+                )
+            }
+            (0, _, 0) => {
+                let jump_test = if y == 3 {
+                    JumpTest::Unconditional
+                } else {
+                    JumpTest::decode(y - 4)
+                };
+                let displacement = self.memory.read_byte(self.next_address) as i8;
+                self.next_address += 1;
+                Instruction::Jr(
+                    jump_test,
+                    Operand::Immediate16((self.next_address as u16).wrapping_add(displacement as u16))
+                )
+            }
+            (0, _, 1) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                let register_pair = Operand::decode_register_pair(p, false);
+
+                match q {
+                    0 => {
+                        let value = Operand::Immediate16(self.memory.read_word(self.next_address));
+                        self.next_address += 2;
+                        Instruction::Ld(register_pair, value)
+                    }
+                    1 => {
+                        Instruction::Add(Operand::Register(cpu::Register::HL), register_pair)
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            (0, _, 2) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                let address = match p {
+                    0 => Operand::RegisterIndirect(cpu::Register::BC),
+                    1 => Operand::RegisterIndirect(cpu::Register::DE),
+                    _ => {
+                        let address = self.memory.read_word(self.next_address);
+                        self.next_address += 2;
+                        Operand::Direct16(address)
+                    }
+                };
+
+                let register = match p {
+                    2 => Operand::Register(cpu::Register::HL),
+                    _ => Operand::Register(cpu::Register::A),
+                };
+
+                match q {
+                    0 => Instruction::Ld(address, register),
+                    1 => Instruction::Ld(register, address),
+                    _ => unreachable!(),
+                }
+            }
+            (0, _, 3) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                let register_pair = Operand::decode_register_pair(p, false);
+
+                match q {
+                    0 => {
+                        Instruction::Inc(register_pair)
+                    }
+                    1 => {
+                        Instruction::Dec(register_pair)
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            (0, _, 4) => {
+                let register = Operand::decode_register(y);
+                Instruction::Inc(register)
+            }
+            (0, _, 5) => {
+                let register = Operand::decode_register(y);
+                Instruction::Dec(register)
+            }
+            (0, _, 6) => {
+                let register = Operand::decode_register(y);
+
+                let value = self.memory.read_byte(self.next_address);
+                self.next_address += 1;
+
+                Instruction::Ld(register, Operand::Immediate8(value))
+            }
+            (0, _, 7) => {
+                match y {
+                    0 => Instruction::Rlca,
+                    1 => Instruction::Rrca,
+                    2 => Instruction::Rla,
+                    3 => Instruction::Rra,
+                    4 => Instruction::Daa,
+                    5 => Instruction::Cpl,
+                    6 => Instruction::Scf,
+                    7 => Instruction::Ccf,
+                    _ => unreachable!(),
+                }
+            }
+            (1, _, _) => {
+                if y == 6 && z == 6 {
+                    Instruction::Halt
+                } else {
+                    let destination = Operand::decode_register(y);
+                    let source = Operand::decode_register(z);
+                    Instruction::Ld(destination, source)
+                }
+            }
+            (2, _, _) => {
+                let register = Operand::decode_register(z);
+                Instruction::decode_alu(y, register)
+            }
+            (3, _, 0) => {
+                let jump_test = JumpTest::decode(y);
+                Instruction::Ret(jump_test)
+            }
+            (3, _, 1) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                match q {
+                    0 => {
+                        let register_pair = Operand::decode_register_pair(p, true);
+                        Instruction::Pop(register_pair)
+                    }
+                    1 => match p {
+                        0 => Instruction::Ret(JumpTest::Unconditional),
+                        1 => Instruction::Exx,
+                        2 => Instruction::Jp(JumpTest::Unconditional, Operand::Register(cpu::Register::HL)),
+                        3 => Instruction::Ld(Operand::Register(cpu::Register::SP), Operand::Register(cpu::Register::HL)),
+                        _ => unreachable!(),
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            (3, _, 2) => {
+                let jump_test = JumpTest::decode(y);
+
+                let target = Operand::Immediate16(self.memory.read_word(self.next_address));
+                self.next_address += 2;
+
+                Instruction::Jp(jump_test, target)
+            }
+            (3, _, 3) => {
+                match y {
+                    0 => {
+                        let target = Operand::Immediate16(self.memory.read_word(self.next_address));
+                        self.next_address += 2;
+
+                        Instruction::Jp(JumpTest::Unconditional, target)
+                    }
+                    1 => unreachable!(),
+                    2 => {
+                        let port = Operand::Direct8(self.memory.read_byte(self.next_address));
+                        self.next_address += 1;
+
+                        Instruction::Out(port, Operand::Register(cpu::Register::A))
+                    }
+                    3 => {
+                        let port = Operand::Direct8(self.memory.read_byte(self.next_address));
+                        self.next_address += 1;
+
+                        Instruction::In(Operand::Register(cpu::Register::A), port)
+                    }
+                    4 => Instruction::Ex(Operand::RegisterIndirect(cpu::Register::SP), Operand::Register(cpu::Register::HL)),
+                    5 => Instruction::Ex(Operand::Register(cpu::Register::DE), Operand::Register(cpu::Register::HL)),
+                    6 => Instruction::Di,
+                    7 => Instruction::Ei,
+                    _ => unreachable!(),
+                }
+            }
+            (3, _, 4) => {
+                let jump_test = JumpTest::decode(y);
+
+                let target = Operand::Immediate16(self.memory.read_word(self.next_address));
+                self.next_address += 2;
+
+                Instruction::Call(jump_test, target)
+            }
+            (3, _, 5) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                match q {
+                    0 => {
+                        let source = Operand::decode_register_pair(p, true);
+                        Instruction::Push(source)
+                    }
+                    1 => if p == 0 {
+                        let target = Operand::Immediate16(self.memory.read_word(self.next_address));
+                        self.next_address += 2;
+
+                        Instruction::Call(JumpTest::Unconditional, target)
+                    } else {
+                        unreachable!()
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            (3, _, 6) => {
+                let value = Operand::Immediate8(self.memory.read_byte(self.next_address));
+                self.next_address += 1;
+
+                Instruction::decode_alu(y, value)
+            }
+            (3, _, 7) => {
+                Instruction::Rst(Operand::Immediate8(y * 8))
+            }
+            _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
         }
     }
 }
