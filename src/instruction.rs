@@ -244,424 +244,6 @@ enum Instruction {
 }
 
 impl Instruction {
-    fn decode(memory: &Memory, address: usize) -> (Instruction, usize) {
-        // based on http://z80.info/decoding.htm
-
-        let mut opcode = memory.read_byte(address);
-        let mut next_address = address + 1;
-
-        let prefix = match opcode {
-            0xcb => {
-                opcode = memory.read_byte(next_address);
-                next_address += 1;
-                Prefix::CB
-            }
-            0xed => {
-                opcode = memory.read_byte(next_address);
-                next_address += 1;
-                Prefix::ED
-            }
-            0xdd => {
-                opcode = memory.read_byte(next_address);
-                next_address += 1;
-                if opcode == 0xcb {
-                    opcode = memory.read_byte(next_address);
-                    let displacement = memory.read_byte(next_address + 1); // TODO: as i8?
-                    next_address += 2;
-                    Prefix::DDCB(displacement)
-                } else {
-                    Prefix::DD
-                }
-            }
-            0xfd => {
-                opcode = memory.read_byte(next_address);
-                next_address += 1;
-                if opcode == 0xcb {
-                    opcode = memory.read_byte(next_address);
-                    let displacement = memory.read_byte(next_address + 1); // TODO: as i8?
-                    next_address += 2;
-                    Prefix::FDCB(displacement)
-                } else {
-                    Prefix::FD
-                }
-            }
-            _ => Prefix::None
-        };  
-
-        let x = opcode >> 6;
-        let y = (opcode >> 3) & 7;
-        let z = opcode & 7;
-
-        let instruction = match (prefix, x, y, z) {
-            (Prefix::None, 0, 0, 0) =>
-                Instruction::Nop,
-            (Prefix::None, 0, 1, 0) =>
-                Instruction::Ex(
-                    Operand::Register(cpu::Register::AF),
-                    // this instruction swaps AF and AF', but using AF below uniquely identifies the instruction
-                    Operand::Register(cpu::Register::AF),
-                ),
-            (Prefix::None, 0, 2, 0) => {
-                let displacement = memory.read_byte(next_address) as i8;
-                next_address += 1;
-                Instruction::Djnz(
-                    Operand::Immediate16((next_address as u16).wrapping_add(displacement as u16))
-                )
-            }
-            (Prefix::None, 0, _, 0) => {
-                let jump_test = if y == 3 {
-                    JumpTest::Unconditional
-                } else {
-                    JumpTest::decode(y - 4)
-                };
-                let displacement = memory.read_byte(next_address) as i8;
-                next_address += 1;
-                Instruction::Jr(
-                    jump_test,
-                    Operand::Immediate16((next_address as u16).wrapping_add(displacement as u16))
-                )
-            }
-            (Prefix::None, 0, _, 1) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                let register_pair = Operand::decode_register_pair(p, false);
-
-                match q {
-                    0 => {
-                        let value = Operand::Immediate16(memory.read_word(next_address));
-                        next_address += 2;
-                        Instruction::Ld(register_pair, value)
-                    }
-                    1 => {
-                        Instruction::Add(Operand::Register(cpu::Register::HL), register_pair)
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::None, 0, _, 2) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                let address = match p {
-                    0 => Operand::RegisterIndirect(cpu::Register::BC),
-                    1 => Operand::RegisterIndirect(cpu::Register::DE),
-                    _ => {
-                        let address = memory.read_word(next_address);
-                        next_address += 2;
-                        Operand::Direct16(address)
-                    }
-                };
-
-                let register = match p {
-                    2 => Operand::Register(cpu::Register::HL),
-                    _ => Operand::Register(cpu::Register::A),
-                };
-
-                match q {
-                    0 => Instruction::Ld(address, register),
-                    1 => Instruction::Ld(register, address),
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::None, 0, _, 3) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                let register_pair = Operand::decode_register_pair(p, false);
-
-                match q {
-                    0 => {
-                        Instruction::Inc(register_pair)
-                    }
-                    1 => {
-                        Instruction::Dec(register_pair)
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::None, 0, _, 4) => {
-                let register = Operand::decode_register(y);
-                Instruction::Inc(register)
-            }
-            (Prefix::None, 0, _, 5) => {
-                let register = Operand::decode_register(y);
-                Instruction::Dec(register)
-            }
-            (Prefix::None, 0, _, 6) => {
-                let register = Operand::decode_register(y);
-
-                let value = memory.read_byte(next_address);
-                next_address += 1;
-
-                Instruction::Ld(register, Operand::Immediate8(value))
-            }
-            (Prefix::None, 0, _, 7) => {
-                match y {
-                    0 => Instruction::Rlca,
-                    1 => Instruction::Rrca,
-                    2 => Instruction::Rla,
-                    3 => Instruction::Rra,
-                    4 => Instruction::Daa,
-                    5 => Instruction::Cpl,
-                    6 => Instruction::Scf,
-                    7 => Instruction::Ccf,
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::None, 1, _, _) => {
-                if y == 6 && z == 6 {
-                    Instruction::Halt
-                } else {
-                    let destination = Operand::decode_register(y);
-                    let source = Operand::decode_register(z);
-                    Instruction::Ld(destination, source)
-                }
-            }
-            (Prefix::None, 2, _, _) => {
-                let register = Operand::decode_register(z);
-                Instruction::decode_alu(y, register)
-            }
-            (Prefix::None, 3, _, 0) => {
-                let jump_test = JumpTest::decode(y);
-                Instruction::Ret(jump_test)
-            }
-            (Prefix::None, 3, _, 1) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                match q {
-                    0 => {
-                        let register_pair = Operand::decode_register_pair(p, true);
-                        Instruction::Pop(register_pair)
-                    }
-                    1 => match p {
-                        0 => Instruction::Ret(JumpTest::Unconditional),
-                        1 => Instruction::Exx,
-                        2 => Instruction::Jp(JumpTest::Unconditional, Operand::Register(cpu::Register::HL)),
-                        3 => Instruction::Ld(Operand::Register(cpu::Register::SP), Operand::Register(cpu::Register::HL)),
-                        _ => unreachable!(),
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::None, 3, _, 2) => {
-                let jump_test = JumpTest::decode(y);
-
-                let target = Operand::Immediate16(memory.read_word(next_address));
-                next_address += 2;
-
-                Instruction::Jp(jump_test, target)
-            }
-            (Prefix::None, 3, _, 3) => {
-                match y {
-                    0 => {
-                        let target = Operand::Immediate16(memory.read_word(next_address));
-                        next_address += 2;
-
-                        Instruction::Jp(JumpTest::Unconditional, target)
-                    }
-                    1 => unreachable!(),
-                    2 => {
-                        let port = Operand::Direct8(memory.read_byte(next_address));
-                        next_address += 1;
-
-                        Instruction::Out(port, Operand::Register(cpu::Register::A))
-                    }
-                    3 => {
-                        let port = Operand::Direct8(memory.read_byte(next_address));
-                        next_address += 1;
-
-                        Instruction::In(Operand::Register(cpu::Register::A), port)
-                    }
-                    4 => Instruction::Ex(Operand::RegisterIndirect(cpu::Register::SP), Operand::Register(cpu::Register::HL)),
-                    5 => Instruction::Ex(Operand::Register(cpu::Register::DE), Operand::Register(cpu::Register::HL)),
-                    6 => Instruction::Di,
-                    7 => Instruction::Ei,
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::None, 3, _, 4) => {
-                let jump_test = JumpTest::decode(y);
-
-                let target = Operand::Immediate16(memory.read_word(next_address));
-                next_address += 2;
-
-                Instruction::Call(jump_test, target)
-            }
-            (Prefix::None, 3, _, 5) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                match q {
-                    0 => {
-                        let source = Operand::decode_register_pair(p, true);
-                        Instruction::Push(source)
-                    }
-                    1 => if p == 0 {
-                        let target = Operand::Immediate16(memory.read_word(next_address));
-                        next_address += 2;
-
-                        Instruction::Call(JumpTest::Unconditional, target)
-                    } else {
-                        unreachable!()
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::None, 3, _, 6) => {
-                let value = Operand::Immediate8(memory.read_byte(next_address));
-                next_address += 1;
-
-                Instruction::decode_alu(y, value)
-            }
-            (Prefix::None, 3, _, 7) => {
-                Instruction::Rst(Operand::Immediate8(y * 8))
-            }
-            (Prefix::CB, 0, _, _) => {
-                let destination = Operand::decode_register(z);
-                let operand = Operand::decode_register(z);
-
-                Instruction::decode_bitshift(y, destination, operand)
-            }
-            (Prefix::CB, 1, _, _) => {
-                let bit = Operand::Bit(y);
-                let operand = Operand::decode_register(z);
-
-                Instruction::Bit(bit, operand)
-            }
-            (Prefix::CB, 2, _, _) => {
-                let bit = Operand::Bit(y);
-                let destination = Operand::decode_register(z);
-                let operand = Operand::decode_register(z);
-
-                Instruction::Res(destination, bit, operand)
-            }
-            (Prefix::CB, 3, _, _) => {
-                let bit = Operand::Bit(y);
-                let destination = Operand::decode_register(z);
-                let operand = Operand::decode_register(z);
-
-                Instruction::Set(destination, bit, operand)
-            }
-            (Prefix::ED, 1, _, 0) => {
-                let destination = Operand::decode_register(y);
-                let port = Operand::RegisterIndirect(cpu::Register::C);
-
-                Instruction::In(destination, port)
-            }
-            (Prefix::ED, 1, _, 1) => {
-                let port = Operand::RegisterIndirect(cpu::Register::C);
-                let source = Operand::decode_register(y);
-
-                Instruction::Out(port, source)
-            }
-            (Prefix::ED, 1, _, 2) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                let destination = Operand::Register(cpu::Register::HL);
-                let source = Operand::decode_register_pair(p, false);
-
-                match q {
-                    0 => Instruction::Sbc(destination, source),
-                    1 => Instruction::Adc(destination, source),
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::ED, 1, _, 3) => {
-                let p = y >> 1;
-                let q = y & 1;
-
-                let address = Operand::Direct16(memory.read_word(next_address));
-                next_address += 2;
-
-                let register = Operand::decode_register_pair(p, false);
-
-                match q {
-                    0 => Instruction::Ld(address, register),
-                    1 => Instruction::Ld(register, address),
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::ED, 1, _, 4) => {
-                Instruction::Neg
-            }
-            (Prefix::ED, 1, _, 5) => {
-                match y {
-                    1 => Instruction::Reti,
-                    _ => Instruction::Retn,
-                }
-            }
-            (Prefix::ED, 1, _, 6) => {
-                let mode = match y {
-                    0 => InterruptMode::Mode0,
-                    1 => InterruptMode::Mode0, // TODO: verify this. could be mode 1
-                    2 => InterruptMode::Mode1,
-                    3 => InterruptMode::Mode2,
-                    4 => InterruptMode::Mode0,
-                    5 => InterruptMode::Mode0, // TODO: verify this. could be mode 1
-                    6 => InterruptMode::Mode1,
-                    7 => InterruptMode::Mode2,
-                    _ => unreachable!(),
-                };
-
-                Instruction::Im(mode)
-            }
-            (Prefix::ED, 1, _, 7) => {
-                match y {
-                    0 => Instruction::Ld(Operand::Register(cpu::Register::I), Operand::Register(cpu::Register::A)),
-                    1 => Instruction::Ld(Operand::Register(cpu::Register::R), Operand::Register(cpu::Register::A)),
-                    2 => Instruction::Ld(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::I)),
-                    3 => Instruction::Ld(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::R)),
-                    4 => Instruction::Rrd,
-                    5 => Instruction::Rld,
-                    6 => Instruction::Nop,
-                    7 => Instruction::Nop,
-                    _ => unreachable!(),
-                }
-            }
-            (Prefix::ED, 2, _, _) => {
-                match z {
-                    0 => match y {
-                        4 => Instruction::Ldi,
-                        5 => Instruction::Ldd,
-                        6 => Instruction::Ldir,
-                        7 => Instruction::Lddr,
-                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
-                    }
-                    1 => match y {
-                        4 => Instruction::Cpi,
-                        5 => Instruction::Cpd,
-                        6 => Instruction::Cpir,
-                        7 => Instruction::Cpdr,
-                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
-                    }
-                    2 => match y {
-                        4 => Instruction::Ini,
-                        5 => Instruction::Ind,
-                        6 => Instruction::Inir,
-                        7 => Instruction::Indr,
-                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
-                    }
-                    3 => match y {
-                        4 => Instruction::Outi,
-                        5 => Instruction::Outd,
-                        6 => Instruction::Otir,
-                        7 => Instruction::Otdr,
-                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
-                    }
-                    _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
-                }
-            }
-            (Prefix::ED, _, _, _) => {
-                Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
-            }
-            _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
-        };
-
-        (instruction, next_address)
-    }
 
     fn decode_alu(encoded: u8, operand: Operand) -> Instruction {
         match encoded {
@@ -975,12 +557,168 @@ where M: Read
         self.decode_at(self.next_address)
     }
 
-    fn decode_cb_instruction(&self) -> Instruction {
-        Instruction::Nop
+    fn decode_cb_instruction(&mut self) -> Instruction {
+        let opcode = self.memory.read_byte(self.next_address);
+        self.next_address += 1;
+
+        let x = opcode >> 6;
+        let y = (opcode >> 3) & 7;
+        let z = opcode & 7;
+
+        match (x, y, z) {
+            (0, _, _) => {
+                let destination = Operand::decode_register(z);
+                let operand = Operand::decode_register(z);
+
+                Instruction::decode_bitshift(y, destination, operand)
+            }
+            (1, _, _) => {
+                let bit = Operand::Bit(y);
+                let operand = Operand::decode_register(z);
+
+                Instruction::Bit(bit, operand)
+            }
+            (2, _, _) => {
+                let bit = Operand::Bit(y);
+                let destination = Operand::decode_register(z);
+                let operand = Operand::decode_register(z);
+
+                Instruction::Res(destination, bit, operand)
+            }
+            (3, _, _) => {
+                let bit = Operand::Bit(y);
+                let destination = Operand::decode_register(z);
+                let operand = Operand::decode_register(z);
+
+                Instruction::Set(destination, bit, operand)
+            }
+            _ => unreachable!(),
+        }
     }
 
-    fn decode_ed_instruction(&self) -> Instruction {
-        Instruction::Nop
+    fn decode_ed_instruction(&mut self) -> Instruction {
+        let opcode = self.memory.read_byte(self.next_address);
+        self.next_address += 1;
+
+        let x = opcode >> 6;
+        let y = (opcode >> 3) & 7;
+        let z = opcode & 7;
+
+        match (x, y, z) {
+            (1, _, 0) => {
+                let destination = Operand::decode_register(y);
+                let port = Operand::RegisterIndirect(cpu::Register::C);
+
+                Instruction::In(destination, port)
+            }
+            (1, _, 1) => {
+                let port = Operand::RegisterIndirect(cpu::Register::C);
+                let source = Operand::decode_register(y);
+
+                Instruction::Out(port, source)
+            }
+            (1, _, 2) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                let destination = Operand::Register(cpu::Register::HL);
+                let source = Operand::decode_register_pair(p, false);
+
+                match q {
+                    0 => Instruction::Sbc(destination, source),
+                    1 => Instruction::Adc(destination, source),
+                    _ => unreachable!(),
+                }
+            }
+            (1, _, 3) => {
+                let p = y >> 1;
+                let q = y & 1;
+
+                let address = Operand::Direct16(self.memory.read_word(self.next_address));
+                self.next_address += 2;
+
+                let register = Operand::decode_register_pair(p, false);
+
+                match q {
+                    0 => Instruction::Ld(address, register),
+                    1 => Instruction::Ld(register, address),
+                    _ => unreachable!(),
+                }
+            }
+            (1, _, 4) => {
+                Instruction::Neg
+            }
+            (1, _, 5) => {
+                match y {
+                    1 => Instruction::Reti,
+                    _ => Instruction::Retn,
+                }
+            }
+            (1, _, 6) => {
+                let mode = match y {
+                    0 => InterruptMode::Mode0,
+                    1 => InterruptMode::Mode0, // TODO: verify this. could be mode 1
+                    2 => InterruptMode::Mode1,
+                    3 => InterruptMode::Mode2,
+                    4 => InterruptMode::Mode0,
+                    5 => InterruptMode::Mode0, // TODO: verify this. could be mode 1
+                    6 => InterruptMode::Mode1,
+                    7 => InterruptMode::Mode2,
+                    _ => unreachable!(),
+                };
+
+                Instruction::Im(mode)
+            }
+            (1, _, 7) => {
+                match y {
+                    0 => Instruction::Ld(Operand::Register(cpu::Register::I), Operand::Register(cpu::Register::A)),
+                    1 => Instruction::Ld(Operand::Register(cpu::Register::R), Operand::Register(cpu::Register::A)),
+                    2 => Instruction::Ld(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::I)),
+                    3 => Instruction::Ld(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::R)),
+                    4 => Instruction::Rrd,
+                    5 => Instruction::Rld,
+                    6 => Instruction::Nop,
+                    7 => Instruction::Nop,
+                    _ => unreachable!(),
+                }
+            }
+            (2, _, _) => {
+                match z {
+                    0 => match y {
+                        4 => Instruction::Ldi,
+                        5 => Instruction::Ldd,
+                        6 => Instruction::Ldir,
+                        7 => Instruction::Lddr,
+                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                    }
+                    1 => match y {
+                        4 => Instruction::Cpi,
+                        5 => Instruction::Cpd,
+                        6 => Instruction::Cpir,
+                        7 => Instruction::Cpdr,
+                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                    }
+                    2 => match y {
+                        4 => Instruction::Ini,
+                        5 => Instruction::Ind,
+                        6 => Instruction::Inir,
+                        7 => Instruction::Indr,
+                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                    }
+                    3 => match y {
+                        4 => Instruction::Outi,
+                        5 => Instruction::Outd,
+                        6 => Instruction::Otir,
+                        7 => Instruction::Otdr,
+                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                    }
+                    _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                }
+            }
+            _ => {
+                Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+            }
+        }
     }
 
     fn decode_prefixed(&mut self, mode: DecoderMode) -> Instruction {
