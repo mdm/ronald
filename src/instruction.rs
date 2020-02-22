@@ -25,36 +25,6 @@ enum Operand {
     Bit(u8), // TODO: use Immediate8? or rename to Immediate1?
 }
 
-impl Operand {
-    fn decode_register(encoded: u8) -> Operand {
-        match encoded {
-            0 => Operand::Register(cpu::Register::B),
-            1 => Operand::Register(cpu::Register::C),
-            2 => Operand::Register(cpu::Register::D),
-            3 => Operand::Register(cpu::Register::E),
-            4 => Operand::Register(cpu::Register::H),
-            5 => Operand::Register(cpu::Register::L),
-            6 => Operand::RegisterIndirect(cpu::Register::HL),
-            7 => Operand::Register(cpu::Register::A),
-            _ => unreachable!(),
-        }
-    }
-
-    fn decode_register_pair(encoded: u8, alternate: bool) -> Operand {
-        match encoded {
-            0 => Operand::Register(cpu::Register::BC),
-            1 => Operand::Register(cpu::Register::DE),
-            2 => Operand::Register(cpu::Register::HL),
-            3 => if alternate {
-                Operand::Register(cpu::Register::AF)
-            } else {
-                Operand::Register(cpu::Register::SP)
-            }
-            _ => unreachable!(),
-        }
-    }
-}
-
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -244,35 +214,6 @@ enum Instruction {
 }
 
 impl Instruction {
-
-    fn decode_alu(encoded: u8, operand: Operand) -> Instruction {
-        match encoded {
-            0 => Instruction::Add(Operand::Register(cpu::Register::A), operand),
-            1 => Instruction::Adc(Operand::Register(cpu::Register::A), operand),
-            2 => Instruction::Sub(operand),
-            3 => Instruction::Sbc(Operand::Register(cpu::Register::A), operand),
-            4 => Instruction::And(operand),
-            5 => Instruction::Xor(operand),
-            6 => Instruction::Or(operand),
-            7 => Instruction::Cp(operand),
-            _ => unreachable!(),
-        }
-    }
-
-    fn decode_bitshift(encoded: u8, destination: Operand, operand: Operand) -> Instruction {
-        match encoded {
-            0 => Instruction::Rlc(destination, operand),
-            1 => Instruction::Rrc(destination, operand),
-            2 => Instruction::Rl(destination, operand),
-            3 => Instruction::Rr(destination, operand),
-            4 => Instruction::Sla(destination, operand),
-            5 => Instruction::Sra(destination, operand),
-            6 => Instruction::Sll(destination, operand),
-            7 => Instruction::Srl(destination, operand),
-            _ => unreachable!(),
-        }
-    }
-
     fn timing(&self) -> usize {
         match self {
             Instruction::Adc(_, _) => unimplemented!(),
@@ -503,6 +444,7 @@ impl fmt::Display for Instruction {
     }
 }
 
+#[derive(Clone, Copy)]
 enum DecoderMode {
     Default,
     PatchIX,
@@ -567,28 +509,63 @@ where M: Read
 
         match (x, y, z) {
             (0, _, _) => {
-                let destination = Operand::decode_register(z);
-                let operand = Operand::decode_register(z);
+                let old_mode = self.mode;
+                self.mode = DecoderMode::Default;
+                let destination = self.decode_register(z);
+                self.mode = old_mode;
 
-                Instruction::decode_bitshift(y, destination, operand)
+                let (destination, operand) = match self.mode {
+                    DecoderMode::PatchIX => {
+                        let displacement = self.memory.read_byte(self.next_address) as i8;
+                        match z {
+                            6 => (Operand::Indexed(cpu::Register::IX, displacement), Operand::Indexed(cpu::Register::IX, displacement)),
+                            _ => (destination, Operand::Indexed(cpu::Register::IX, displacement)),
+                        }
+                    }
+                    DecoderMode::PatchIY => {
+                        let displacement = self.memory.read_byte(self.next_address) as i8;
+                        match z {
+                            6 => (Operand::Indexed(cpu::Register::IY, displacement), Operand::Indexed(cpu::Register::IY, displacement)),
+                            _ => (destination, Operand::Indexed(cpu::Register::IY, displacement)),
+                        }
+                    }
+                    _ => {
+                        let operand = self.decode_register(z);
+                        (destination, operand)
+                    }
+                };
+
+                self.decode_bitshift(y, destination, operand)
             }
             (1, _, _) => {
                 let bit = Operand::Bit(y);
-                let operand = Operand::decode_register(z);
 
-                Instruction::Bit(bit, operand)
+                match self.mode {
+                    DecoderMode::PatchIX => {
+                        let displacement = self.memory.read_byte(self.next_address) as i8;
+                        Instruction::Bit(bit, Operand::Indexed(cpu::Register::IX, displacement))
+                    }
+                    DecoderMode::PatchIY => {
+                        let displacement = self.memory.read_byte(self.next_address) as i8;
+                        Instruction::Bit(bit, Operand::Indexed(cpu::Register::IY, displacement))
+                    }
+                    _ => {
+                        let operand = self.decode_register(z);
+                        Instruction::Bit(bit, operand)
+                    }
+                }
             }
             (2, _, _) => {
                 let bit = Operand::Bit(y);
-                let destination = Operand::decode_register(z);
-                let operand = Operand::decode_register(z);
+                let destination = self.decode_register(z);
+                let operand = self.decode_register(z);
 
                 Instruction::Res(destination, bit, operand)
             }
             (3, _, _) => {
                 let bit = Operand::Bit(y);
-                let destination = Operand::decode_register(z);
-                let operand = Operand::decode_register(z);
+                let destination = self.decode_register(z);
+                let operand = self.decode_register(z);
 
                 Instruction::Set(destination, bit, operand)
             }
@@ -606,14 +583,14 @@ where M: Read
 
         match (x, y, z) {
             (1, _, 0) => {
-                let destination = Operand::decode_register(y);
+                let destination = self.decode_register(y);
                 let port = Operand::RegisterIndirect(cpu::Register::C);
 
                 Instruction::In(destination, port)
             }
             (1, _, 1) => {
                 let port = Operand::RegisterIndirect(cpu::Register::C);
-                let source = Operand::decode_register(y);
+                let source = self.decode_register(y);
 
                 Instruction::Out(port, source)
             }
@@ -622,7 +599,7 @@ where M: Read
                 let q = y & 1;
 
                 let destination = Operand::Register(cpu::Register::HL);
-                let source = Operand::decode_register_pair(p, false);
+                let source = self.decode_register_pair(p, false);
 
                 match q {
                     0 => Instruction::Sbc(destination, source),
@@ -637,7 +614,7 @@ where M: Read
                 let address = Operand::Direct16(self.memory.read_word(self.next_address));
                 self.next_address += 2;
 
-                let register = Operand::decode_register_pair(p, false);
+                let register = self.decode_register_pair(p, false);
 
                 match q {
                     0 => Instruction::Ld(address, register),
@@ -789,7 +766,7 @@ where M: Read
                 let p = y >> 1;
                 let q = y & 1;
 
-                let register_pair = Operand::decode_register_pair(p, false);
+                let register_pair = self.decode_register_pair(p, false);
 
                 match q {
                     0 => {
@@ -832,7 +809,7 @@ where M: Read
                 let p = y >> 1;
                 let q = y & 1;
 
-                let register_pair = Operand::decode_register_pair(p, false);
+                let register_pair = self.decode_register_pair(p, false);
 
                 match q {
                     0 => {
@@ -845,15 +822,15 @@ where M: Read
                 }
             }
             (0, _, 4) => {
-                let register = Operand::decode_register(y);
+                let register = self.decode_register(y);
                 Instruction::Inc(register)
             }
             (0, _, 5) => {
-                let register = Operand::decode_register(y);
+                let register = self.decode_register(y);
                 Instruction::Dec(register)
             }
             (0, _, 6) => {
-                let register = Operand::decode_register(y);
+                let register = self.decode_register(y);
 
                 let value = self.memory.read_byte(self.next_address);
                 self.next_address += 1;
@@ -872,19 +849,39 @@ where M: Read
                     7 => Instruction::Ccf,
                     _ => unreachable!(),
                 }
+            
+            }
+            (1, 6, 6) => {
+                Instruction::Halt
+            }
+            (1, 6, _) => {
+                let destination = self.decode_register(y);
+
+                let old_mode = self.mode;
+                self.mode = DecoderMode::Default;
+                let source = self.decode_register(z);
+                self.mode = old_mode;
+
+                Instruction::Ld(destination, source)
+            }
+            (1, _, 6) => {
+                let old_mode = self.mode;
+                self.mode = DecoderMode::Default;
+                let destination = self.decode_register(y);
+                self.mode = old_mode;
+
+                let source = self.decode_register(z);
+
+                Instruction::Ld(destination, source)
             }
             (1, _, _) => {
-                if y == 6 && z == 6 {
-                    Instruction::Halt
-                } else {
-                    let destination = Operand::decode_register(y);
-                    let source = Operand::decode_register(z);
-                    Instruction::Ld(destination, source)
-                }
+                let destination = self.decode_register(y);
+                let source = self.decode_register(z);
+                Instruction::Ld(destination, source)
             }
             (2, _, _) => {
-                let register = Operand::decode_register(z);
-                Instruction::decode_alu(y, register)
+                let register = self.decode_register(z);
+                self.decode_alu(y, register)
             }
             (3, _, 0) => {
                 let jump_test = JumpTest::decode(y);
@@ -896,7 +893,7 @@ where M: Read
 
                 match q {
                     0 => {
-                        let register_pair = Operand::decode_register_pair(p, true);
+                        let register_pair = self.decode_register_pair(p, true);
                         Instruction::Pop(register_pair)
                     }
                     1 => match p {
@@ -959,7 +956,7 @@ where M: Read
 
                 match q {
                     0 => {
-                        let source = Operand::decode_register_pair(p, true);
+                        let source = self.decode_register_pair(p, true);
                         Instruction::Push(source)
                     }
                     1 => if p == 0 {
@@ -977,12 +974,110 @@ where M: Read
                 let value = Operand::Immediate8(self.memory.read_byte(self.next_address));
                 self.next_address += 1;
 
-                Instruction::decode_alu(y, value)
+                self.decode_alu(y, value)
             }
             (3, _, 7) => {
                 Instruction::Rst(Operand::Immediate8(y * 8))
             }
             _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
+        }
+    }
+
+    fn decode_alu(&self, encoded: u8, operand: Operand) -> Instruction {
+        match encoded {
+            0 => Instruction::Add(Operand::Register(cpu::Register::A), operand),
+            1 => Instruction::Adc(Operand::Register(cpu::Register::A), operand),
+            2 => Instruction::Sub(operand),
+            3 => Instruction::Sbc(Operand::Register(cpu::Register::A), operand),
+            4 => Instruction::And(operand),
+            5 => Instruction::Xor(operand),
+            6 => Instruction::Or(operand),
+            7 => Instruction::Cp(operand),
+            _ => unreachable!(),
+        }
+    }
+
+    fn decode_bitshift(&self, encoded: u8, destination: Operand, operand: Operand) -> Instruction {
+        match encoded {
+            0 => Instruction::Rlc(destination, operand),
+            1 => Instruction::Rrc(destination, operand),
+            2 => Instruction::Rl(destination, operand),
+            3 => Instruction::Rr(destination, operand),
+            4 => Instruction::Sla(destination, operand),
+            5 => Instruction::Sra(destination, operand),
+            6 => Instruction::Sll(destination, operand),
+            7 => Instruction::Srl(destination, operand),
+            _ => unreachable!(),
+        }
+    }
+
+    fn decode_register(&mut self, encoded: u8) -> Operand {
+        match encoded {
+            0 => Operand::Register(cpu::Register::B),
+            1 => Operand::Register(cpu::Register::C),
+            2 => Operand::Register(cpu::Register::D),
+            3 => Operand::Register(cpu::Register::E),
+            4 => match self.mode {
+                DecoderMode::PatchIX => {
+                    self.patched = true;
+                    Operand::Register(cpu::Register::IXH)
+                }
+                DecoderMode::PatchIY => {
+                    self.patched = true;
+                    Operand::Register(cpu::Register::IYH)
+                }
+                _ => Operand::Register(cpu::Register::H),
+            }
+            5 => match self.mode {
+                DecoderMode::PatchIX => {
+                    self.patched = true;
+                    Operand::Register(cpu::Register::IXL)
+                }
+                DecoderMode::PatchIY => {
+                    self.patched = true;
+                    Operand::Register(cpu::Register::IYL)
+                }
+                _ => Operand::Register(cpu::Register::L),
+            }
+            6 => match self.mode {
+                DecoderMode::PatchIX => {
+                    self.patched = true;
+                    let displacement = self.memory.read_byte(self.next_address) as i8;
+                    Operand::Indexed(cpu::Register::IX, displacement)
+                }
+                DecoderMode::PatchIY => {
+                    self.patched = true;
+                    let displacement = self.memory.read_byte(self.next_address) as i8;
+                    Operand::Indexed(cpu::Register::IY, displacement)
+                }
+                _ => Operand::RegisterIndirect(cpu::Register::HL),
+            }
+            7 => Operand::Register(cpu::Register::A),
+            _ => unreachable!(),
+        }
+    }
+
+    fn decode_register_pair(&mut self, encoded: u8, alternate: bool) -> Operand {
+        match encoded {
+            0 => Operand::Register(cpu::Register::BC),
+            1 => Operand::Register(cpu::Register::DE),
+            2 => match self.mode {
+                DecoderMode::PatchIX => {
+                    self.patched = true;
+                    Operand::Register(cpu::Register::IX)
+                }
+                DecoderMode::PatchIY => {
+                    self.patched = true;
+                    Operand::Register(cpu::Register::IY)
+                }
+                _ => Operand::Register(cpu::Register::HL),
+            }
+            3 => if alternate {
+                Operand::Register(cpu::Register::AF)
+            } else {
+                Operand::Register(cpu::Register::SP)
+            }
+            _ => unreachable!(),
         }
     }
 }
