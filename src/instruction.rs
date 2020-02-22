@@ -880,7 +880,17 @@ where M: Read
                 };
 
                 let register = match p {
-                    2 => Operand::Register(cpu::Register::HL),
+                    2 => match self.mode {
+                        DecoderMode::PatchIX => {
+                            self.patched = true;
+                            Operand::Register(cpu::Register::IX)
+                        }
+                        DecoderMode::PatchIY => {
+                            self.patched = true;
+                            Operand::Register(cpu::Register::IY)
+                        }
+                        _ => Operand::Register(cpu::Register::HL),
+                    }
                     _ => Operand::Register(cpu::Register::A),
                 };
 
