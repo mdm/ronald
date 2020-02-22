@@ -22,12 +22,12 @@ pub trait Write {
     }
 }
 
-struct ROM {
+pub struct ROM {
     data: Vec<u8>,
 }
 
 impl ROM {
-    fn from_file(path: &str) -> ROM {
+    pub fn from_file(path: &str) -> ROM {
         // TODO: better error handling
         // TODO: check ROM size (should be 16k)
         ROM { data: std::fs::read(path).expect(&format!("ROM file \"{}\" could not be read.", path)) }
@@ -40,24 +40,24 @@ impl Read for ROM {
     }
 }
 
-struct RAM {
+pub struct RAM {
     data: Vec<u8>,
 }
 
 impl RAM {
-    fn new(size: usize) -> RAM {
+    pub fn new(size: usize) -> RAM {
         RAM { data: vec![0; size] }
     }
 
-    fn from_file(path: &str) -> RAM {
+    pub fn from_file(path: &str) -> RAM {
         // TODO: better error handling
         // TODO: check RAM size (should be 64k)
         RAM { data: read(path).expect(&format!("ROM file \"{}\" could not be read.", path)) }
     }
 
-    fn write_to_file(&self, file: &mut File) {
+    pub fn write_to_file(&self, file: &mut File) -> io::Result<()> {
         // TODO: better error handling
-        io::Write::write_all(file, &self.data);
+        io::Write::write_all(file, &self.data)
     }
 }
 
@@ -83,7 +83,7 @@ pub struct Memory {
 }
 
 impl Memory {
-    fn new() -> Memory {
+    pub fn new() -> Memory {
         let mut upper_roms = HashMap::new();
         upper_roms.insert(0, ROM::from_file("rom/basic_1.0.rom"));
         upper_roms.insert(7, ROM::from_file("rom/amsdos_0.5.rom"));

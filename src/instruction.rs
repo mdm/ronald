@@ -1,20 +1,10 @@
 use std::fmt;
 
-use crate::memory::{Memory, Read};
+use crate::memory::Read;
 use crate::cpu;
 
 
-enum Prefix {
-    None,
-    CB,
-    ED,
-    DD,
-    FD,
-    DDCB(u8),
-    FDCB(u8),
-}
-
-enum Operand {
+pub enum Operand {
     Immediate8(u8),
     Immediate16(u16),
     Register(cpu::Register),
@@ -90,13 +80,13 @@ impl fmt::Display for Operand {
     }
 }
 
-enum InterruptMode { // TODO: move to CPU?
+pub enum InterruptMode { // TODO: move to CPU?
     Mode0,
     Mode1,
     Mode2,
 }
 
-enum JumpTest {
+pub enum JumpTest {
     Unconditional,
     NonZero,
     Zero,
@@ -108,7 +98,7 @@ enum JumpTest {
     SignNegative,
 }
 
-impl JumpTest {
+impl JumpTest { // TODO: move to decoder?
     fn decode(encoded: u8) -> JumpTest {
         match encoded {
             0 => JumpTest::NonZero,
@@ -140,7 +130,7 @@ impl fmt::Display for JumpTest {
     }
 }
 
-enum Instruction {
+pub enum Instruction {
     Adc(Operand, Operand),
     Add(Operand, Operand),
     And(Operand),
@@ -296,17 +286,17 @@ impl fmt::Display for Instruction {
             Instruction::Adc(destination, value) => write!(f, "adc {},{}", destination, value),
             Instruction::Add(destination, value) => write!(f, "add {},{}", destination, value),
             Instruction::And(value) => write!(f, "and {}", value),
-            Instruction::Bit(_, _) => unimplemented!(),
+            Instruction::Bit(bit, operand) => write!(f, "bit {},{}", bit, operand),
             Instruction::Call(jump_test, target) => match jump_test {
                 JumpTest::Unconditional => write!(f, "call {}", target),
                 _ => write!(f, "call {},{}", jump_test, target),
             }
             Instruction::Ccf => write!(f, "ccf"),
             Instruction::Cp(value) => write!(f, "cp {}", value),
-            Instruction::Cpd => unimplemented!(),
-            Instruction::Cpdr => unimplemented!(),
-            Instruction::Cpi => unimplemented!(),
-            Instruction::Cpir => unimplemented!(),
+            Instruction::Cpd => write!(f, "cpd"),
+            Instruction::Cpdr => write!(f, "cpdr"),
+            Instruction::Cpi => write!(f, "cpi"),
+            Instruction::Cpir => write!(f, "cpir"),
             Instruction::Cpl => write!(f, "cpl"),
             Instruction::Daa => write!(f, "daa"),
             Instruction::Dec(destination) => write!(f, "dec {}", destination),
@@ -326,10 +316,10 @@ impl fmt::Display for Instruction {
             }
             Instruction::In(destination, port) => write!(f, "in {},{}", destination, port),
             Instruction::Inc(destination) => write!(f, "inc {}", destination),
-            Instruction::Ind => unimplemented!(),
-            Instruction::Indr => unimplemented!(),
-            Instruction::Ini => unimplemented!(),
-            Instruction::Inir => unimplemented!(),
+            Instruction::Ind => write!(f, "ind"),
+            Instruction::Indr => write!(f, "indr"),
+            Instruction::Ini => write!(f, "ini"),
+            Instruction::Inir => write!(f, "inir"),
             Instruction::Jp(jump_test, target) => match jump_test {
                 JumpTest::Unconditional => write!(f, "jp {}", target),
                 _ => write!(f, "jp {},{}", jump_test, target),
@@ -339,23 +329,23 @@ impl fmt::Display for Instruction {
                 _ => write!(f, "jr {},{}", jump_test, target),
             }
             Instruction::Ld(destination, source) => write!(f, "ld {},{}", destination, source),
-            Instruction::Ldd => unimplemented!(),
-            Instruction::Lddr => unimplemented!(),
-            Instruction::Ldi => unimplemented!(),
-            Instruction::Ldir => unimplemented!(),
+            Instruction::Ldd => write!(f, "ldd"),
+            Instruction::Lddr => write!(f, "lddr"),
+            Instruction::Ldi => write!(f, "ldi"),
+            Instruction::Ldir => write!(f, "ldir"),
             Instruction::Neg => write!(f, "neg"),
             Instruction::Nop => write!(f, "nop"),
             Instruction::Or(value) => write!(f, "or {}", value),
             Instruction::Out(port, source) => write!(f, "out {},{}", port, source),
-            Instruction::Otdr => unimplemented!(),
-            Instruction::Otir => unimplemented!(),
-            Instruction::Outd => unimplemented!(),
-            Instruction::Outi => unimplemented!(),
+            Instruction::Otdr => write!(f, "otdr"),
+            Instruction::Otir => write!(f, "otir"),
+            Instruction::Outd => write!(f, "outd"),
+            Instruction::Outi => write!(f, "outi"),
             Instruction::Pop(destination) => write!(f, "pop {}", destination),
             Instruction::Push(source) => write!(f, "push {}", source),
             Instruction::Res(destination, bit, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "res {},{}", bit, operand),
+                    Operand::Indexed(_, _) => write!(f, "res {},{}", bit, operand),
                     _ => write!(f, "res {},{}->{}", bit, operand, destination),
                 }
                 _ => write!(f, "res {},{}", bit, operand),
@@ -368,7 +358,7 @@ impl fmt::Display for Instruction {
             Instruction::Retn => write!(f, "retn"),
             Instruction::Rl(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rl {}", operand),
+                    Operand::Indexed(_, _) => write!(f, "rl {}", operand),
                     _ => write!(f, "rl {}->{}", operand, destination),
                 }
                 _ => write!(f, "rl {}", operand),
@@ -376,7 +366,7 @@ impl fmt::Display for Instruction {
             Instruction::Rla => write!(f, "rla"),
             Instruction::Rlc(destination, operand) => match operand { // TODO: extract this into reusable method. how to handle helpers in traits?
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rlc {}", operand),
+                    Operand::Indexed(_, _) => write!(f, "rlc {}", operand),
                     _ => write!(f, "rlc {}->{}", operand, destination),
                 }
                 _ => write!(f, "rlc {}", operand),
@@ -385,14 +375,14 @@ impl fmt::Display for Instruction {
             Instruction::Rld => write!(f, "rld"),
             Instruction::Rr(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rr {}", operand),
+                    Operand::Indexed(_, _) => write!(f, "rr {}", operand),
                     _ => write!(f, "rr {}->{}", operand, destination),
                 }
                 _ => write!(f, "rr {}", operand),
             }
             Instruction::Rrc(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "rrc {}", operand),
+                    Operand::Indexed(_, _) => write!(f, "rrc {}", operand),
                     _ => write!(f, "rrc {}->{}", operand, destination),
                 }
                 _ => write!(f, "rrc {}", operand),
@@ -405,35 +395,35 @@ impl fmt::Display for Instruction {
             Instruction::Scf => write!(f, "scf"),
             Instruction::Set(destination, bit, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "set {},{}", bit, operand),
+                    Operand::Indexed(_, _) => write!(f, "set {},{}", bit, operand),
                     _ => write!(f, "set {},{}->{}", bit, operand, destination),
                 }
                 _ => write!(f, "set {},{}", bit, operand),
             }
             Instruction::Sla(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "sla {}", operand),
+                    Operand::Indexed(_, _) => write!(f, "sla {}", operand),
                     _ => write!(f, "sla {}->{}", operand, destination),
                 }
                 _ => write!(f, "sla {}", operand),
             }
             Instruction::Sll(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "sll {}", operand),
+                    Operand::Indexed(_, _) => write!(f, "sll {}", operand),
                     _ => write!(f, "sll {}->{}", operand, destination),
                 }
                 _ => write!(f, "sll {}", operand),
             }
             Instruction::Sra(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "sra {}", operand),
+                    Operand::Indexed(_, _) => write!(f, "sra {}", operand),
                     _ => write!(f, "sra {}->{}", operand, destination),
                 }
                 _ => write!(f, "sra {}", operand),
             }
             Instruction::Srl(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::RegisterIndirect(cpu::Register::HL) => write!(f, "srl {}", operand),
+                    Operand::Indexed(_, _) => write!(f, "srl {}", operand),
                     _ => write!(f, "srl {}->{}", operand, destination),
                 }
                 _ => write!(f, "srl {}", operand),
@@ -461,7 +451,7 @@ impl DecoderMode {
     }
 }
 
-struct Decoder<'m, M> {
+pub struct Decoder<'m, M> {
     memory: &'m M,
     next_address: usize,
     mode: DecoderMode,
@@ -471,7 +461,7 @@ struct Decoder<'m, M> {
 impl<'m, M> Decoder<'m, M>
 where M: Read
 { // based on http://z80.info/decoding.htm
-    fn new(memory: &M) -> Decoder<M> {
+    pub fn new(memory: &M) -> Decoder<M> {
         Decoder {
             memory,
             next_address: 0,
@@ -480,7 +470,7 @@ where M: Read
         }
     }
 
-    fn decode_at(&mut self, address: usize) -> (Instruction, usize) {
+    pub fn decode_at(&mut self, address: usize) -> (Instruction, usize) {
         self.next_address = address;
 
         let opcode = self.memory.read_byte(self.next_address);
@@ -495,81 +485,161 @@ where M: Read
         }
     }
 
-    fn decode_next(&mut self) -> (Instruction, usize) {
+    pub fn decode_next(&mut self) -> (Instruction, usize) {
         self.decode_at(self.next_address)
     }
 
     fn decode_cb_instruction(&mut self) -> Instruction {
-        let opcode = self.memory.read_byte(self.next_address);
-        self.next_address += 1;
+        match self.mode {
+            DecoderMode::PatchIX => {
+                let displacement = self.memory.read_byte(self.next_address) as i8;
+                self.next_address += 1;
 
-        let x = opcode >> 6;
-        let y = (opcode >> 3) & 7;
-        let z = opcode & 7;
+                let opcode = self.memory.read_byte(self.next_address);
+                self.next_address += 1;
 
-        match (x, y, z) {
-            (0, _, _) => {
+                let x = opcode >> 6;
+                let y = (opcode >> 3) & 7;
+                let z = opcode & 7;
+
                 let old_mode = self.mode;
                 self.mode = DecoderMode::Default;
                 let destination = self.decode_register(z);
                 self.mode = old_mode;
 
-                let (destination, operand) = match self.mode {
-                    DecoderMode::PatchIX => {
-                        let displacement = self.memory.read_byte(self.next_address) as i8;
-                        match z {
-                            6 => (Operand::Indexed(cpu::Register::IX, displacement), Operand::Indexed(cpu::Register::IX, displacement)),
-                            _ => (destination, Operand::Indexed(cpu::Register::IX, displacement)),
-                        }
+                match (x, y, z) {
+                    (0, _, 6) => {
+                        let destination = Operand::Indexed(cpu::Register::IX, displacement);
+                        let operand = Operand::Indexed(cpu::Register::IX, displacement);
+                        self.decode_bitshift(y, destination, operand)
                     }
-                    DecoderMode::PatchIY => {
-                        let displacement = self.memory.read_byte(self.next_address) as i8;
-                        match z {
-                            6 => (Operand::Indexed(cpu::Register::IY, displacement), Operand::Indexed(cpu::Register::IY, displacement)),
-                            _ => (destination, Operand::Indexed(cpu::Register::IY, displacement)),
-                        }
+                    (0, _, _) => {
+                        let operand = Operand::Indexed(cpu::Register::IX, displacement);
+                        self.decode_bitshift(y, destination, operand)
                     }
-                    _ => {
-                        let operand = self.decode_register(z);
-                        (destination, operand)
-                    }
-                };
-
-                self.decode_bitshift(y, destination, operand)
-            }
-            (1, _, _) => {
-                let bit = Operand::Bit(y);
-
-                match self.mode {
-                    DecoderMode::PatchIX => {
-                        let displacement = self.memory.read_byte(self.next_address) as i8;
-                        Instruction::Bit(bit, Operand::Indexed(cpu::Register::IX, displacement))
-                    }
-                    DecoderMode::PatchIY => {
-                        let displacement = self.memory.read_byte(self.next_address) as i8;
-                        Instruction::Bit(bit, Operand::Indexed(cpu::Register::IY, displacement))
-                    }
-                    _ => {
-                        let operand = self.decode_register(z);
+                    (1, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let operand = Operand::Indexed(cpu::Register::IX, displacement);
                         Instruction::Bit(bit, operand)
                     }
+                    (2, _, 6) => {
+                        let bit = Operand::Bit(y);
+                        let destination = Operand::Indexed(cpu::Register::IX, displacement);
+                        let operand = Operand::Indexed(cpu::Register::IX, displacement);
+                        Instruction::Res(destination, bit, operand)
+                    }
+                    (2, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let operand = Operand::Indexed(cpu::Register::IX, displacement);
+                        Instruction::Res(destination, bit, operand)
+                    }
+                    (3, _, 6) => {
+                        let bit = Operand::Bit(y);
+                        let destination = Operand::Indexed(cpu::Register::IX, displacement);
+                        let operand = Operand::Indexed(cpu::Register::IX, displacement);
+                        Instruction::Set(destination, bit, operand)
+                    }
+                    (3, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let operand = Operand::Indexed(cpu::Register::IX, displacement);
+                        Instruction::Set(destination, bit, operand)
+                    }
+                    _ => unreachable!(),
                 }
             }
-            (2, _, _) => {
-                let bit = Operand::Bit(y);
-                let destination = self.decode_register(z);
-                let operand = self.decode_register(z);
+            DecoderMode::PatchIY => {
+                let displacement = self.memory.read_byte(self.next_address) as i8;
+                self.next_address += 1;
 
-                Instruction::Res(destination, bit, operand)
-            }
-            (3, _, _) => {
-                let bit = Operand::Bit(y);
-                let destination = self.decode_register(z);
-                let operand = self.decode_register(z);
+                let opcode = self.memory.read_byte(self.next_address);
+                self.next_address += 1;
 
-                Instruction::Set(destination, bit, operand)
+                let x = opcode >> 6;
+                let y = (opcode >> 3) & 7;
+                let z = opcode & 7;
+
+                let old_mode = self.mode;
+                self.mode = DecoderMode::Default;
+                let destination = self.decode_register(z);
+                self.mode = old_mode;
+
+                match (x, y, z) {
+                    (0, _, 6) => {
+                        let destination = Operand::Indexed(cpu::Register::IY, displacement);
+                        let operand = Operand::Indexed(cpu::Register::IY, displacement);
+                        self.decode_bitshift(y, destination, operand)
+                    }
+                    (0, _, _) => {
+                        let operand = Operand::Indexed(cpu::Register::IY, displacement);
+                        self.decode_bitshift(y, destination, operand)
+                    }
+                    (1, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let operand = Operand::Indexed(cpu::Register::IY, displacement);
+                        Instruction::Bit(bit, operand)
+                    }
+                    (2, _, 6) => {
+                        let bit = Operand::Bit(y);
+                        let destination = Operand::Indexed(cpu::Register::IY, displacement);
+                        let operand = Operand::Indexed(cpu::Register::IY, displacement);
+                        Instruction::Res(destination, bit, operand)
+                    }
+                    (2, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let operand = Operand::Indexed(cpu::Register::IY, displacement);
+                        Instruction::Res(destination, bit, operand)
+                    }
+                    (3, _, 6) => {
+                        let bit = Operand::Bit(y);
+                        let destination = Operand::Indexed(cpu::Register::IY, displacement);
+                        let operand = Operand::Indexed(cpu::Register::IY, displacement);
+                        Instruction::Set(destination, bit, operand)
+                    }
+                    (3, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let operand = Operand::Indexed(cpu::Register::IY, displacement);
+                        Instruction::Set(destination, bit, operand)
+                    }
+                    _ => unreachable!(),
+                }
             }
-            _ => unreachable!(),
+            _ => {
+                let opcode = self.memory.read_byte(self.next_address);
+                self.next_address += 1;
+
+                let x = opcode >> 6;
+                let y = (opcode >> 3) & 7;
+                let z = opcode & 7;
+
+                match (x, y, z) {
+                    (0, _, _) => {
+                        let destination = self.decode_register(z);
+                        let operand = self.decode_register(z);
+                        self.decode_bitshift(y, destination, operand)
+                    }
+                    (1, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let operand = self.decode_register(z);
+
+                        Instruction::Bit(bit, operand)
+                    }
+                    (2, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let destination = self.decode_register(z);
+                        let operand = self.decode_register(z);
+
+                        Instruction::Res(destination, bit, operand)
+                    }
+                    (3, _, _) => {
+                        let bit = Operand::Bit(y);
+                        let destination = self.decode_register(z);
+                        let operand = self.decode_register(z);
+
+                        Instruction::Set(destination, bit, operand)
+                    }
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 
@@ -703,7 +773,7 @@ where M: Read
 
         let opcode = self.memory.read_byte(self.next_address);
 
-        match opcode {
+        let instruction = match opcode {
             0xcb => {
                 self.next_address += 1;
                 self.decode_cb_instruction()
@@ -712,10 +782,10 @@ where M: Read
             0xdd => self.mode.into_instruction(),
             0xfd => self.mode.into_instruction(),
             _ => {
-                self.next_address += 1;
                 self.patched = false;
 
                 let start = self.next_address;
+                self.next_address += 1;
                 let instruction = self.decode_instruction(opcode);
 
                 if self.patched {
@@ -725,7 +795,11 @@ where M: Read
                     self.mode.into_instruction()
                 }
             }
-        }
+        };
+
+        self.mode = DecoderMode::Default;
+
+        instruction
     }
 
     fn decode_instruction(&mut self, opcode: u8) -> Instruction {
@@ -775,7 +849,18 @@ where M: Read
                         Instruction::Ld(register_pair, value)
                     }
                     1 => {
-                        Instruction::Add(Operand::Register(cpu::Register::HL), register_pair)
+                        let destination = match self.mode {
+                            DecoderMode::PatchIX => {
+                                self.patched = true;
+                                Operand::Register(cpu::Register::IX)
+                            }
+                            DecoderMode::PatchIY => {
+                                self.patched = true;
+                                Operand::Register(cpu::Register::IY)
+                            }
+                            _ => Operand::Register(cpu::Register::HL),
+                        };
+                        Instruction::Add(destination, register_pair)
                     }
                     _ => unreachable!(),
                 }
@@ -899,7 +984,7 @@ where M: Read
                     1 => match p {
                         0 => Instruction::Ret(JumpTest::Unconditional),
                         1 => Instruction::Exx,
-                        2 => Instruction::Jp(JumpTest::Unconditional, Operand::Register(cpu::Register::HL)),
+                        2 => Instruction::Jp(JumpTest::Unconditional, Operand::RegisterIndirect(cpu::Register::HL)),
                         3 => Instruction::Ld(Operand::Register(cpu::Register::SP), Operand::Register(cpu::Register::HL)),
                         _ => unreachable!(),
                     }
@@ -1043,11 +1128,13 @@ where M: Read
                 DecoderMode::PatchIX => {
                     self.patched = true;
                     let displacement = self.memory.read_byte(self.next_address) as i8;
+                    self.next_address += 1;
                     Operand::Indexed(cpu::Register::IX, displacement)
                 }
                 DecoderMode::PatchIY => {
                     self.patched = true;
                     let displacement = self.memory.read_byte(self.next_address) as i8;
+                    self.next_address += 1;
                     Operand::Indexed(cpu::Register::IY, displacement)
                 }
                 _ => Operand::RegisterIndirect(cpu::Register::HL),
