@@ -49,10 +49,17 @@ impl RAM {
         RAM { data: vec![0; size] }
     }
 
-    pub fn from_file(path: &str) -> RAM {
+    pub fn from_file(size: usize, path: &str, offset: usize) -> RAM {
         // TODO: better error handling
-        // TODO: check RAM size (should be 64k)
-        RAM { data: read(path).expect(&format!("ROM file \"{}\" could not be read.", path)) }
+        // TODO: check if ROM fits
+        let mut ram = RAM::new(size);
+        let rom = read(path).expect(&format!("ROM file \"{}\" could not be read.", path));
+
+        for (i, byte) in rom.into_iter().enumerate() {
+            ram.write_byte(offset + i, byte);
+        }
+
+        ram
     }
 
     pub fn write_to_file(&self, file: &mut File) -> io::Result<()> {
