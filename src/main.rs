@@ -9,7 +9,7 @@ fn main() {
 
 fn exercise(path: &str) {
     let memory = memory::RAM::from_file(0x10000, path, 0x100);
-    let mut cpu = CPU::new(memory, 0x100);
+    let mut cpu = cpu::CPU::new(memory, 0x100);
     while cpu.fetch_and_execute() {}
 }
 
