@@ -15,10 +15,10 @@ fn exercise(path: &str) {
 
 fn decode(path: &str) {
     let rom = memory::ROM::from_file(path);
-    let mut decoder = instruction::Decoder::new(&rom);
+    let mut decoder = instruction::Decoder::new();
     let mut current_address = 0;
     while current_address < 0x4000 {
-        let (instruction, next_address) = decoder.decode_next();
+        let (instruction, next_address) = decoder.decode_next(&rom);
         println!("{}", instruction);
         current_address = next_address;
     }
