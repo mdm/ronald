@@ -20,14 +20,17 @@ fn exercise(path: &str) {
             0x0005 => {
                 match cpu.registers.read_byte(cpu::Register::C) {
                     5 => print!("{}", cpu.registers.read_byte(cpu::Register::E) as char),
-                    9 => loop {
-                        let address = cpu.registers.read_word(cpu::Register::DE) as usize;
-                        let character = memory.read_byte(address) as char;
-                        if character == '$' {
-                            break;
-                        }
-                        else {
-                            print!("{}", character);
+                    9 => {
+                        let mut address = cpu.registers.read_word(cpu::Register::DE) as usize;
+                        loop {
+                            let character = memory.read_byte(address) as char;
+                            if character == '$' {
+                                break;
+                            }
+                            else {
+                                print!("{}", character);
+                            }
+                            address += 1;
                         }
                     }
                     _ => unreachable!(),
