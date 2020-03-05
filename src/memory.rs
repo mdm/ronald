@@ -96,7 +96,7 @@ impl Memory {
         upper_roms.insert(7, ROM::from_file("rom/amsdos_0.5.rom"));
 
         Memory {
-            ram: RAM::new(65536),
+            ram: RAM::new(0x10000),
             lower_rom: ROM::from_file("rom/os_464.rom"),
             lower_rom_enabled: true,
             upper_roms,

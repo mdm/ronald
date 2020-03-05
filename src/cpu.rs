@@ -26,7 +26,7 @@ pub enum Register {
     PC,
 }
 
-struct RegisterFile {
+pub struct RegisterFile {
     data: Vec<u16>,
 }
 
@@ -35,7 +35,7 @@ impl RegisterFile {
         RegisterFile { data: vec![0; 14] }
     }
 
-    fn read_byte(&self, register: Register) -> u8 {
+    pub fn read_byte(&self, register: Register) -> u8 {
         let value = match register {
             Register::A => self.data[0] >> 8,
             Register::F => self.data[0] & 0xff,
@@ -79,7 +79,7 @@ impl RegisterFile {
         }
     }
 
-    fn read_word(&self, register: Register) -> u16 {
+    pub fn read_word(&self, register: Register) -> u16 {
         match register {
             Register::AF => self.data[0],
             Register::BC => self.data[1],
@@ -108,36 +108,40 @@ impl RegisterFile {
     }
 }
 
-pub struct CPU<M> {
-    pub memory: M,
+pub struct CPU {
+    pub registers: RegisterFile,
+    pub halted: bool,
     decoder: Decoder,
-    registers: RegisterFile,
 }
 
-impl<M> CPU<M>
-where M: memory::Read + memory::Write
+impl CPU
 {
-    pub fn new(memory: M, initial_pc: u16) -> CPU<M> {
-        let decoder = Decoder::new();
-        let registers = RegisterFile::new();
+    pub fn new(initial_pc: u16) -> CPU {
+        let mut registers = RegisterFile::new();
+        registers.write_word(Register::PC, initial_pc);
 
         let cpu = CPU {
-            memory,
-            decoder,
             registers,
+            halted: false,
+            decoder: Decoder::new(),
         };
 
         cpu
     }
 
-    pub fn fetch_and_execute(&mut self) -> bool {
+    pub fn fetch_and_execute<M>(&mut self, memory: &mut M) // TODO: pass bus instead of individual devices
+    where M: memory::Read + memory::Write {
         let (instruction, next_address) = self.decoder.decode_at(
-            &self.memory, self.registers.read_word(Register::PC) as usize
+            memory, self.registers.read_word(Register::PC) as usize
         );
 
         match instruction {
-            Instruction::Halt => false,
+            Instruction::Halt => self.reset(),
             _ => unimplemented!(),
         }
+    }
+
+    fn reset(&mut self) {
+        // TODO: implement reset
     }
 }

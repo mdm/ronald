@@ -1,6 +1,8 @@
-mod memory;
-mod instruction;
 mod cpu;
+mod instruction;
+mod memory;
+
+use memory::{ Read, Write };
 
 fn main() {
     exercise("rom/zexall.com");
@@ -8,9 +10,33 @@ fn main() {
 }
 
 fn exercise(path: &str) {
-    let memory = memory::RAM::from_file(0x10000, path, 0x100);
-    let mut cpu = cpu::CPU::new(memory, 0x100);
-    while cpu.fetch_and_execute() {}
+    let mut memory = memory::RAM::from_file(0x10000, path, 0x100);
+    memory.write_byte(0x0005, 0xc9); // patch with RET instruction
+    let mut cpu = cpu::CPU::new(0x100);
+
+    loop {
+        match cpu.registers.read_word(cpu::Register::PC) {
+            0x0000 => break,
+            0x0005 => {
+                match cpu.registers.read_byte(cpu::Register::C) {
+                    5 => print!("{}", cpu.registers.read_byte(cpu::Register::E) as char),
+                    9 => loop {
+                        let address = cpu.registers.read_word(cpu::Register::DE) as usize;
+                        let character = memory.read_byte(address) as char;
+                        if character == '$' {
+                            break;
+                        }
+                        else {
+                            print!("{}", character);
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+                cpu.fetch_and_execute(&mut memory);
+            }
+            _ => cpu.fetch_and_execute(&mut memory),
+        }
+    }
 }
 
 fn decode(path: &str) {
