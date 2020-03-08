@@ -162,7 +162,8 @@ pub enum Instruction {
     Inc(Operand),
     Jp(JumpTest, Operand),
     Jr(JumpTest, Operand),
-    Ld(Operand, Operand),
+    Ld8(Operand, Operand),
+    Ld16(Operand, Operand),
     Ldd,
     Lddr,
     Ldi,
@@ -237,7 +238,8 @@ impl Instruction {
             Instruction::Inir => unimplemented!(),
             Instruction::Jp(_, _) => unimplemented!(),
             Instruction::Jr(_, _) => unimplemented!(),
-            Instruction::Ld(_, _) => unimplemented!(),
+            Instruction::Ld8(_, _) => unimplemented!(),
+            Instruction::Ld16(_, _) => unimplemented!(),
             Instruction::Ldd => unimplemented!(),
             Instruction::Lddr => unimplemented!(),
             Instruction::Ldi => unimplemented!(),
@@ -328,7 +330,8 @@ impl fmt::Display for Instruction {
                 JumpTest::Unconditional => write!(f, "jr {}", target),
                 _ => write!(f, "jr {},{}", jump_test, target),
             }
-            Instruction::Ld(destination, source) => write!(f, "ld {},{}", destination, source),
+            Instruction::Ld8(destination, source) => write!(f, "ld {},{}", destination, source),
+            Instruction::Ld16(destination, source) => write!(f, "ld {},{}", destination, source),
             Instruction::Ldd => write!(f, "ldd"),
             Instruction::Lddr => write!(f, "lddr"),
             Instruction::Ldi => write!(f, "ldi"),
@@ -683,8 +686,8 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 let register = self.decode_register_pair(p, false);
 
                 match q {
-                    0 => Instruction::Ld(address, register),
-                    1 => Instruction::Ld(register, address),
+                    0 => Instruction::Ld16(address, register),
+                    1 => Instruction::Ld16(register, address),
                     _ => unreachable!(),
                 }
             }
@@ -714,10 +717,10 @@ impl Decoder { // based on http://z80.info/decoding.htm
             }
             (1, _, 7) => {
                 match y {
-                    0 => Instruction::Ld(Operand::Register(cpu::Register::I), Operand::Register(cpu::Register::A)),
-                    1 => Instruction::Ld(Operand::Register(cpu::Register::R), Operand::Register(cpu::Register::A)),
-                    2 => Instruction::Ld(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::I)),
-                    3 => Instruction::Ld(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::R)),
+                    0 => Instruction::Ld8(Operand::Register(cpu::Register::I), Operand::Register(cpu::Register::A)),
+                    1 => Instruction::Ld8(Operand::Register(cpu::Register::R), Operand::Register(cpu::Register::A)),
+                    2 => Instruction::Ld8(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::I)),
+                    3 => Instruction::Ld8(Operand::Register(cpu::Register::A), Operand::Register(cpu::Register::R)),
                     4 => Instruction::Rrd,
                     5 => Instruction::Rld,
                     6 => Instruction::Nop,
@@ -842,7 +845,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                     0 => {
                         let value = Operand::Immediate16(memory.read_word(self.next_address));
                         self.next_address += 2;
-                        Instruction::Ld(register_pair, value)
+                        Instruction::Ld16(register_pair, value)
                     }
                     1 => {
                         let destination = match self.mode {
@@ -891,8 +894,14 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 };
 
                 match q {
-                    0 => Instruction::Ld(address, register),
-                    1 => Instruction::Ld(register, address),
+                    0 => match register {
+                        Operand::Register(cpu::Register::A) => Instruction::Ld8(address, register),
+                        _ => Instruction::Ld16(address, register),
+                    }
+                    1 => match register {
+                        Operand::Register(cpu::Register::A) => Instruction::Ld8(register, address),
+                        _ => Instruction::Ld16(register, address),
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -926,7 +935,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 let value = memory.read_byte(self.next_address);
                 self.next_address += 1;
 
-                Instruction::Ld(register, Operand::Immediate8(value))
+                Instruction::Ld8(register, Operand::Immediate8(value))
             }
             (0, _, 7) => {
                 match y {
@@ -953,7 +962,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 let source = self.decode_register(memory, z);
                 self.mode = old_mode;
 
-                Instruction::Ld(destination, source)
+                Instruction::Ld8(destination, source)
             }
             (1, _, 6) => {
                 let old_mode = self.mode;
@@ -963,12 +972,12 @@ impl Decoder { // based on http://z80.info/decoding.htm
 
                 let source = self.decode_register(memory, z);
 
-                Instruction::Ld(destination, source)
+                Instruction::Ld8(destination, source)
             }
             (1, _, _) => {
                 let destination = self.decode_register(memory, y);
                 let source = self.decode_register(memory, z);
-                Instruction::Ld(destination, source)
+                Instruction::Ld8(destination, source)
             }
             (2, _, _) => {
                 let register = self.decode_register(memory, z);
@@ -991,7 +1000,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                         0 => Instruction::Ret(JumpTest::Unconditional),
                         1 => Instruction::Exx,
                         2 => Instruction::Jp(JumpTest::Unconditional, Operand::RegisterIndirect(cpu::Register::HL)),
-                        3 => Instruction::Ld(Operand::Register(cpu::Register::SP), Operand::Register(cpu::Register::HL)),
+                        3 => Instruction::Ld16(Operand::Register(cpu::Register::SP), Operand::Register(cpu::Register::HL)),
                         _ => unreachable!(),
                     }
                     _ => unreachable!(),

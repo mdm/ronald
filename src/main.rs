@@ -5,13 +5,14 @@ mod memory;
 use memory::{ Read, Write };
 
 fn main() {
-    exercise("rom/zexall.com");
+    exercise("rom/zexall.rom");
     decode("rom/amsdos_0.5.rom");
 }
 
 fn exercise(path: &str) {
     let mut memory = memory::RAM::from_file(0x10000, path, 0x100);
     memory.write_byte(0x0005, 0xc9); // patch with RET instruction
+    memory.write_word(0x0006, 0xe400); // patch with initial SP
     let mut cpu = cpu::CPU::new(0x100);
 
     loop {
