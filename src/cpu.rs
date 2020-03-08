@@ -191,6 +191,21 @@ impl CPU
 
                 self.registers.write_word(&Register::PC, next_address as u16);
             }
+            Instruction::And(operand) => {
+                let value = self.load_byte(memory, &operand);
+
+                let result = self.registers.read_byte(&Register::A) & value;
+                self.registers.write_byte(&Register::A, result);
+
+                self.set_flag(Flag::Sign, (result as i8) < 0);
+                self.set_flag(Flag::Zero, result == 0);
+                self.set_flag(Flag::HalfCarry, true);
+                self.set_flag(Flag::ParityOverflow, (result.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, false);
+
+                self.registers.write_word(&Register::PC, next_address as u16);
+            }
             Instruction::Call(jump_test, Operand::Immediate16(address)) => {
                 if self.check_jump(jump_test) {
                     let new_sp = self.registers.read_word(&Register::SP) - 2;
@@ -247,6 +262,22 @@ impl CPU
                 self.store_word(memory, &destination, value);
 
                 self.registers.write_word(&Register::PC, next_address as u16);
+            }
+            Instruction::Ldir => {
+                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register::HL));
+                self.store_byte(memory, &Operand::RegisterIndirect(Register::DE), value);
+
+                let address = self.registers.read_word(&Register::DE) + 1;
+                self.registers.write_word(&Register::DE, address);
+
+                let address = self.registers.read_word(&Register::HL) + 1;
+                self.registers.write_word(&Register::HL, address);
+
+                let counter = self.registers.read_word(&Register::BC) - 1;
+                self.registers.write_word(&Register::BC, counter);
+                if counter == 0 {
+                    self.registers.write_word(&Register::PC, next_address as u16);
+                }
             }
             Instruction::Or(operand) => {
                 let value = self.load_byte(memory, &operand);
