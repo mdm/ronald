@@ -35,7 +35,7 @@ impl RegisterFile {
         RegisterFile { data: vec![0; 14] }
     }
 
-    pub fn read_byte(&self, register: Register) -> u8 {
+    pub fn read_byte(&self, register: &Register) -> u8 {
         let value = match register {
             Register::A => self.data[0] >> 8,
             Register::F => self.data[0] & 0xff,
@@ -57,7 +57,7 @@ impl RegisterFile {
         value as u8
     }
 
-    fn write_byte(&mut self, register: Register, value: u8) { // TODO: add tests
+    fn write_byte(&mut self, register: &Register, value: u8) { // TODO: add tests
         let value = value as u16;
 
         match register {
@@ -79,7 +79,7 @@ impl RegisterFile {
         }
     }
 
-    pub fn read_word(&self, register: Register) -> u16 {
+    pub fn read_word(&self, register: &Register) -> u16 {
         match register {
             Register::AF => self.data[0],
             Register::BC => self.data[1],
@@ -93,7 +93,7 @@ impl RegisterFile {
         }
     }
 
-    fn write_word(&mut self, register: Register, value: u16) {
+    fn write_word(&mut self, register: &Register, value: u16) {
         match register {
             Register::AF => { self.data[0] = value; },
             Register::BC => { self.data[1] = value; },
@@ -140,7 +140,7 @@ impl CPU
 {
     pub fn new(initial_pc: u16) -> CPU {
         let mut registers = RegisterFile::new();
-        registers.write_word(Register::PC, initial_pc);
+        registers.write_word(&Register::PC, initial_pc);
 
         let mut cpu = CPU {
             registers,
@@ -156,21 +156,26 @@ impl CPU
     pub fn fetch_and_execute<M>(&mut self, memory: &mut M) // TODO: pass bus instead of individual devices
     where M: memory::Read + memory::Write {
         let (instruction, next_address) = self.decoder.decode_at(
-            memory, self.registers.read_word(Register::PC) as usize
+            memory, self.registers.read_word(&Register::PC) as usize
         );
 
-        println!("{:#06x}: {}", self.registers.read_word(Register::PC), &instruction);
+        println!("{:#06x}: {}", self.registers.read_word(&Register::PC), &instruction);
         match instruction {
             Instruction::Call(jump_test, Operand::Immediate16(address)) => {
                 if self.check_jump(jump_test) {
-                    let new_sp = self.registers.read_word(Register::SP) - 2;
-                    self.registers.write_word(Register::SP, new_sp);
+                    let new_sp = self.registers.read_word(&Register::SP) - 2;
+                    self.registers.write_word(&Register::SP, new_sp);
                     memory.write_word(new_sp as usize, next_address as u16);
-                    self.registers.write_word(Register::PC, address);
+                    self.registers.write_word(&Register::PC, address);
                 } else {
-                    self.registers.write_word(Register::PC, next_address as u16);
+                    self.registers.write_word(&Register::PC, next_address as u16);
                 }
 
+            }
+            Instruction::Inc(Operand::Register(register)) => {
+                let value = self.registers.read_word(&register);
+                self.registers.write_word(&register, value + 1);
+                self.registers.write_word(&Register::PC, next_address as u16);
             }
             Instruction::Jp(jump_test, target) => {
                 if self.check_jump(jump_test) {
@@ -180,52 +185,58 @@ impl CPU
                             unimplemented!();
                         }
                     };
-                    self.registers.write_word(Register::PC, address);
+                    self.registers.write_word(&Register::PC, address);
                 } else {
-                    self.registers.write_word(Register::PC, next_address as u16);
+                    self.registers.write_word(&Register::PC, next_address as u16);
                 }
             }
             Instruction::Ld8(destination, source) => {
-                let value = match source {
-                    Operand::Immediate8(value) => value,
-                    _ => {
-                        unimplemented!();
-                    }
-                };
+                let value = self.load_byte(memory, &source);
+                self.store_byte(memory, &destination, value);
 
-                match destination {
-                    Operand::Register(register) => self.registers.write_byte(register, value),
-                    _ => {
-                        unimplemented!();
-                    }
-                }
-
-                self.registers.write_word(Register::PC, next_address as u16);
+                self.registers.write_word(&Register::PC, next_address as u16);
             }
             Instruction::Ld16(destination, source) => {
-                let value = match source {
-                    Operand::Direct16(address) => memory.read_word(address as usize),
-                    Operand::Register(register) => self.registers.read_word(register),
-                    Operand::Immediate16(value) => value,
-                    _ => {
-                        unimplemented!();
-                    }
-                };
+                let value = self.load_word(memory, &source);
+                self.store_word(memory, &destination, value);
 
-                match destination {
-                    Operand::Register(register) => self.registers.write_word(register, value),
-                    _ => {
-                        unimplemented!();
-                    }
-                }
+                self.registers.write_word(&Register::PC, next_address as u16);
+            }
+            Instruction::Or(operand) => {
+                let value = self.load_byte(memory, &operand);
 
-                self.registers.write_word(Register::PC, next_address as u16);
+                let result = self.registers.read_byte(&Register::A) | value;
+                self.registers.write_byte(&Register::A, result);
+
+                self.set_flag(Flag::Sign, (result as i8) < 0); // TODO: make this reusable?
+                self.set_flag(Flag::Zero, result == 0);
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, (result.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, false);
+
+                self.registers.write_word(&Register::PC, next_address as u16);
+            }
+            Instruction::Pop(Operand::Register(destination)) => {
+                let old_sp = self.registers.read_word(&Register::SP);
+                self.registers.write_word(&Register::SP, old_sp + 2);
+                self.registers.write_word(&destination, memory.read_word(old_sp as usize));
+                self.registers.write_word(&Register::PC, next_address as u16);
             }
             Instruction::Push(Operand::Register(source)) => {
-                let new_sp = self.registers.read_word(Register::SP) - 2;
-                self.registers.write_word(Register::SP, new_sp);
-                memory.write_word(new_sp as usize, self.registers.read_word(source));
-                self.registers.write_word(Register::PC, next_address as u16);
+                let new_sp = self.registers.read_word(&Register::SP) - 2;
+                self.registers.write_word(&Register::SP, new_sp);
+                memory.write_word(new_sp as usize, self.registers.read_word(&source));
+                self.registers.write_word(&Register::PC, next_address as u16);
+            }
+            Instruction::Ret(jump_test) => {
+                if self.check_jump(jump_test) {
+                    let old_sp = self.registers.read_word(&Register::SP);
+                    self.registers.write_word(&Register::SP, old_sp + 2);
+                    self.registers.write_word(&Register::PC, memory.read_word(old_sp as usize));
+                } else {
+                    self.registers.write_word(&Register::PC, next_address as u16);
+                }
             }
             _ => {
                 unimplemented!();
@@ -238,9 +249,21 @@ impl CPU
     }
 
     fn check_flag(&self, flag: Flag) -> bool {
-        let flags = self.registers.read_byte(Register::F);
+        let flags = self.registers.read_byte(&Register::F);
 
         flags & flag.mask() != 0
+    }
+
+    fn set_flag(&mut self, flag: Flag, value: bool) {
+        let old_flags = self.registers.read_byte(&Register::F);
+
+        let new_flags = if value {
+            old_flags | flag.mask()
+        } else {
+            old_flags & (!flag.mask()) // TODO: add tests
+        };
+        
+        self.registers.write_byte(&Register::F, new_flags);
     }
 
     fn check_jump(&self, jump_test: JumpTest) -> bool {
@@ -254,6 +277,80 @@ impl CPU
             JumpTest::ParityEven => self.check_flag(Flag::ParityOverflow),
             JumpTest::SignPositive => !self.check_flag(Flag::Sign),
             JumpTest::SignNegative => self.check_flag(Flag::Sign),
+        }
+    }
+
+    fn load_byte<M>(&self, memory: &M, operand: &Operand) -> u8
+    where M: memory::Read {
+        match operand {
+            Operand::Immediate8(value) => *value,
+            Operand::Register(register) => self.registers.read_byte(register),
+            Operand::Direct8(_) => unimplemented!(),
+            Operand::Direct16(address) => memory.read_byte(*address as usize),
+            Operand::RegisterIndirect(Register::C) => unimplemented!(),
+            Operand::RegisterIndirect(register) => {
+                let address = self.registers.read_word(register);
+                memory.read_byte(address as usize)
+            }
+            Operand::Indexed(register, displacement) => {
+                let address = self.registers.read_word(register);
+                memory.read_byte((address as i64 + *displacement as i64) as usize)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn store_byte<M>(&mut self, memory: &mut M, operand: &Operand, value: u8)
+    where M: memory::Read + memory::Write {
+        match operand {
+            Operand::Register(register) => self.registers.write_byte(register, value),
+            Operand::Direct8(_) => unimplemented!(),
+            Operand::Direct16(address) => memory.write_byte(*address as usize, value),
+            Operand::RegisterIndirect(Register::C) => unimplemented!(),
+            Operand::RegisterIndirect(register) => {
+                let address = self.registers.read_word(register);
+                memory.write_byte(address as usize, value)
+            }
+            Operand::Indexed(register, displacement) => {
+                let address = self.registers.read_word(register);
+                memory.write_byte((address as i64 + *displacement as i64) as usize, value)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn load_word<M>(&self, memory: &M, operand: &Operand) -> u16
+    where M: memory::Read {
+        match operand {
+            Operand::Immediate16(value) => *value,
+            Operand::Register(register) => self.registers.read_word(register),
+            Operand::Direct16(address) => memory.read_word(*address as usize),
+            Operand::RegisterIndirect(register) => {
+                let address = self.registers.read_word(register);
+                memory.read_word(address as usize)
+            }
+            Operand::Indexed(register, displacement) => {
+                let address = self.registers.read_word(register);
+                memory.read_word((address as i64 + *displacement as i64) as usize)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn store_word<M>(&mut self, memory: &mut M, operand: &Operand, value: u16)
+    where M: memory::Read + memory::Write {
+        match operand {
+            Operand::Register(register) => self.registers.write_word(register, value),
+            Operand::Direct16(address) => memory.write_word(*address as usize, value),
+            Operand::RegisterIndirect(register) => {
+                let address = self.registers.read_word(register);
+                memory.write_word(address as usize, value)
+            }
+            Operand::Indexed(register, displacement) => {
+                let address = self.registers.read_word(register);
+                memory.write_word((address as i64 + *displacement as i64) as usize, value)
+            }
+            _ => unreachable!(),
         }
     }
 }
