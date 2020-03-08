@@ -161,6 +161,36 @@ impl CPU
 
         println!("{:#06x}: {}", self.registers.read_word(&Register::PC), &instruction);
         match instruction {
+            Instruction::Add(destination, source) => {
+                match destination {
+                    Operand::Register(Register::A) => {
+                        let left = self.load_byte(memory, &destination);
+                        let right = self.load_byte(memory, &source);
+                        let value = left as u16 + right as u16;
+                        self.store_byte(memory, &destination, value as u8);
+
+                        self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
+                        self.set_flag(Flag::Zero, value == 0);
+                        self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf)) & 0x10) != 0);
+                        self.set_flag(Flag::ParityOverflow, ((left & 0x80) == (right & 0x80)) && ((left & 0x80) == ((value as u8) & 0x80)));
+                        self.set_flag(Flag::AddSubtract, false);
+                        self.set_flag(Flag::Carry, (value & 0x100) != 0);
+                    }
+                    Operand::Register(Register::HL) => {
+                        let left = self.load_word(memory, &destination);
+                        let right = self.load_word(memory, &source);
+                        let value = left as u32 + right as u32;
+                        self.store_word(memory, &destination, value as u16);
+
+                        self.set_flag(Flag::HalfCarry, (((left & 0xfff) + (right & 0xfff)) & 0x1000) != 0);
+                        self.set_flag(Flag::AddSubtract, false);
+                        self.set_flag(Flag::Carry, (value & 0x10000) != 0);
+                    }
+                    _ => unreachable!(),
+                }
+
+                self.registers.write_word(&Register::PC, next_address as u16);
+            }
             Instruction::Call(jump_test, Operand::Immediate16(address)) => {
                 if self.check_jump(jump_test) {
                     let new_sp = self.registers.read_word(&Register::SP) - 2;
@@ -172,9 +202,25 @@ impl CPU
                 }
 
             }
+            Instruction::Dec(Operand::Register(register)) => {
+                let value = self.registers.read_word(&register);
+                self.registers.write_word(&register, value - 1);
+
+                self.registers.write_word(&Register::PC, next_address as u16);
+            }
+            Instruction::Ex(left, right) => {
+                let left_value = self.load_word(memory, &left);
+                let right_value = self.load_word(memory, &right);
+
+                self.store_word(memory, &left, right_value);
+                self.store_word(memory, &right, left_value);
+
+                self.registers.write_word(&Register::PC, next_address as u16);
+            }
             Instruction::Inc(Operand::Register(register)) => {
                 let value = self.registers.read_word(&register);
                 self.registers.write_word(&register, value + 1);
+
                 self.registers.write_word(&Register::PC, next_address as u16);
             }
             Instruction::Jp(jump_test, target) => {
