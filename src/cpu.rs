@@ -170,7 +170,7 @@ impl CPU
                         self.store_byte(memory, &destination, value as u8);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
-                        self.set_flag(Flag::Zero, value == 0);
+                        self.set_flag(Flag::Zero, (value as u8) == 0);
                         self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf)) & 0x10) != 0);
                         self.set_flag(Flag::ParityOverflow, ((left & 0x80) == (right & 0x80)) && ((left & 0x80) == ((value as u8) & 0x80)));
                         self.set_flag(Flag::AddSubtract, false);
@@ -216,6 +216,20 @@ impl CPU
                     self.registers.write_word(&Register::PC, next_address as u16);
                 }
 
+            }
+            Instruction::Cp(operand) => {
+                let left = self.registers.read_byte(&Register::A);
+                let right = self.load_byte(memory, &operand);
+                let value = left as u16 + !right as u16 + 1;
+
+                self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
+                self.set_flag(Flag::Zero, (value as u8) == 0);
+                self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf)) & 0x10) != 0);
+                self.set_flag(Flag::ParityOverflow, ((left & 0x80) == (right & 0x80)) && ((left & 0x80) == ((value as u8) & 0x80)));
+                self.set_flag(Flag::AddSubtract, true);
+                self.set_flag(Flag::Carry, (value & 0x100) != 0);
+
+                self.registers.write_word(&Register::PC, next_address as u16);
             }
             Instruction::Dec(Operand::Register(register)) => {
                 let value = self.registers.read_word(&register);
@@ -314,6 +328,17 @@ impl CPU
                 } else {
                     self.registers.write_word(&Register::PC, next_address as u16);
                 }
+            }
+            Instruction::Rlca => {
+                let value = (self.registers.read_byte(&Register::A) as u16) << 1;
+                let carry = value >> 8;
+                self.registers.write_byte(&Register::A, (value | carry) as u8);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register::PC, next_address as u16);
             }
             _ => {
                 unimplemented!();
