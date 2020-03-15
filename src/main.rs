@@ -16,13 +16,13 @@ fn exercise(path: &str) {
     let mut cpu = cpu::CPU::new(0x100);
 
     loop {
-        match cpu.registers.read_word(&cpu::Register::PC) {
+        match cpu.registers.read_word(&cpu::Register16::PC) {
             0x0000 => break,
             0x0005 => {
-                match cpu.registers.read_byte(&cpu::Register::C) {
-                    5 => print!("{}", cpu.registers.read_byte(&cpu::Register::E) as char),
+                match cpu.registers.read_byte(&cpu::Register8::C) {
+                    5 => print!("{}", cpu.registers.read_byte(&cpu::Register8::E) as char),
                     9 => {
-                        let mut address = cpu.registers.read_word(&cpu::Register::DE) as usize;
+                        let mut address = cpu.registers.read_word(&cpu::Register16::DE) as usize;
                         loop {
                             let character = memory.read_byte(address) as char;
                             if character == '$' {
