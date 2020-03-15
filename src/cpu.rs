@@ -264,15 +264,21 @@ impl CPU
                     self.registers.write_word(&Register16::PC, next_address as u16);
                 }
             }
-            Instruction::Ld8(destination, source) => {
-                let value = self.load_byte(memory, &source);
-                self.store_byte(memory, &destination, value);
-
-                self.registers.write_word(&Register16::PC, next_address as u16);
-            }
-            Instruction::Ld16(destination, source) => {
-                let value = self.load_word(memory, &source);
-                self.store_word(memory, &destination, value);
+            Instruction::Ld(destination, source) => {
+                match (&destination, &source) {
+                    (Operand::Register16(_), _) => {
+                        let value = self.load_word(memory, &source);
+                        self.store_word(memory, &destination, value);
+                    }
+                    (_, Operand::Register16(_)) => {
+                        let value = self.load_word(memory, &source);
+                        self.store_word(memory, &destination, value);
+                    }
+                    _ => {
+                        let value = self.load_byte(memory, &source);
+                        self.store_byte(memory, &destination, value);
+                    }
+                }
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
