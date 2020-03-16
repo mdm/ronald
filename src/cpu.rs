@@ -230,9 +230,25 @@ impl CPU
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::Dec(Operand::Register16(register)) => {
-                let value = self.registers.read_word(&register);
-                self.registers.write_word(&register, value - 1);
+            Instruction::Dec(destination) => {
+                match destination {
+                    Operand::Register8(register) => {
+                        let mut value = self.registers.read_byte(&register);
+                        self.set_flag(Flag::ParityOverflow, value == 0x80);
+                        value -= 1;
+                        self.registers.write_byte(&register, value);
+
+                        self.set_flag(Flag::Sign, (value as i8) < 0);
+                        self.set_flag(Flag::Zero, value == 0);
+                        self.set_flag(Flag::HalfCarry, false); // TODO: fix this
+                        self.set_flag(Flag::AddSubtract, true);
+                    }
+                    Operand::Register16(register) => {
+                        let value = self.registers.read_word(&register);
+                        self.registers.write_word(&register, value - 1);
+                    }
+                    _ => unreachable!(),
+                }
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -245,9 +261,25 @@ impl CPU
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::Inc(Operand::Register16(register)) => {
-                let value = self.registers.read_word(&register);
-                self.registers.write_word(&register, value + 1);
+            Instruction::Inc(destination) => {
+                match destination {
+                    Operand::Register8(register) => {
+                        let mut value = self.registers.read_byte(&register);
+                        self.set_flag(Flag::ParityOverflow, value == 0x7f);
+                        value += 1;
+                        self.registers.write_byte(&register, value);
+
+                        self.set_flag(Flag::Sign, (value as i8) < 0);
+                        self.set_flag(Flag::Zero, value == 0);
+                        self.set_flag(Flag::HalfCarry, false); // TODO: fix this
+                        self.set_flag(Flag::AddSubtract, false);
+                    }
+                    Operand::Register16(register) => {
+                        let value = self.registers.read_word(&register);
+                        self.registers.write_word(&register, value + 1);
+                    }
+                    _ => unreachable!(),
+                }
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -338,6 +370,17 @@ impl CPU
                 let value = (self.registers.read_byte(&Register8::A) as u16) << 1;
                 let carry = value >> 8;
                 self.registers.write_byte(&Register8::A, (value | carry) as u8);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Rrca => {
+                let value = (self.registers.read_byte(&Register8::A) as u16) << 1;
+                let carry = value & 1;
+                self.registers.write_byte(&Register8::A, (value | (carry << 7)) as u8);
 
                 self.set_flag(Flag::HalfCarry, false);
                 self.set_flag(Flag::AddSubtract, false);
