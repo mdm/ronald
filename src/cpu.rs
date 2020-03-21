@@ -293,6 +293,86 @@ impl CPU
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Cpd => {
+                let left = self.registers.read_byte(&Register8::A);
+                let right = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let value = left.wrapping_sub(right);
+
+                let source = self.registers.read_word(&Register16::HL).wrapping_sub(1);
+                self.registers.write_word(&Register16::HL, source);
+
+                let counter = self.registers.read_word(&Register16::BC).wrapping_sub(1);
+                self.registers.write_word(&Register16::BC, counter);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0);
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf));
+                self.set_flag(Flag::ParityOverflow, counter != 0);
+                self.set_flag(Flag::AddSubtract, true);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Cpdr => {
+                let left = self.registers.read_byte(&Register8::A);
+                let right = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let value = left.wrapping_sub(right);
+
+                let source = self.registers.read_word(&Register16::HL).wrapping_sub(1);
+                self.registers.write_word(&Register16::HL, source);
+
+                let counter = self.registers.read_word(&Register16::BC).wrapping_sub(1);
+                self.registers.write_word(&Register16::BC, counter);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0);
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf));
+                self.set_flag(Flag::ParityOverflow, counter != 0);
+                self.set_flag(Flag::AddSubtract, true);
+
+                if counter == 0 || value == 0 {
+                    self.registers.write_word(&Register16::PC, next_address as u16);
+                }
+            }
+            Instruction::Cpi => {
+                let left = self.registers.read_byte(&Register8::A);
+                let right = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let value = left.wrapping_sub(right);
+
+                let source = self.registers.read_word(&Register16::HL).wrapping_add(1);
+                self.registers.write_word(&Register16::HL, source);
+
+                let counter = self.registers.read_word(&Register16::BC).wrapping_sub(1);
+                self.registers.write_word(&Register16::BC, counter);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0);
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf));
+                self.set_flag(Flag::ParityOverflow, counter != 0);
+                self.set_flag(Flag::AddSubtract, true);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Cpir => {
+                let left = self.registers.read_byte(&Register8::A);
+                let right = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let value = left.wrapping_sub(right);
+
+                let source = self.registers.read_word(&Register16::HL).wrapping_add(1);
+                self.registers.write_word(&Register16::HL, source);
+
+                let counter = self.registers.read_word(&Register16::BC).wrapping_sub(1);
+                self.registers.write_word(&Register16::BC, counter);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0);
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf));
+                self.set_flag(Flag::ParityOverflow, counter != 0);
+                self.set_flag(Flag::AddSubtract, true);
+
+                if counter == 0 || value == 0 {
+                    self.registers.write_word(&Register16::PC, next_address as u16);
+                }
+            }
             Instruction::Dec(destination) => {
                 match destination {
                     Operand::Register16(register) => {
