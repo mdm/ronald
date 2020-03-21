@@ -174,7 +174,22 @@ impl CPU
             Instruction::Adc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
-                        unimplemented!();
+                        let left = self.load_byte(memory, &destination);
+                        let right = self.load_byte(memory, &source);
+                        let (value, carry1) = left.overflowing_add(right);
+                        // let (_, overflow1) = (left as i8).overflowing_add(right as i8);
+                        let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
+                        let (value, carry2) = value.overflowing_add(carry_value);
+                        // let (_, overflow2) = (value as i8).overflowing_add(carry_value as i8);
+                        let overflow = (left & 0x80) == (right & 0x80) && (right & 0x80) != (value & 0x80);
+                        self.store_byte(memory, &destination, value);
+
+                        self.set_flag(Flag::Sign, (value as i8) < 0);
+                        self.set_flag(Flag::Zero, value == 0);
+                        self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf)) & 0x10) != 0);
+                        self.set_flag(Flag::ParityOverflow, overflow);
+                        self.set_flag(Flag::AddSubtract, false);
+                        self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     Operand::Register16(Register16::HL) => {
                         let left = self.load_word(memory, &destination);
@@ -189,9 +204,9 @@ impl CPU
                         self.set_flag(Flag::Sign, (value as i16) < 0);
                         self.set_flag(Flag::Zero, value == 0);
                         self.set_flag(Flag::HalfCarry, (((left & 0xfff) + (right & 0xfff)) & 0x1000) != 0);
-                        self.set_flag(Flag::ParityOverflow, overflow1 | overflow2);
+                        self.set_flag(Flag::ParityOverflow, overflow1 || overflow2);
                         self.set_flag(Flag::AddSubtract, false);
-                        self.set_flag(Flag::Carry, carry1 | carry2);
+                        self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     _ => unreachable!(),
                 }
@@ -240,6 +255,15 @@ impl CPU
                 self.set_flag(Flag::ParityOverflow, (result.count_ones() & 1) == 0);
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, false);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Bit(Operand::Bit(bit), operand) => {
+                let value = self.load_byte(memory, &operand);
+
+                self.set_flag(Flag::Zero, (value & (1 << bit)) == 0);
+                self.set_flag(Flag::HalfCarry, true);
+                self.set_flag(Flag::AddSubtract, false);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -440,7 +464,22 @@ impl CPU
             Instruction::Sbc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
-                        unimplemented!();
+                        let left = self.load_byte(memory, &destination);
+                        let right = self.load_byte(memory, &source);
+                        let (value, carry1) = left.overflowing_sub(right);
+                        // let (_, overflow1) = (left as i8).overflowing_sub(right as i8);
+                        let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
+                        let (value, carry2) = value.overflowing_sub(carry_value);
+                        // let (_, overflow2) = (value as i8).overflowing_sub(carry_value as i8);
+                        let overflow = (left & 0x80) != (right & 0x80) && (right & 0x80) == (value & 0x80);
+                        self.store_byte(memory, &destination, value);
+
+                        self.set_flag(Flag::Sign, (value as i8) < 0);
+                        self.set_flag(Flag::Zero, value == 0);
+                        self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf));
+                        self.set_flag(Flag::ParityOverflow, overflow);
+                        self.set_flag(Flag::AddSubtract, true);
+                        self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     Operand::Register16(Register16::HL) => {
                         let left = self.load_word(memory, &destination);
@@ -455,12 +494,28 @@ impl CPU
                         self.set_flag(Flag::Sign, (value as i16) < 0);
                         self.set_flag(Flag::Zero, value == 0);
                         self.set_flag(Flag::HalfCarry, (left & 0xfff) < (right & 0xfff));
-                        self.set_flag(Flag::ParityOverflow, overflow1 | overflow2);
+                        self.set_flag(Flag::ParityOverflow, overflow1 || overflow2);
                         self.set_flag(Flag::AddSubtract, true);
-                        self.set_flag(Flag::Carry, carry1 | carry2);
+                        self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     _ => unreachable!(),
                 }
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Sub(operand) => {
+                let left = self.registers.read_byte(&Register8::A);
+                let right = self.load_byte(memory, &operand);
+                let (value, carry) = left.overflowing_sub(right);
+                let (_, overflow) = (left as i8).overflowing_sub(right as i8);
+                self.registers.write_byte(&Register8::A, value);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf));
+                self.set_flag(Flag::ParityOverflow, overflow);
+                self.set_flag(Flag::AddSubtract, true);
+                self.set_flag(Flag::Carry, carry);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
