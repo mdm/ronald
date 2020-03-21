@@ -170,8 +170,34 @@ impl CPU
             memory, self.registers.read_word(&Register16::PC) as usize
         );
 
-        println!("{:#06x}: {}", self.registers.read_word(&Register16::PC), &instruction);
         match instruction {
+            Instruction::Adc(destination, source) => {
+                match destination {
+                    Operand::Register8(Register8::A) => {
+                        unimplemented!();
+                    }
+                    Operand::Register16(Register16::HL) => {
+                        let left = self.load_word(memory, &destination);
+                        let right = self.load_word(memory, &source);
+                        let (value, carry1) = left.overflowing_add(right);
+                        let (_, overflow1) = (left as i16).overflowing_add(right as i16);
+                        let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
+                        let (value, carry2) = value.overflowing_add(carry_value);
+                        let (_, overflow2) = (value as i16).overflowing_add(carry_value as i16);
+                        self.store_word(memory, &destination, value);
+
+                        self.set_flag(Flag::Sign, (value as i16) < 0);
+                        self.set_flag(Flag::Zero, value == 0);
+                        self.set_flag(Flag::HalfCarry, (((left & 0xfff) + (right & 0xfff)) & 0x1000) != 0);
+                        self.set_flag(Flag::ParityOverflow, overflow1 | overflow2);
+                        self.set_flag(Flag::AddSubtract, false);
+                        self.set_flag(Flag::Carry, carry1 | carry2);
+                    }
+                    _ => unreachable!(),
+                }
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Add(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
@@ -188,7 +214,7 @@ impl CPU
                         self.set_flag(Flag::AddSubtract, false);
                         self.set_flag(Flag::Carry, carry);
                     }
-                    Operand::Register16(Register16::HL) => {
+                    _ => {
                         let left = self.load_word(memory, &destination);
                         let right = self.load_word(memory, &source);
                         let (value, carry) = left.overflowing_add(right);
@@ -198,7 +224,6 @@ impl CPU
                         self.set_flag(Flag::AddSubtract, false);
                         self.set_flag(Flag::Carry, carry);
                     }
-                    _ => unreachable!(),
                 }
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
@@ -416,40 +441,23 @@ impl CPU
                 match destination {
                     Operand::Register8(Register8::A) => {
                         unimplemented!();
-                        // let left = self.load_byte(memory, &destination);
-                        // let right = if self.check_flag(Flag::Carry) {
-                        //     self.load_byte(memory, &source).wrapping_sub(1)
-                        // } else {
-                        //     self.load_byte(memory, &source)
-                        // };
-                        // let (value, carry) = left.overflowing_sub(right);
-                        // let (_, overflow) = (left as i8).overflowing_sub(right as i8);
-                        // self.store_byte(memory, &destination, value);
-
-                        // self.set_flag(Flag::Sign, (value as i8) < 0);
-                        // self.set_flag(Flag::Zero, value == 0);
-                        // self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf));
-                        // self.set_flag(Flag::ParityOverflow, overflow);
-                        // self.set_flag(Flag::AddSubtract, true);
-                        // self.set_flag(Flag::Carry, carry);
                     }
                     Operand::Register16(Register16::HL) => {
                         let left = self.load_word(memory, &destination);
-                        let right = if self.check_flag(Flag::Carry) {
-                            self.load_word(memory, &source).wrapping_sub(1)
-                        } else {
-                            self.load_word(memory, &source)
-                        };
-                        let (value, carry) = left.overflowing_sub(right);
-                        let (_, overflow) = (left as i16).overflowing_sub(right as i16);
+                        let right = self.load_word(memory, &source);
+                        let (value, carry1) = left.overflowing_sub(right);
+                        let (_, overflow1) = (left as i16).overflowing_sub(right as i16);
+                        let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
+                        let (value, carry2) = value.overflowing_sub(carry_value);
+                        let (_, overflow2) = (value as i16).overflowing_sub(carry_value as i16);
                         self.store_word(memory, &destination, value);
 
                         self.set_flag(Flag::Sign, (value as i16) < 0);
                         self.set_flag(Flag::Zero, value == 0);
                         self.set_flag(Flag::HalfCarry, (left & 0xfff) < (right & 0xfff));
-                        self.set_flag(Flag::ParityOverflow, overflow);
+                        self.set_flag(Flag::ParityOverflow, overflow1 | overflow2);
                         self.set_flag(Flag::AddSubtract, true);
-                        self.set_flag(Flag::Carry, carry);
+                        self.set_flag(Flag::Carry, carry1 | carry2);
                     }
                     _ => unreachable!(),
                 }
@@ -472,6 +480,7 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             _ => {
+                println!("{:#06x}: {}", self.registers.read_word(&Register16::PC), &instruction);
                 unimplemented!();
             }
         }

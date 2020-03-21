@@ -5,7 +5,7 @@ mod memory;
 use memory::{ Read, Write };
 
 fn main() {
-    exercise("rom/zexall.rom");
+    exercise("rom/zexdoc.rom");
     decode("rom/amsdos_0.5.rom");
 }
 
@@ -20,7 +20,7 @@ fn exercise(path: &str) {
             0x0000 => break,
             0x0005 => {
                 match cpu.registers.read_byte(&cpu::Register8::C) {
-                    5 => print!("{}", cpu.registers.read_byte(&cpu::Register8::E) as char),
+                    2 => print!("{}", cpu.registers.read_byte(&cpu::Register8::E) as char),
                     9 => {
                         let mut address = cpu.registers.read_word(&cpu::Register16::DE) as usize;
                         loop {
