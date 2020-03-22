@@ -278,6 +278,15 @@ impl CPU
                 }
 
             }
+            Instruction::Ccf => {
+                let carry = self.check_flag(Flag::Carry);
+
+                self.set_flag(Flag::HalfCarry, carry);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, !carry);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Cp(operand) => {
                 let left = self.registers.read_byte(&Register8::A);
                 let right = self.load_byte(memory, &operand);
@@ -373,11 +382,60 @@ impl CPU
                     self.registers.write_word(&Register16::PC, next_address as u16);
                 }
             }
+            Instruction::Cpl => {
+                let value = self.registers.read_byte(&Register8::A);
+                self.registers.write_byte(&Register8::A, !value);
+
+                self.set_flag(Flag::HalfCarry, true);
+                self.set_flag(Flag::AddSubtract, true);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Daa => {
+                let mut value = self.registers.read_byte(&Register8::A);
+                let mut carry = false;
+                match self.check_flag(Flag::AddSubtract) {
+                    true => {
+                        if (value & 0xf) > 0x9 || self.check_flag(Flag::HalfCarry) {
+                            value -= 0x6;
+                        }
+
+                        if (value >> 4) > 0x9 || self.check_flag(Flag::Carry) {
+                            value -= 0x60;
+                            carry = true;
+                        }
+                    }
+                    false => {
+                        if (value & 0xf) > 0x9 || self.check_flag(Flag::HalfCarry) {
+                            value += 0x6;
+                        }
+
+                        if (value >> 4) > 0x9 || self.check_flag(Flag::Carry) {
+                            value += 0x60;
+                            carry = true;
+                        }
+                    }
+                }
+
+                let n = self.check_flag(Flag::AddSubtract);
+                let h = self.check_flag(Flag::HalfCarry);
+                let half_carry = (n && h && (value & 0xf) < 0x6) || (!n && (value & 0xf) >= 0xa);
+
+                self.registers.write_byte(&Register8::A, value);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0);
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, half_carry);
+                self.set_flag(Flag::ParityOverflow, (value.count_ones() & 1) == 0);
+                self.set_flag(Flag::Carry, carry);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Dec(destination) => {
                 match destination {
                     Operand::Register16(register) => {
                         let value = self.registers.read_word(&register);
-                        self.registers.write_word(&register, value - 1);
+                        self.registers.write_word(&register, value.wrapping_sub(1));
                     }
                     _ => {
                         let old_value = self.load_byte(memory, &destination);
@@ -392,6 +450,10 @@ impl CPU
                     }
                 }
 
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Defb(_operand) => {
+                // TODO: disable interrupts
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Di => {
@@ -418,7 +480,7 @@ impl CPU
                 match destination {
                     Operand::Register16(register) => {
                         let value = self.registers.read_word(&register);
-                        self.registers.write_word(&register, value + 1);
+                        self.registers.write_word(&register, value.wrapping_add(1));
                     }
                     _ => {
                         let old_value = self.load_byte(memory, &destination);
@@ -466,21 +528,100 @@ impl CPU
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Ldd => {
+                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::DE), value);
+
+                let address = self.registers.read_word(&Register16::DE).wrapping_sub(1);
+                self.registers.write_word(&Register16::DE, address);
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_sub(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_word(&Register16::BC).wrapping_sub(1);
+                self.registers.write_word(&Register16::BC, counter);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, counter != 0);
+                self.set_flag(Flag::AddSubtract, false);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Lddr => {
+                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::DE), value);
+
+                let address = self.registers.read_word(&Register16::DE).wrapping_sub(1);
+                self.registers.write_word(&Register16::DE, address);
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_sub(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_word(&Register16::BC).wrapping_sub(1);
+                self.registers.write_word(&Register16::BC, counter);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, counter != 0);
+                self.set_flag(Flag::AddSubtract, false);
+
+                if counter == 0 {
+                    self.registers.write_word(&Register16::PC, next_address as u16);
+                }
+            }
+            Instruction::Ldi => {
+                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::DE), value);
+
+                let address = self.registers.read_word(&Register16::DE).wrapping_add(1);
+                self.registers.write_word(&Register16::DE, address);
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_add(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_word(&Register16::BC).wrapping_sub(1);
+                self.registers.write_word(&Register16::BC, counter);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, counter != 0);
+                self.set_flag(Flag::AddSubtract, false);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Ldir => {
                 let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
                 self.store_byte(memory, &Operand::RegisterIndirect(Register16::DE), value);
 
-                let address = self.registers.read_word(&Register16::DE) + 1;
+                let address = self.registers.read_word(&Register16::DE).wrapping_add(1);
                 self.registers.write_word(&Register16::DE, address);
 
-                let address = self.registers.read_word(&Register16::HL) + 1;
+                let address = self.registers.read_word(&Register16::HL).wrapping_add(1);
                 self.registers.write_word(&Register16::HL, address);
 
-                let counter = self.registers.read_word(&Register16::BC) - 1;
+                let counter = self.registers.read_word(&Register16::BC).wrapping_sub(1);
                 self.registers.write_word(&Register16::BC, counter);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, counter != 0);
+                self.set_flag(Flag::AddSubtract, false);
+
                 if counter == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
                 }
+            }
+            Instruction::Neg => {
+                let right = self.registers.read_byte(&Register8::A);
+                let (value, carry) = (0 as u8).overflowing_sub(right);
+                let (_, overflow) = (0 as i8).overflowing_sub(right as i8);
+                self.registers.write_byte(&Register8::A, value);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, 0 < (right & 0xf));
+                self.set_flag(Flag::ParityOverflow, overflow);
+                self.set_flag(Flag::AddSubtract, true);
+                self.set_flag(Flag::Carry, carry);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Nop => {
                 self.registers.write_word(&Register16::PC, next_address as u16);
@@ -512,6 +653,13 @@ impl CPU
                 memory.write_word(new_sp as usize, self.registers.read_word(&source));
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Res(destination, Operand::Bit(bit), operand) => {
+                let value = self.load_byte(memory, &operand) & (!(1 << bit));
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Ret(jump_test) => {
                 if self.check_jump(jump_test) {
                     let old_sp = self.registers.read_word(&Register16::SP);
@@ -520,6 +668,42 @@ impl CPU
                 } else {
                     self.registers.write_word(&Register16::PC, next_address as u16);
                 }
+            }
+            Instruction::Rl(destination, operand) => {
+                let value = self.load_byte(memory, &operand);
+                let carry = value >> 7;
+                let value = (value.rotate_left(1) & 0xfe) | carry;
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Rla => {
+                let value = self.registers.read_byte(&Register8::A);
+                let carry = value >> 7;
+                let value = (value.rotate_left(1) & 0xfe) | carry;
+                self.registers.write_byte(&Register8::A, value);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Rlc(destination, operand) => {
+                let value = self.load_byte(memory, &operand).rotate_left(1);
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, (value & 1) != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rlca => {
                 let value = self.registers.read_byte(&Register8::A).rotate_left(1);
@@ -531,6 +715,41 @@ impl CPU
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Rr(destination, operand) => {
+                let value = self.load_byte(memory, &operand);
+                let carry = value & 1;
+                let value = (value.rotate_right(1) & 0x7f) | (carry << 7);
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Rra => {
+                let value = self.registers.read_byte(&Register8::A);
+                let carry = value & 1;
+                self.registers.write_byte(&Register8::A, (value.rotate_right(1) & 0x7f) | (carry << 7));
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Rrc(destination, operand) => {
+                let value = self.load_byte(memory, &operand).rotate_right(1);
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, (value & 0x80) != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Rrca => {
                 let value = self.registers.read_byte(&Register8::A).rotate_right(1);
                 self.registers.write_byte(&Register8::A, value);
@@ -538,6 +757,38 @@ impl CPU
                 self.set_flag(Flag::HalfCarry, false);
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, (value & 0x80) != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Rld => {
+                let accumulator = self.registers.read_byte(&Register8::A);
+                let memory_hl = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let new_accumulator = (accumulator & 0xf0) | (memory_hl >> 4);
+                self.registers.write_byte(&Register8::A, new_accumulator);
+                let new_memory_hl = (memory_hl << 4) | (accumulator & 0xf);
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), new_memory_hl);
+
+                self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
+                self.set_flag(Flag::Zero, new_accumulator == 0);
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, (new_accumulator.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Rrd => {
+                let accumulator = self.registers.read_byte(&Register8::A);
+                let memory_hl = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let new_accumulator = (accumulator & 0xf0) | (memory_hl & 0xf);
+                self.registers.write_byte(&Register8::A, new_accumulator);
+                let new_memory_hl = ((accumulator & 0xf) << 4) | (memory_hl >> 4);
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), new_memory_hl);
+
+                self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
+                self.set_flag(Flag::Zero, new_accumulator == 0);
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, (new_accumulator.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -580,6 +831,85 @@ impl CPU
                     }
                     _ => unreachable!(),
                 }
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Scf => {
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, true);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Set(destination, Operand::Bit(bit), operand) => {
+                let value = self.load_byte(memory, &operand) | (1 << bit);
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Sla(destination, operand) => {
+                let value = self.load_byte(memory, &operand);
+                let carry = value >> 7;
+                let value = value << 1;
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, (value.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Sll(destination, operand) => {
+                let value = self.load_byte(memory, &operand);
+                let carry = value >> 7;
+                let value = value << 1;
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, (value.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Sra(destination, operand) => {
+                let value = self.load_byte(memory, &operand);
+                let sign = value >> 7;
+                let carry = value & 1;
+                let value = sign | (value >> 1);
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, (value.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Srl(destination, operand) => {
+                let value = self.load_byte(memory, &operand);
+                let carry = value & 1;
+                let value = value >> 1;
+                self.store_byte(memory, &destination, value); // copy for undocumented instructions
+                self.store_byte(memory, &operand, value);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, (value.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::Carry, carry != 0);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }

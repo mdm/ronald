@@ -6,7 +6,7 @@ use memory::{ Read, Write };
 
 fn main() {
     exercise("rom/zexdoc.rom");
-    decode("rom/amsdos_0.5.rom");
+    // decode("rom/amsdos_0.5.rom");
 }
 
 fn exercise(path: &str) {
