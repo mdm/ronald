@@ -177,7 +177,8 @@ impl CPU
                         let left = self.load_byte(memory, &destination);
                         let right = self.load_byte(memory, &source);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
-                        let (value, carry) = left.overflowing_add(right.wrapping_add(carry_value));
+                        let (value, carry1) = right.overflowing_add(carry_value);
+                        let (value, carry2) = left.overflowing_add(value);
                         let overflow = (left & 0x80) == (right & 0x80) && (right & 0x80) != (value & 0x80);
                         self.store_byte(memory, &destination, value);
 
@@ -186,13 +187,14 @@ impl CPU
                         self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf) + carry_value) & 0x10) != 0);
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, false);
-                        self.set_flag(Flag::Carry, carry);
+                        self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     Operand::Register16(Register16::HL) => {
                         let left = self.load_word(memory, &destination);
                         let right = self.load_word(memory, &source);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
-                        let (value, carry) = left.overflowing_add(right.wrapping_add(carry_value));
+                        let (value, carry1) = right.overflowing_add(carry_value);
+                        let (value, carry2) = left.overflowing_add(value);
                         let overflow = (left & 0x8000) == (right & 0x8000) && (right & 0x8000) != (value & 0x8000);
                         self.store_word(memory, &destination, value);
 
@@ -201,7 +203,7 @@ impl CPU
                         self.set_flag(Flag::HalfCarry, (((left & 0xfff) + (right & 0xfff) + carry_value) & 0x1000) != 0);
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, false);
-                        self.set_flag(Flag::Carry, carry);
+                        self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     _ => unreachable!(),
                 }
@@ -239,10 +241,7 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::And(operand) => {
-                // println!("BEGIN AND");
-                // self.print_state();
                 let value = self.load_byte(memory, &operand);
-                // println!("OPERANDS: {:#04x}, {:#04x}", self.registers.read_byte(&Register8::A), value);
 
                 let result = self.registers.read_byte(&Register8::A) & value;
                 self.registers.write_byte(&Register8::A, result);
@@ -253,9 +252,6 @@ impl CPU
                 self.set_flag(Flag::ParityOverflow, (result.count_ones() & 1) == 0);
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, false);
-
-                // self.print_state();
-                // println!("END AND");
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -799,10 +795,14 @@ impl CPU
             Instruction::Sbc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
+                        // println!("BEGIN SBC");
+                        // self.print_state();
                         let left = self.load_byte(memory, &destination);
                         let right = self.load_byte(memory, &source);
+                        // println!("OPERANDS: {:#04x}, {:#04x}", left, right);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
-                        let (value, carry) = left.overflowing_sub(right.wrapping_add(carry_value));
+                        let (value, carry1) = right.overflowing_add(carry_value);
+                        let (value, carry2) = left.overflowing_sub(value);
                         let overflow = (left & 0x80) != (right & 0x80) && (right & 0x80) == (value & 0x80);
                         self.store_byte(memory, &destination, value);
 
@@ -811,13 +811,17 @@ impl CPU
                         self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf) + carry_value);
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, true);
-                        self.set_flag(Flag::Carry, carry);
+                        self.set_flag(Flag::Carry, carry1 || carry2);
+
+                        // self.print_state();
+                        // println!("END SBC");
                     }
                     Operand::Register16(Register16::HL) => {
                         let left = self.load_word(memory, &destination);
                         let right = self.load_word(memory, &source);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
-                        let (value, carry) = left.overflowing_sub(right.wrapping_add(carry_value));
+                        let (value, carry1) = right.overflowing_add(carry_value);
+                        let (value, carry2) = left.overflowing_sub(value);
                         let overflow = (left & 0x8000) != (right & 0x8000) && (right & 0x8000) == (value & 0x8000);
                         self.store_word(memory, &destination, value);
 
@@ -826,7 +830,7 @@ impl CPU
                         self.set_flag(Flag::HalfCarry, (left & 0xfff) < (right & 0xfff) + carry_value);
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, true);
-                        self.set_flag(Flag::Carry, carry);
+                        self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     _ => unreachable!(),
                 }
