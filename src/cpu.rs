@@ -176,20 +176,22 @@ impl CPU
                     Operand::Register8(Register8::A) => {
                         let left = self.load_byte(memory, &destination);
                         let right = self.load_byte(memory, &source);
-                        let (value, carry1) = left.overflowing_add(right);
+                        // let (value, carry1) = left.overflowing_add(right);
                         // let (_, overflow1) = (left as i8).overflowing_add(right as i8);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
-                        let (value, carry2) = value.overflowing_add(carry_value);
+                        // let (value, carry2) = value.overflowing_add(carry_value);
+                        let (value, carry) = left.overflowing_add(right.wrapping_add(carry_value));
                         // let (_, overflow2) = (value as i8).overflowing_add(carry_value as i8);
                         let overflow = (left & 0x80) == (right & 0x80) && (right & 0x80) != (value & 0x80);
                         self.store_byte(memory, &destination, value);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0);
                         self.set_flag(Flag::Zero, value == 0);
-                        self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf)) & 0x10) != 0);
+                        self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf) + carry_value) & 0x10) != 0);
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, false);
-                        self.set_flag(Flag::Carry, carry1 || carry2);
+                        // self.set_flag(Flag::Carry, carry1 || carry2);
+                        self.set_flag(Flag::Carry, carry);
                     }
                     Operand::Register16(Register16::HL) => {
                         let left = self.load_word(memory, &destination);
@@ -215,7 +217,7 @@ impl CPU
             }
             Instruction::Add(destination, source) => {
                 match destination {
-                    Operand::Register8(Register8::A) => {
+                    Operand::Register8(Register8::A) => { // ALUOP / checked
                         let left = self.load_byte(memory, &destination);
                         let right = self.load_byte(memory, &source);
                         let (value, carry) = left.overflowing_add(right);
@@ -244,7 +246,10 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::And(operand) => {
+                // println!("BEGIN AND");
+                // self.print_state();
                 let value = self.load_byte(memory, &operand);
+                // println!("OPERANDS: {:#04x}, {:#04x}", self.registers.read_byte(&Register8::A), value);
 
                 let result = self.registers.read_byte(&Register8::A) & value;
                 self.registers.write_byte(&Register8::A, result);
@@ -255,6 +260,9 @@ impl CPU
                 self.set_flag(Flag::ParityOverflow, (result.count_ones() & 1) == 0);
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, false);
+
+                // self.print_state();
+                // println!("END AND");
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -287,7 +295,7 @@ impl CPU
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::Cp(operand) => {
+            Instruction::Cp(operand) => { // ALUOP / checked
                 let left = self.registers.read_byte(&Register8::A);
                 let right = self.load_byte(memory, &operand);
                 let (value, carry) = left.overflowing_sub(right);
@@ -393,33 +401,36 @@ impl CPU
             }
             Instruction::Daa => {
                 let mut value = self.registers.read_byte(&Register8::A);
-                let mut carry = false;
+                let mut half_carry = self.check_flag(Flag::HalfCarry);
+                let mut carry = self.check_flag(Flag::Carry);
                 match self.check_flag(Flag::AddSubtract) {
                     true => {
-                        if (value & 0xf) > 0x9 || self.check_flag(Flag::HalfCarry) {
+                        if (value & 0xf) > 0x9 || half_carry {
                             value -= 0x6;
                         }
 
-                        if (value >> 4) > 0x9 || self.check_flag(Flag::Carry) {
+                        // if (value >> 4) > 0x9 || carry {
+                        if value > 0x99 || carry {
                             value -= 0x60;
                             carry = true;
                         }
+
+                        half_carry = half_carry && (value & 0xf) < 0x6;
                     }
                     false => {
-                        if (value & 0xf) > 0x9 || self.check_flag(Flag::HalfCarry) {
+                        if (value & 0xf) > 0x9 || half_carry {
                             value += 0x6;
                         }
 
-                        if (value >> 4) > 0x9 || self.check_flag(Flag::Carry) {
+                        // if (value >> 4) > 0x9 || carry {
+                        if value > 0x99 || carry {
                             value += 0x60;
                             carry = true;
                         }
+
+                        half_carry = (value & 0xf) >= 0xa;
                     }
                 }
-
-                let n = self.check_flag(Flag::AddSubtract);
-                let h = self.check_flag(Flag::HalfCarry);
-                let half_carry = (n && h && (value & 0xf) < 0x6) || (!n && (value & 0xf) >= 0xa);
 
                 self.registers.write_byte(&Register8::A, value);
 
@@ -795,22 +806,26 @@ impl CPU
             Instruction::Sbc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
-                        let left = self.load_byte(memory, &destination);
-                        let right = self.load_byte(memory, &source);
-                        let (value, carry1) = left.overflowing_sub(right);
+                        let left = self.load_byte(memory, &destination) as u16;
+                        let right = self.load_byte(memory, &source) as u16;
+                        // let (value, carry1) = left.overflowing_sub(right);
                         // let (_, overflow1) = (left as i8).overflowing_sub(right as i8);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
-                        let (value, carry2) = value.overflowing_sub(carry_value);
+                        // let (value, carry2) = value.overflowing_sub(carry_value);
+                        // let (value, carry) = left.overflowing_sub(right.wrapping_sub(carry_value));
+                        let value = left.wrapping_sub(right).wrapping_sub(carry_value);
+                        let carry = (value & 0x100) != 0;
                         // let (_, overflow2) = (value as i8).overflowing_sub(carry_value as i8);
                         let overflow = (left & 0x80) != (right & 0x80) && (right & 0x80) == (value & 0x80);
-                        self.store_byte(memory, &destination, value);
+                        self.store_byte(memory, &destination, value as u8);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0);
                         self.set_flag(Flag::Zero, value == 0);
-                        self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf));
+                        self.set_flag(Flag::HalfCarry, (left & 0xf) < (right & 0xf) + carry_value);
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, true);
-                        self.set_flag(Flag::Carry, carry1 || carry2);
+                        // self.set_flag(Flag::Carry, carry1 || carry2);
+                        self.set_flag(Flag::Carry, carry);
                     }
                     Operand::Register16(Register16::HL) => {
                         let left = self.load_word(memory, &destination);
@@ -913,7 +928,7 @@ impl CPU
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::Sub(operand) => {
+            Instruction::Sub(operand) => { // ALUOP / checked
                 let left = self.registers.read_byte(&Register8::A);
                 let right = self.load_byte(memory, &operand);
                 let (value, carry) = left.overflowing_sub(right);
@@ -1057,5 +1072,27 @@ impl CPU
             }
             _ => unreachable!(),
         }
+    }
+
+    fn print_state(&self) {
+        let ix = self.registers.read_word(&Register16::IX);
+        let iy = self.registers.read_word(&Register16::IY);
+        let hl = self.registers.read_word(&Register16::HL);
+        let de = self.registers.read_word(&Register16::DE);
+        let bc = self.registers.read_word(&Register16::BC);
+        let af = self.registers.read_word(&Register16::AF);
+        let sp = self.registers.read_word(&Register16::SP);
+        println!(
+            "IX = {:#06x}, IY = {:#06x}, HL = {:#06x}, DE = {:#06x}, BC = {:#06x}, AF = {:#06x}, SP = {:#06x}",
+            ix, iy, hl, de, bc, af, sp
+        );
+        
+        let s = self.check_flag(Flag::Sign);
+        let z = self.check_flag(Flag::Zero);
+        let h = self.check_flag(Flag::HalfCarry);
+        let pv = self.check_flag(Flag::ParityOverflow);
+        let n = self.check_flag(Flag::AddSubtract);
+        let c = self.check_flag(Flag::Carry);
+        println!("S = {}, Z = {}, H = {}, P/V = {}, N = {}, C = {}", s, z, h, pv, n, c);
     }
 }
