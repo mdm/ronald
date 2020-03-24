@@ -105,6 +105,16 @@ impl RegisterFile {
             Register16::PC => { self.data[13] = value; },
         }
     }
+
+    fn swap_word(&mut self, register: &Register16) {
+        match register {
+            Register16::AF => { let tmp = self.data[0]; self.data[0] = self.data[4]; self.data[4] = tmp; },
+            Register16::BC => { let tmp = self.data[1]; self.data[1] = self.data[5]; self.data[5] = tmp; },
+            Register16::DE => { let tmp = self.data[2]; self.data[2] = self.data[6]; self.data[6] = tmp; },
+            Register16::HL => { let tmp = self.data[3]; self.data[3] = self.data[7]; self.data[7] = tmp; },
+            _ => unreachable!(),
+        }
+    }
 }
 
 enum Flag {
@@ -389,41 +399,29 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Daa => {
-                // println!("BEGIN DAA");
-                // self.print_state();
                 let mut value = self.registers.read_byte(&Register8::A);
                 let mut half_carry = self.check_flag(Flag::HalfCarry);
                 let mut carry = self.check_flag(Flag::Carry);
-                match self.check_flag(Flag::AddSubtract) {
-                    true => {
-                        if (value & 0xf) > 0x9 || half_carry {
-                            value -= 0x6;
-                        }
+                let mut correction = 0;
 
-                        // if (value >> 4) > 0x9 || carry {
-                        if value > 0x99 || carry {
-                            value -= 0x60;
-                            carry = true;
-                        }
-
-                        half_carry = half_carry && (value & 0xf) < 0x6;
-                    }
-                    false => {
-                        if (value & 0xf) > 0x9 || half_carry {
-                            value += 0x6;
-                        }
-
-                        // if (value >> 4) > 0x9 || carry {
-                        if value > 0x99 || carry {
-                            value += 0x60;
-                            carry = true;
-                        }
-
-                        half_carry = (value & 0xf) >= 0xa;
-                    }
+                if (value & 0xf) > 0x9 || half_carry {
+                    half_carry = half_carry && (value & 0xf) < 0x6;
+                    correction += 0x6;
                 }
 
-                // println!("DETAILS: {:#04x} => {:#04x}", self.registers.read_byte(&Register8::A), value);
+                if value > 0x99 || carry {
+                    correction += 0x60;
+                    carry = true;
+                }
+
+                if self.check_flag(Flag::AddSubtract) {
+                    half_carry = half_carry && (value & 0xf) < 0x6;
+                    value -= correction;
+                } else {
+                    half_carry = (value & 0xf) > 0x9;
+                    value += correction;
+                }
+
                 self.registers.write_byte(&Register8::A, value);
 
                 self.set_flag(Flag::Sign, (value as i8) < 0);
@@ -431,9 +429,6 @@ impl CPU
                 self.set_flag(Flag::HalfCarry, half_carry);
                 self.set_flag(Flag::ParityOverflow, (value.count_ones() & 1) == 0);
                 self.set_flag(Flag::Carry, carry);
-
-                // self.print_state();
-                // println!("END DAA");
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -474,11 +469,18 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Ex(left, right) => {
-                let left_value = self.load_word(memory, &left);
-                let right_value = self.load_word(memory, &right);
+                match (left, right) {
+                    (Operand::Register16(Register16::AF), Operand::Register16(Register16::AF)) => {
+                        self.registers.swap_word(&Register16::AF);
+                    }
+                    (left, right) => {
+                        let left_value = self.load_word(memory, &left);
+                        let right_value = self.load_word(memory, &right);
 
-                self.store_word(memory, &left, right_value);
-                self.store_word(memory, &right, left_value);
+                        self.store_word(memory, &left, right_value);
+                        self.store_word(memory, &right, left_value);
+                    }
+                }
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
