@@ -683,14 +683,21 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rla => {
+                // println!("BEGIN RLA");
+                // self.print_state();
                 let value = self.registers.read_byte(&Register8::A);
-                let carry = value >> 7;
-                let value = (value.rotate_left(1) & 0xfe) | carry;
-                self.registers.write_byte(&Register8::A, value);
+                let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
+                let carry = (value >> 7) != 0;
+                let result = (value.rotate_left(1) & 0xfe) | carry_value;
+                // println!("DETAILS: {:#04x} => {:#04x}", value, result);
+                self.registers.write_byte(&Register8::A, result);
 
                 self.set_flag(Flag::HalfCarry, false);
                 self.set_flag(Flag::AddSubtract, false);
-                self.set_flag(Flag::Carry, carry != 0);
+                self.set_flag(Flag::Carry, carry);
+
+                // self.print_state();
+                // println!("END RLA");
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -706,12 +713,13 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rlca => {
-                let value = self.registers.read_byte(&Register8::A).rotate_left(1);
-                self.registers.write_byte(&Register8::A, value);
+                let value = self.registers.read_byte(&Register8::A);
+                let result = value.rotate_left(1);
+                self.registers.write_byte(&Register8::A, result);
 
                 self.set_flag(Flag::HalfCarry, false);
                 self.set_flag(Flag::AddSubtract, false);
-                self.set_flag(Flag::Carry, (value & 1) != 0);
+                self.set_flag(Flag::Carry, (result & 1) != 0);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -730,12 +738,14 @@ impl CPU
             }
             Instruction::Rra => {
                 let value = self.registers.read_byte(&Register8::A);
-                let carry = value & 1;
-                self.registers.write_byte(&Register8::A, (value.rotate_right(1) & 0x7f) | (carry << 7));
+                let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
+                let carry = (value & 1) != 0;
+                let result = (value.rotate_right(1) & 0x7f) | (carry_value << 7);
+                self.registers.write_byte(&Register8::A, result);
 
                 self.set_flag(Flag::HalfCarry, false);
                 self.set_flag(Flag::AddSubtract, false);
-                self.set_flag(Flag::Carry, carry != 0);
+                self.set_flag(Flag::Carry, carry);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -751,12 +761,13 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rrca => {
-                let value = self.registers.read_byte(&Register8::A).rotate_right(1);
-                self.registers.write_byte(&Register8::A, value);
+                let value = self.registers.read_byte(&Register8::A);
+                let result = value.rotate_right(1);
+                self.registers.write_byte(&Register8::A, result);
 
                 self.set_flag(Flag::HalfCarry, false);
                 self.set_flag(Flag::AddSubtract, false);
-                self.set_flag(Flag::Carry, (value & 0x80) != 0);
+                self.set_flag(Flag::Carry, (result & 0x80) != 0);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -795,11 +806,8 @@ impl CPU
             Instruction::Sbc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
-                        // println!("BEGIN SBC");
-                        // self.print_state();
                         let left = self.load_byte(memory, &destination);
                         let right = self.load_byte(memory, &source);
-                        // println!("OPERANDS: {:#04x}, {:#04x}", left, right);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_sub(value);
@@ -812,9 +820,6 @@ impl CPU
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, true);
                         self.set_flag(Flag::Carry, carry1 || carry2);
-
-                        // self.print_state();
-                        // println!("END SBC");
                     }
                     Operand::Register16(Register16::HL) => {
                         let left = self.load_word(memory, &destination);
