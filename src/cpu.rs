@@ -529,6 +529,7 @@ impl CPU
                         self.store_word(memory, &destination, value);
                     }
                     _ => {
+                        // TODO: store iff2 in parity flag if instruction is ld a,i or ld a,r
                         let value = self.load_byte(memory, &source);
                         self.store_byte(memory, &destination, value);
                     }
