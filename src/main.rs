@@ -1,6 +1,7 @@
 mod cpu;
 mod instruction;
 mod memory;
+mod crtc;
 
 use memory::{ Read, Write };
 
@@ -14,6 +15,7 @@ fn exercise(path: &str) {
     memory.write_byte(0x0005, 0xc9); // patch with RET instruction
     memory.write_word(0x0006, 0xe400); // patch with initial SP
     let mut cpu = cpu::CPU::new(0x100);
+    let mut crtc = crtc::CRTC::new();
 
     loop {
         match cpu.registers.read_word(&cpu::Register16::PC) {
