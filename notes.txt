@@ -1,0 +1,13 @@
+CRTC
+----
+
+* where is the character rom located? inside the gate array? - no character rom just raw pixels
+* are there 18 or 19 registers? 18 - the extra one is the pointer to the selected register
+* skip interlace modes for first implementation
+* Whenever the microprocessor writes to R12 and R13, the Linear Address Generator is updated at the start of the next vertical frame.
+* Which refresh addresses provided during hsync? see datasheet ("during")
+
+Debugger
+--------
+
+* break on bus communication
