@@ -27,8 +27,6 @@ pub struct CRTC {
     character_row_counter: u8,
     scan_line_counter: u8,
     display_start_address: u16,
-    refresh_memory_address: u16,
-    row_address: u8,
 }
 
 impl CRTC {
@@ -41,8 +39,6 @@ impl CRTC {
             character_row_counter: 0,
             scan_line_counter: 0,
             display_start_address: 0,
-            refresh_memory_address: 0,
-            row_address: 0,
         };
         // crtc.registers[Register::HorizontalTotal as usize] = 63;
         // crtc.registers[Register::HorizontalDisplayed as usize] = 40;
@@ -78,11 +74,51 @@ impl CRTC {
         self.registers[self.selected_register] // TODO: restrict to registers 14-17
     }
 
-    pub fn generate_address(&mut self) -> usize {
+    pub fn read_address(&self) -> usize {
+        let refresh_memory_address = self.display_start_address + self.registers[Register::HorizontalDisplayed as usize] as u16 * self.character_row_counter as u16 + self.horizontal_counter as u16;
+
+        let bits_14_and_15 = (refresh_memory_address & (0b11 << 12)) << 2;
+        let bits_11_to_13 = ((self.scan_line_counter & 0b111) as u16) << 11;
+        let bits_0_to_10 = (refresh_memory_address & 0b11_11111111) << 1;
+
+        (bits_14_and_15 | bits_11_to_13 | bits_0_to_10) as usize
+    }
+
+    pub fn read_display_enabled(&self) -> bool {
+        self.horizontal_counter < self.registers[Register::HorizontalDisplayed as usize] && self.character_row_counter < self.registers[Register::VerticalDisplayed as usize]
+    }
+
+    pub fn read_horizontal_sync(&self) -> bool {
+        let sync_start = self.registers[Register::HorizontalSyncPosition as usize];
+        let sync_end = self.registers[Register::HorizontalSyncPosition as usize] + (self.registers[Register::HorizontalAndVerticalSyncWidths as usize] & 0b1111);
+        self.horizontal_counter >= sync_start && self.horizontal_counter < sync_end // this results in NO sync if the horizontal sync width is 0
+    }
+
+    pub fn read_vertical_sync(&self) -> bool {
+        let sync_start = self.registers[Register::VerticalSyncPosition as usize];
+        let sync_end = self.registers[Register::VerticalSyncPosition as usize] + 16;
+        self.character_row_counter >= sync_start && self.character_row_counter < sync_end
+    }
+
+    pub fn generate_next_address(&mut self) {
+        self.horizontal_counter += 1;
+
+        if self.horizontal_counter > self.registers[Register::HorizontalTotal as usize] {
+            self.scan_line_counter += 1;
+            self.horizontal_counter = 0;
+        }
+
+        if self.scan_line_counter > self.registers[Register::MaximumRasterAddress as usize] {
+            self.character_row_counter += 1;
+            self.scan_line_counter = 0;            
+        }
+
+        if self.character_row_counter > self.registers[Register::VerticalTotal as usize] { // TODO: take VerticalTotalAdjust into account
+            self.character_row_counter = 0;
+        }
+
         if self.horizontal_counter == 0 && self.character_row_counter == 0 {
             self.display_start_address = ((self.registers[Register::DisplayStartAddressHigh as usize] as u16) << 8) + self.registers[Register::DisplayStartAddressLow as usize] as u16;
         }
-
-        0
     }
 }
