@@ -2,47 +2,14 @@ mod cpu;
 mod instruction;
 mod memory;
 mod crtc;
+mod system;
 
-use memory::{ Read, Write };
+use system::System;
 
 fn main() {
-    exercise("rom/zexdoc.rom");
+    let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
+    zex_harness.emulate(None);
     // decode("rom/amsdos_0.5.rom");
-}
-
-fn exercise(path: &str) {
-    let mut memory = memory::RAM::from_file(0x10000, path, 0x100);
-    memory.write_byte(0x0005, 0xc9); // patch with RET instruction
-    memory.write_word(0x0006, 0xe400); // patch with initial SP
-    let mut cpu = cpu::CPU::new(0x100);
-    let mut crtc = crtc::CRTC::new();
-
-    loop {
-        match cpu.registers.read_word(&cpu::Register16::PC) {
-            0x0000 => break,
-            0x0005 => {
-                match cpu.registers.read_byte(&cpu::Register8::C) {
-                    2 => print!("{}", cpu.registers.read_byte(&cpu::Register8::E) as char),
-                    9 => {
-                        let mut address = cpu.registers.read_word(&cpu::Register16::DE) as usize;
-                        loop {
-                            let character = memory.read_byte(address) as char;
-                            if character == '$' {
-                                break;
-                            }
-                            else {
-                                print!("{}", character);
-                            }
-                            address += 1;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-                cpu.fetch_and_execute(&mut memory);
-            }
-            _ => cpu.fetch_and_execute(&mut memory),
-        }
-    }
 }
 
 fn decode(path: &str) {
