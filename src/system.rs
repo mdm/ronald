@@ -1,6 +1,7 @@
+use crate::cpu;
 use crate::memory;
 use memory::{ Read, Write };
-use crate::cpu;
+use crate::bus;
 
 pub trait System {
     fn emulate(&mut self, time_limit: Option<u64>);
@@ -8,8 +9,8 @@ pub trait System {
 
 
 pub struct ZexHarness {
-    memory: memory::RAM,
     cpu: cpu::CPU,
+    memory: memory::RAM,
 }
 
 impl ZexHarness {
@@ -19,8 +20,8 @@ impl ZexHarness {
         memory.write_word(0x0006, 0xe400); // patch with initial SP
 
         ZexHarness {
-            memory: memory,
             cpu: cpu::CPU::new(0x100),
+            memory: memory,
         }
     }
 }
@@ -53,14 +54,23 @@ impl System for ZexHarness {
                 _ => self.cpu.fetch_and_execute(&mut self.memory),
             }
         }
+        println!();
     }
 }
 
 
-// struct CPC464 {
+struct CPC464 {
+    cpu: cpu::CPU,
+    memory: memory::Memory,
+    bus: bus::Bus,
+}
 
-// }
-
-// impl system for CPC464 {
-
-// }
+impl CPC464 {
+    pub fn new() -> CPC464 {
+        CPC464 {
+            cpu: cpu::CPU::new(0),
+            memory: memory::Memory::new(),
+            bus: bus::Bus::new(),
+        }
+    }
+}

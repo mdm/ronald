@@ -91,6 +91,7 @@ pub struct Memory {
 
 impl Memory {
     pub fn new() -> Memory {
+        // TODO: receive rom paths as parameters
         let mut upper_roms = HashMap::new();
         upper_roms.insert(0, ROM::from_file("rom/basic_1.0.rom"));
         upper_roms.insert(7, ROM::from_file("rom/amsdos_0.5.rom"));

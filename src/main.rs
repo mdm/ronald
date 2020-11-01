@@ -3,10 +3,17 @@ mod instruction;
 mod memory;
 mod crtc;
 mod system;
+mod bus;
 
+use clap::App;
 use system::System;
 
 fn main() {
+    App::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .about("an Amstrad CPC emulator")
+        .get_matches();
+
     let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
     zex_harness.emulate(None);
     // decode("rom/amsdos_0.5.rom");
