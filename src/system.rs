@@ -2,6 +2,8 @@ use crate::cpu;
 use crate::memory;
 use memory::{ Read, Write };
 use crate::bus;
+use crate::gate_array;
+use crate::crtc;
 
 pub trait System {
     fn emulate(&mut self, time_limit: Option<u64>);
@@ -70,7 +72,13 @@ impl CPC464 {
         CPC464 {
             cpu: cpu::CPU::new(0),
             memory: memory::Memory::new(),
-            bus: bus::Bus::new(),
+            bus: bus::Bus::new(gate_array::GateArray::new(), crtc::CRTC::new()),
         }
+    }
+
+    fn emulate(&mut self, _time_limit: Option<u64>) {
+        let cycles = self.cpu.fetch_and_execute(&mut self.memory);
+        
+        self.bus.step(&mut self.memory); // TODO: step multiple times depending on "cycles" and handle interrupts
     }
 }

@@ -1,16 +1,18 @@
-pub trait Device {
-    fn read_byte(&self, port: u16) -> Option<u8>;
-    fn write_byte(&mut self, port: u16, value: u8);
-}
+use crate::memory;
+use crate::gate_array;
+use crate::crtc;
+
 
 pub struct Bus {
-    devices: Vec<Box<dyn Device>>
+    gate_array: gate_array::GateArray,
+    crtc: crtc::CRTC,
 }
 
 impl Bus {
-    pub fn new() -> Bus {
+    pub fn new(gate_array: gate_array::GateArray, crtc: crtc::CRTC) -> Bus {
         Bus {
-            devices: vec!()
+            gate_array,
+            crtc,
         }
     }
 
@@ -20,5 +22,10 @@ impl Bus {
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
 
+    }
+
+    pub fn step(&mut self, memory: &mut memory::Memory) -> bool {
+        self.crtc.step();
+        self.gate_array.step(memory, &self.crtc)
     }
 }

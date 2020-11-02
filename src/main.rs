@@ -1,6 +1,7 @@
 mod cpu;
 mod instruction;
 mod memory;
+mod gate_array;
 mod crtc;
 mod system;
 mod bus;

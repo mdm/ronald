@@ -100,7 +100,7 @@ impl CRTC {
         self.character_row_counter >= sync_start && self.character_row_counter < sync_end
     }
 
-    pub fn generate_next_address(&mut self) {
+    pub fn step(&mut self) {
         self.horizontal_counter += 1;
 
         if self.horizontal_counter > self.registers[Register::HorizontalTotal as usize] {
