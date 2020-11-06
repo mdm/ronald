@@ -19,7 +19,7 @@ enum Register {
     LightPenAddressLow,
 }
 
-pub struct CRTC {
+pub struct CRTController {
     registers: [u8; 18],
     selected_register: usize,
     horizontal_counter: u8,
@@ -29,9 +29,9 @@ pub struct CRTC {
     display_start_address: u16,
 }
 
-impl CRTC {
-    pub fn new() -> CRTC {
-        let mut crtc = CRTC {
+impl CRTController {
+    pub fn new() -> CRTController {
+        let mut crtc = CRTController {
             registers: [0; 18],
             selected_register: 0,
             horizontal_counter: 0,

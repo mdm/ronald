@@ -1,9 +1,11 @@
+use crate::bus;
 use crate::cpu;
+use crate::crtc;
+use crate::gate_array;
 use crate::memory;
 use memory::{ Read, Write };
-use crate::bus;
-use crate::gate_array;
-use crate::crtc;
+use crate::pio;
+
 
 pub trait System {
     fn emulate(&mut self, time_limit: Option<u64>);
@@ -72,7 +74,7 @@ impl CPC464 {
         CPC464 {
             cpu: cpu::CPU::new(0),
             memory: memory::Memory::new(),
-            bus: bus::Bus::new(gate_array::GateArray::new(), crtc::CRTC::new()),
+            bus: bus::Bus::new(crtc::CRTController::new(), gate_array::GateArray::new(), pio::PeripheralInterface::new()),
         }
     }
 

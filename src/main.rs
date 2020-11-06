@@ -1,10 +1,12 @@
+mod bus;
 mod cpu;
+mod crtc;
+mod fdc;
+mod gate_array;
 mod instruction;
 mod memory;
-mod gate_array;
-mod crtc;
+mod pio;
 mod system;
-mod bus;
 
 use clap::App;
 use system::System;
