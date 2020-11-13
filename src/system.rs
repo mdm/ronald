@@ -1,6 +1,7 @@
 use crate::bus;
 use crate::cpu;
 use crate::crtc;
+use crate::fdc;
 use crate::gate_array;
 use crate::memory;
 use memory::{ Read, Write };
@@ -74,7 +75,11 @@ impl CPC464 {
         CPC464 {
             cpu: cpu::CPU::new(0),
             memory: memory::Memory::new(),
-            bus: bus::Bus::new(crtc::CRTController::new(), gate_array::GateArray::new(), pio::PeripheralInterface::new()),
+            bus: bus::Bus::new(
+                crtc::CRTController::new(),
+                fdc::FloppyDiskController::new(),
+                gate_array::GateArray::new(),
+                pio::PeripheralInterface::new()),
         }
     }
 

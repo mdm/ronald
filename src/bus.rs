@@ -13,7 +13,12 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new(crtc: crtc::CRTController, fdc: fdc::FloppyDiskController, gate_array: gate_array::GateArray, pio: pio::PeripheralInterface) -> Bus {
+    pub fn new(
+        crtc: crtc::CRTController,
+        fdc: fdc::FloppyDiskController,
+        gate_array: gate_array::GateArray,
+        pio: pio::PeripheralInterface
+    ) -> Bus {
         Bus {
             crtc,
             fdc,
@@ -25,7 +30,8 @@ impl Bus {
     pub fn read_byte(&self, port: u16) -> u8 {
         // TODO: map read to devices
         match port {
-            _ if 0x4000 & port == 0 => self.crtc.read_byte(port),            
+            _ if 0x4000 & port == 0 => self.crtc.read_byte(port),
+            _ if 0x0800 & port == 0 => self.pio.read_byte(port),
             0xfb7e | 0xfb7f => self.fdc.read_byte(port),
             _ => unimplemented!(),
         }
