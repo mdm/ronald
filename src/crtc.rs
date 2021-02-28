@@ -84,7 +84,7 @@ impl CRTController {
 
     pub fn read_vertical_sync(&self) -> bool {
         let sync_start = self.registers[Register::VerticalSyncPosition as usize];
-        let sync_end = self.registers[Register::VerticalSyncPosition as usize] + 16;
+        let sync_end = self.registers[Register::VerticalSyncPosition as usize] + 16; // this can be switched between 0 and 16 on type 0
         self.character_row_counter >= sync_start && self.character_row_counter < sync_end
     }
 

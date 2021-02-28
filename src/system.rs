@@ -6,6 +6,7 @@ use crate::gate_array;
 use crate::memory;
 use memory::{ Read, Write };
 use crate::pio;
+use crate::screen;
 
 
 pub trait System {
@@ -64,10 +65,11 @@ impl System for ZexHarness {
 }
 
 
-struct CPC464 {
+pub struct CPC464 {
     cpu: cpu::CPU,
     memory: memory::Memory,
     bus: bus::Bus,
+    screen: screen::Screen,
 }
 
 impl CPC464 {
@@ -80,9 +82,12 @@ impl CPC464 {
                 fdc::FloppyDiskController::new(),
                 gate_array::GateArray::new(),
                 pio::PeripheralInterface::new()),
+            screen: screen::Screen::new(),
         }
     }
+}
 
+impl System for CPC464 {
     fn emulate(&mut self, _time_limit: Option<u64>) {
         let cycles = self.cpu.fetch_and_execute(&mut self.memory);
         

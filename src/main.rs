@@ -3,32 +3,43 @@ mod cpu;
 mod crtc;
 mod fdc;
 mod gate_array;
+mod gui;
 mod instruction;
 mod memory;
 mod pio;
+mod screen;
 mod system;
 
-use clap::App;
+use clap::{App, Arg};
 use system::System;
 
 fn main() {
-    App::new(env!("CARGO_PKG_NAME"))
+    let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about("an Amstrad CPC emulator")
+        .arg(Arg::with_name("system")
+            .short("s")
+            .long("system")
+            .value_name("SYSTEM")
+            .help("Selects the system to run")
+            .takes_value(true)
+            )
         .get_matches();
 
-    let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
-    zex_harness.emulate(None);
-    // decode("rom/amsdos_0.5.rom");
-}
+    let system = matches.value_of("system").unwrap_or("cpc464");
 
-fn decode(path: &str) {
-    let rom = memory::ROM::from_file(path);
-    let mut decoder = instruction::Decoder::new();
-    let mut current_address = 0;
-    while current_address < 0x4000 {
-        let (instruction, next_address) = decoder.decode_next(&rom);
-        println!("{}", instruction);
-        current_address = next_address;
+    match system {
+        "cpc464" => {
+            let cpc = Box::new(system::CPC464::new());
+            let gui = gui::GUI::new(cpc);
+            gui.run();
+        },
+        "zexdoc" => {
+            let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
+            zex_harness.emulate(None);
+        },
+        unknown_system => {
+            println!("Unknown system \"{}\". Valid systems are:\n\n\tcpc464\n\tzexdoc\n", unknown_system);
+        }
     }
 }
