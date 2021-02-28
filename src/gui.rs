@@ -28,7 +28,7 @@ impl GUI {
             self.system.emulate(None);
             
             self.window.update_with_buffer(
-                &self.system.screen.buffer,
+                self.system.get_frame_buffer(),
                 screen::BUFFER_WIDTH,
                 screen::BUFFER_HEIGHT,
             ).unwrap(); // TODO: handle errors properly

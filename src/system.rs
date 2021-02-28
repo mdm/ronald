@@ -9,11 +9,6 @@ use crate::pio;
 use crate::screen;
 
 
-pub trait System {
-    fn emulate(&mut self, time_limit: Option<u64>);
-}
-
-
 pub struct ZexHarness {
     cpu: cpu::CPU,
     memory: memory::RAM,
@@ -30,10 +25,8 @@ impl ZexHarness {
             memory: memory,
         }
     }
-}
 
-impl System for ZexHarness {
-    fn emulate(&mut self, _time_limit: Option<u64>) {
+    pub fn emulate(&mut self) {
         loop {
             match self.cpu.registers.read_word(&cpu::Register16::PC) {
                 0x0000 => break,
@@ -64,6 +57,10 @@ impl System for ZexHarness {
     }
 }
 
+pub trait System {
+    fn emulate(&mut self, time_limit: Option<u64>);
+    fn get_frame_buffer(&self) -> &Vec<u32>;
+}
 
 pub struct CPC464 {
     cpu: cpu::CPU,
@@ -92,5 +89,9 @@ impl System for CPC464 {
         let cycles = self.cpu.fetch_and_execute(&mut self.memory);
         
         self.bus.step(&mut self.memory); // TODO: step multiple times depending on "cycles" and handle interrupts
+    }
+
+    fn get_frame_buffer(&self) -> &Vec<u32> {
+        self.screen.get_frame_buffer()
     }
 }

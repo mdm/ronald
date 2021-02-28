@@ -11,7 +11,6 @@ mod screen;
 mod system;
 
 use clap::{App, Arg};
-use system::System;
 
 fn main() {
     let matches = App::new(env!("CARGO_PKG_NAME"))
@@ -31,12 +30,12 @@ fn main() {
     match system {
         "cpc464" => {
             let cpc = Box::new(system::CPC464::new());
-            let gui = gui::GUI::new(cpc);
+            let mut gui = gui::GUI::new(cpc);
             gui.run();
         },
         "zexdoc" => {
             let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
-            zex_harness.emulate(None);
+            zex_harness.emulate();
         },
         unknown_system => {
             println!("Unknown system \"{}\". Valid systems are:\n\n\tcpc464\n\tzexdoc\n", unknown_system);

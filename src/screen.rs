@@ -51,6 +51,10 @@ impl Screen {
         }
     }
 
+    pub fn get_frame_buffer(&self) -> &Vec<u32> {
+        &self.buffer
+    }
+
     fn write(&mut self, color: usize) {
         if self.waiting_for_vsync {
             return;
