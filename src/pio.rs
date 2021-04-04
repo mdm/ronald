@@ -1,10 +1,17 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub type PeripheralInterfaceShared = Rc<RefCell<PeripheralInterface>>;
+
 pub struct PeripheralInterface { // Peripheral input/output
 
 }
 
 impl PeripheralInterface {
-    pub fn new() -> PeripheralInterface {
-        PeripheralInterface {}
+    pub fn new() -> PeripheralInterfaceShared {
+        let pio = PeripheralInterface {};
+
+        Rc::new(RefCell::new(pio))
     }
 
     pub fn read_byte(&self, port: u16) -> u8 {

@@ -10,4 +10,10 @@ CRTC
 Debugger
 --------
 
-* break on bus communication
+* Break on bus communication
+
+
+Architecture
+------------
+
+* Use Rc<RefCell>s and interior mutability

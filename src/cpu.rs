@@ -1,3 +1,6 @@
+use std::fmt;
+
+use crate::bus;
 use crate::memory;
 use crate::instruction::{ Decoder, Instruction, JumpTest, Operand };
 
@@ -117,6 +120,25 @@ impl RegisterFile {
     }
 }
 
+impl fmt::Display for RegisterFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "AF: {:#06x}    ", self.data[0])?;
+        writeln!(f, "AF': {:#06x}", self.data[4])?;
+        write!(f, "BC: {:#06x}    ", self.data[1])?;
+        writeln!(f, "BC': {:#06x}", self.data[5])?;
+        write!(f, "DE: {:#06x}    ", self.data[2])?;
+        writeln!(f, "DE': {:#06x}", self.data[6])?;
+        write!(f, "HL: {:#06x}    ", self.data[3])?;
+        writeln!(f, "HL': {:#06x}", self.data[7])?;
+        writeln!(f, " I: {:#04x}", self.data[8] & 0xff)?;
+        writeln!(f, " R: {:#04x}", self.data[9] & 0xff)?;
+        writeln!(f, "IX: {:#06x}", self.data[10])?;
+        writeln!(f, "IY: {:#06x}", self.data[11])?;
+        writeln!(f, "SP: {:#06x}", self.data[12])?;
+        writeln!(f, "PC: {:#06x}", self.data[13])
+    }
+}
+
 enum Flag {
     Carry,
     AddSubtract,
@@ -168,7 +190,7 @@ impl CPU
         cpu
     }
 
-    pub fn fetch_and_execute<M>(&mut self, memory: &mut M) // TODO: pass bus instead of individual devices
+    pub fn fetch_and_execute<M>(&mut self, memory: &mut M, connected_bus: Option<&mut bus::Bus>)
     where M: memory::Read + memory::Write {
         if self.enable_interrupt {
             self.iff1 = true;
@@ -647,6 +669,15 @@ impl CPU
                 self.set_flag(Flag::ParityOverflow, (result.count_ones() & 1) == 0);
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, false);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Out(Operand::RegisterIndirect(port), Operand::Register8(source)) => {
+                if let Some(bus) = connected_bus {
+                    let address = self.registers.read_word(&port);
+                    let value = self.registers.read_byte(&source);
+                    bus.write_byte(memory, address, value);    
+                }
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }

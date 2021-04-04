@@ -2,6 +2,12 @@ use std::collections::HashMap;
 use std::fs::*;
 use std::io;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub type RAMShared = Rc<RefCell<RAM>>;
+pub type MemoryShared = Rc<RefCell<Memory>>;
+
 pub trait Read {
     fn read_byte(&self, address: usize) -> u8;
 
@@ -49,6 +55,12 @@ impl RAM {
         RAM { data: vec![0; size] }
     }
 
+    pub fn new_shared(size: usize) -> RAMShared {
+        let ram = RAM::new(size);
+
+        Rc::new(RefCell::new(ram))
+    }
+
     pub fn from_file(size: usize, path: &str, offset: usize) -> RAM {
         // TODO: better error handling
         // TODO: check if ROM fits
@@ -90,20 +102,22 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new() -> Memory {
+    pub fn new_shared() -> MemoryShared {
         // TODO: receive rom paths as parameters
         let mut upper_roms = HashMap::new();
         upper_roms.insert(0, ROM::from_file("rom/basic_1.0.rom"));
         upper_roms.insert(7, ROM::from_file("rom/amsdos_0.5.rom"));
 
-        Memory {
+        let memory = Memory {
             ram: RAM::new(0x10000),
             lower_rom: ROM::from_file("rom/os_464.rom"),
             lower_rom_enabled: true,
             upper_roms,
             selected_upper_rom: 0,
             upper_rom_enabled: true,
-        }
+        };
+
+        Rc::new(RefCell::new(memory))
     }
 }
 

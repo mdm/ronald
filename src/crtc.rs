@@ -1,3 +1,8 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub type CRTControllerShared = Rc<RefCell<CRTController>>;
+
 enum Register {
     HorizontalTotal,
     HorizontalDisplayed,
@@ -30,8 +35,8 @@ pub struct CRTController {
 }
 
 impl CRTController {
-    pub fn new() -> CRTController {
-        CRTController {
+    pub fn new_shared() -> CRTControllerShared {
+        let crtc = CRTController {
             registers: [0; 18],
             selected_register: 0,
             horizontal_counter: 0,
@@ -39,14 +44,18 @@ impl CRTController {
             character_row_counter: 0,
             scan_line_counter: 0,
             display_start_address: 0,
-        }
+        };
+
+        Rc::new(RefCell::new(crtc))
     }
 
     pub fn read_byte(&self, port: u16) -> u8 {
+        dbg!(port);
         unimplemented!()
     }
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
+        dbg!(port, value);
         unimplemented!()
     }
 
