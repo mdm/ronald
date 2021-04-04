@@ -8,10 +8,13 @@ use memory::{ Read, Write };
 use crate::pio;
 use crate::screen;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 
 pub struct ZexHarness {
-    cpu: cpu::CPU,
-    memory: memory::RAM,
+    cpu: cpu::CPU<memory::RAM, bus::DummyBus>,
+    memory: Rc<RefCell<memory::RAM>>,
 }
 
 impl ZexHarness {
@@ -20,9 +23,12 @@ impl ZexHarness {
         memory.write_byte(0x0005, 0xc9); // patch with RET instruction
         memory.write_word(0x0006, 0xe400); // patch with initial SP
 
+        let memory_shared = Rc::new(RefCell::new(memory));
+        let bus_shared = Rc::new(RefCell::new(bus::DummyBus::new()));
+
         ZexHarness {
-            cpu: cpu::CPU::new(0x100),
-            memory: memory,
+            cpu: cpu::CPU::new(memory_shared.clone(), bus_shared.clone(), 0x100),
+            memory: memory_shared.clone(),
         }
     }
 
@@ -36,7 +42,7 @@ impl ZexHarness {
                         9 => {
                             let mut address = self.cpu.registers.read_word(&cpu::Register16::DE) as usize;
                             loop {
-                                let character = self.memory.read_byte(address) as char;
+                                let character = self.memory.borrow().read_byte(address) as char;
                                 if character == '$' {
                                     break;
                                 }
@@ -48,9 +54,9 @@ impl ZexHarness {
                         }
                         _ => unreachable!(),
                     }
-                    self.cpu.fetch_and_execute(&mut self.memory, None);
+                    self.cpu.fetch_and_execute();
                 }
-                _ => self.cpu.fetch_and_execute(&mut self.memory, None),
+                _ => self.cpu.fetch_and_execute(),
             }
         }
         println!();
@@ -63,22 +69,25 @@ pub trait System {
 }
 
 pub struct CPC464 {
-    cpu: cpu::CPU,
-    memory: memory::Memory,
-    bus: bus::Bus,
+    cpu: cpu::CPU<memory::Memory, bus::StandardBus>,
+    bus: bus::StandardBusShared,
     screen: screen::Screen,
 }
 
 impl CPC464 {
-    pub fn new() -> CPC464 {
+    pub fn new() -> CPC464 { // TODO: receive shared screen here
+        let memory = memory::Memory::new_shared();
+        let crtc = crtc::CRTController::new_shared();
+        let bus = bus::StandardBus::new_shared(
+            crtc.clone(),
+            fdc::FloppyDiskController::new_shared(),
+            gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
+            pio::PeripheralInterface::new_shared()
+        );
+
         CPC464 {
-            cpu: cpu::CPU::new(0),
-            memory: memory::Memory::new(),
-            bus: bus::Bus::new(
-                crtc::CRTController::new(),
-                fdc::FloppyDiskController::new(),
-                gate_array::GateArray::new(),
-                pio::PeripheralInterface::new()),
+            cpu: cpu::CPU::new(memory.clone(), bus.clone(), 0),
+            bus: bus.clone(),
             screen: screen::Screen::new(),
         }
     }
@@ -86,9 +95,9 @@ impl CPC464 {
 
 impl System for CPC464 {
     fn emulate(&mut self, _time_limit: Option<u64>) {
-        let cycles = self.cpu.fetch_and_execute(&mut self.memory, Some(&mut self.bus));
+        let cycles = self.cpu.fetch_and_execute();
         
-        self.bus.step(&mut self.memory, &mut self.screen); // TODO: step multiple times depending on "cycles" and handle interrupts
+        self.bus.borrow_mut().step(); // TODO: step multiple times depending on "cycles" and handle interrupts
     }
 
     fn get_frame_buffer(&self) -> &Vec<u32> {

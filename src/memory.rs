@@ -5,7 +5,6 @@ use std::io;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub type RAMShared = Rc<RefCell<RAM>>;
 pub type MemoryShared = Rc<RefCell<Memory>>;
 
 pub trait Read {
@@ -53,12 +52,6 @@ pub struct RAM {
 impl RAM {
     pub fn new(size: usize) -> RAM {
         RAM { data: vec![0; size] }
-    }
-
-    pub fn new_shared(size: usize) -> RAMShared {
-        let ram = RAM::new(size);
-
-        Rc::new(RefCell::new(ram))
     }
 
     pub fn from_file(size: usize, path: &str, offset: usize) -> RAM {

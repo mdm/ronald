@@ -1,4 +1,6 @@
 use std::fmt;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::memory::Read;
 use crate::cpu;
@@ -440,47 +442,50 @@ impl DecoderMode {
     }
 }
 
-pub struct Decoder {
+pub struct Decoder<M> {
+    memory: Rc<RefCell<M>>,
     next_address: usize,
     mode: DecoderMode,
     patched: bool,
 }
 
-impl Decoder { // based on http://z80.info/decoding.htm
-    pub fn new() -> Decoder {
+impl<M> Decoder<M>
+where M: Read { // based on http://z80.info/decoding.htm
+    pub fn new(memory: Rc<RefCell<M>>) -> Decoder<M> {
         Decoder {
+            memory,
             next_address: 0,
             mode: DecoderMode::Default,
             patched: false
         }
     }
 
-    pub fn decode_at<M: Read>(&mut self, memory: &M, address: usize) -> (Instruction, usize) {
+    pub fn decode_at(&mut self, address: usize) -> (Instruction, usize) {
         self.next_address = address;
 
-        let opcode = memory.read_byte(self.next_address);
+        let opcode = self.memory.borrow().read_byte(self.next_address);
         self.next_address += 1;
 
         match opcode {
-            0xcb => (self.decode_cb_instruction(memory), self.next_address),
-            0xed => (self.decode_ed_instruction(memory), self.next_address),
-            0xdd => (self.decode_prefixed(memory, DecoderMode::PatchIX), self.next_address),
-            0xfd => (self.decode_prefixed(memory, DecoderMode::PatchIY), self.next_address),
-            _ => (self.decode_instruction(memory, opcode), self.next_address),
+            0xcb => (self.decode_cb_instruction(), self.next_address),
+            0xed => (self.decode_ed_instruction(), self.next_address),
+            0xdd => (self.decode_prefixed(DecoderMode::PatchIX), self.next_address),
+            0xfd => (self.decode_prefixed(DecoderMode::PatchIY), self.next_address),
+            _ => (self.decode_instruction(opcode), self.next_address),
         }
     }
 
-    pub fn decode_next<M: Read>(&mut self, memory: &M) -> (Instruction, usize) {
-        self.decode_at(memory, self.next_address)
+    pub fn decode_next(&mut self) -> (Instruction, usize) {
+        self.decode_at(self.next_address)
     }
 
-    fn decode_cb_instruction<M: Read>(&mut self, memory: &M) -> Instruction {
+    fn decode_cb_instruction(&mut self) -> Instruction {
         match self.mode {
             DecoderMode::PatchIX => {
-                let displacement = memory.read_byte(self.next_address) as i8;
+                let displacement = self.memory.borrow().read_byte(self.next_address) as i8;
                 self.next_address += 1;
 
-                let opcode = memory.read_byte(self.next_address);
+                let opcode = self.memory.borrow().read_byte(self.next_address);
                 self.next_address += 1;
 
                 let x = opcode >> 6;
@@ -489,7 +494,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
 
                 let old_mode = self.mode;
                 self.mode = DecoderMode::Default;
-                let destination = self.decode_register(memory, z);
+                let destination = self.decode_register(z);
                 self.mode = old_mode;
 
                 match (x, y, z) {
@@ -533,10 +538,10 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 }
             }
             DecoderMode::PatchIY => {
-                let displacement = memory.read_byte(self.next_address) as i8;
+                let displacement = self.memory.borrow().read_byte(self.next_address) as i8;
                 self.next_address += 1;
 
-                let opcode = memory.read_byte(self.next_address);
+                let opcode = self.memory.borrow().read_byte(self.next_address);
                 self.next_address += 1;
 
                 let x = opcode >> 6;
@@ -545,7 +550,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
 
                 let old_mode = self.mode;
                 self.mode = DecoderMode::Default;
-                let destination = self.decode_register(memory, z);
+                let destination = self.decode_register(z);
                 self.mode = old_mode;
 
                 match (x, y, z) {
@@ -589,7 +594,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 }
             }
             _ => {
-                let opcode = memory.read_byte(self.next_address);
+                let opcode = self.memory.borrow().read_byte(self.next_address);
                 self.next_address += 1;
 
                 let x = opcode >> 6;
@@ -598,27 +603,27 @@ impl Decoder { // based on http://z80.info/decoding.htm
 
                 match (x, y, z) {
                     (0, _, _) => {
-                        let destination = self.decode_register(memory, z);
-                        let operand = self.decode_register(memory, z);
+                        let destination = self.decode_register(z);
+                        let operand = self.decode_register(z);
                         self.decode_bitshift(y, destination, operand)
                     }
                     (1, _, _) => {
                         let bit = Operand::Bit(y);
-                        let operand = self.decode_register(memory, z);
+                        let operand = self.decode_register(z);
 
                         Instruction::Bit(bit, operand)
                     }
                     (2, _, _) => {
                         let bit = Operand::Bit(y);
-                        let destination = self.decode_register(memory, z);
-                        let operand = self.decode_register(memory, z);
+                        let destination = self.decode_register(z);
+                        let operand = self.decode_register(z);
 
                         Instruction::Res(destination, bit, operand)
                     }
                     (3, _, _) => {
                         let bit = Operand::Bit(y);
-                        let destination = self.decode_register(memory, z);
-                        let operand = self.decode_register(memory, z);
+                        let destination = self.decode_register(z);
+                        let operand = self.decode_register(z);
 
                         Instruction::Set(destination, bit, operand)
                     }
@@ -628,8 +633,8 @@ impl Decoder { // based on http://z80.info/decoding.htm
         }
     }
 
-    fn decode_ed_instruction<M: Read>(&mut self, memory: &M) -> Instruction {
-        let opcode = memory.read_byte(self.next_address);
+    fn decode_ed_instruction(&mut self) -> Instruction {
+        let opcode = self.memory.borrow().read_byte(self.next_address);
         self.next_address += 1;
 
         let x = opcode >> 6;
@@ -638,14 +643,14 @@ impl Decoder { // based on http://z80.info/decoding.htm
 
         match (x, y, z) {
             (1, _, 0) => {
-                let destination = self.decode_register(memory, y);
+                let destination = self.decode_register(y);
                 let port = Operand::RegisterIndirect(cpu::Register16::BC);
 
                 Instruction::In(destination, port)
             }
             (1, _, 1) => {
                 let port = Operand::RegisterIndirect(cpu::Register16::BC);
-                let source = self.decode_register(memory, y);
+                let source = self.decode_register(y);
 
                 Instruction::Out(port, source)
             }
@@ -666,7 +671,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 let p = y >> 1;
                 let q = y & 1;
 
-                let address = Operand::Direct16(memory.read_word(self.next_address));
+                let address = Operand::Direct16(self.memory.borrow().read_word(self.next_address));
                 self.next_address += 2;
 
                 let register = self.decode_register_pair(p, false);
@@ -753,15 +758,15 @@ impl Decoder { // based on http://z80.info/decoding.htm
         }
     }
 
-    fn decode_prefixed<M: Read>(&mut self, memory: &M, mode: DecoderMode) -> Instruction {
+    fn decode_prefixed(&mut self, mode: DecoderMode) -> Instruction {
         self.mode = mode;
 
-        let opcode = memory.read_byte(self.next_address);
+        let opcode = self.memory.borrow().read_byte(self.next_address);
 
         let instruction = match opcode {
             0xcb => {
                 self.next_address += 1;
-                self.decode_cb_instruction(memory)
+                self.decode_cb_instruction()
             }
             0xed => self.mode.into_instruction(),
             0xdd => self.mode.into_instruction(),
@@ -771,7 +776,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
 
                 let start = self.next_address;
                 self.next_address += 1;
-                let instruction = self.decode_instruction(memory, opcode);
+                let instruction = self.decode_instruction(opcode);
 
                 if self.patched {
                     instruction
@@ -787,7 +792,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
         instruction
     }
 
-    fn decode_instruction<M: Read>(&mut self, memory: &M, opcode: u8) -> Instruction {
+    fn decode_instruction(&mut self, opcode: u8) -> Instruction {
         let x = opcode >> 6;
         let y = (opcode >> 3) & 7;
         let z = opcode & 7;
@@ -802,7 +807,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                     Operand::Register16(cpu::Register16::AF),
                 ),
             (0, 2, 0) => {
-                let displacement = memory.read_byte(self.next_address) as i8;
+                let displacement = self.memory.borrow().read_byte(self.next_address) as i8;
                 self.next_address += 1;
                 Instruction::Djnz(
                     Operand::Immediate16((self.next_address as u16).wrapping_add(displacement as u16))
@@ -814,7 +819,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 } else {
                     JumpTest::decode(y - 4)
                 };
-                let displacement = memory.read_byte(self.next_address) as i8;
+                let displacement = self.memory.borrow().read_byte(self.next_address) as i8;
                 self.next_address += 1;
                 Instruction::Jr(
                     jump_test,
@@ -829,7 +834,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
 
                 match q {
                     0 => {
-                        let value = Operand::Immediate16(memory.read_word(self.next_address));
+                        let value = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
                         self.next_address += 2;
                         Instruction::Ld(register_pair, value)
                     }
@@ -858,7 +863,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                     0 => Operand::RegisterIndirect(cpu::Register16::BC),
                     1 => Operand::RegisterIndirect(cpu::Register16::DE),
                     _ => {
-                        let address = memory.read_word(self.next_address);
+                        let address = self.memory.borrow().read_word(self.next_address);
                         self.next_address += 2;
                         Operand::Direct16(address)
                     }
@@ -908,17 +913,17 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 }
             }
             (0, _, 4) => {
-                let register = self.decode_register(memory, y);
+                let register = self.decode_register(y);
                 Instruction::Inc(register)
             }
             (0, _, 5) => {
-                let register = self.decode_register(memory, y);
+                let register = self.decode_register(y);
                 Instruction::Dec(register)
             }
             (0, _, 6) => {
-                let register = self.decode_register(memory, y);
+                let register = self.decode_register(y);
 
-                let value = memory.read_byte(self.next_address);
+                let value = self.memory.borrow().read_byte(self.next_address);
                 self.next_address += 1;
 
                 Instruction::Ld(register, Operand::Immediate8(value))
@@ -941,11 +946,11 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 Instruction::Halt
             }
             (1, 6, _) => {
-                let destination = self.decode_register(memory, y);
+                let destination = self.decode_register(y);
 
                 let old_mode = self.mode;
                 self.mode = DecoderMode::Default;
-                let source = self.decode_register(memory, z);
+                let source = self.decode_register(z);
                 self.mode = old_mode;
 
                 Instruction::Ld(destination, source)
@@ -953,20 +958,20 @@ impl Decoder { // based on http://z80.info/decoding.htm
             (1, _, 6) => {
                 let old_mode = self.mode;
                 self.mode = DecoderMode::Default;
-                let destination = self.decode_register(memory, y);
+                let destination = self.decode_register(y);
                 self.mode = old_mode;
 
-                let source = self.decode_register(memory, z);
+                let source = self.decode_register(z);
 
                 Instruction::Ld(destination, source)
             }
             (1, _, _) => {
-                let destination = self.decode_register(memory, y);
-                let source = self.decode_register(memory, z);
+                let destination = self.decode_register(y);
+                let source = self.decode_register(z);
                 Instruction::Ld(destination, source)
             }
             (2, _, _) => {
-                let register = self.decode_register(memory, z);
+                let register = self.decode_register(z);
                 self.decode_alu(y, register)
             }
             (3, _, 0) => {
@@ -995,7 +1000,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
             (3, _, 2) => {
                 let jump_test = JumpTest::decode(y);
 
-                let target = Operand::Immediate16(memory.read_word(self.next_address));
+                let target = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
                 self.next_address += 2;
 
                 Instruction::Jp(jump_test, target)
@@ -1003,20 +1008,20 @@ impl Decoder { // based on http://z80.info/decoding.htm
             (3, _, 3) => {
                 match y {
                     0 => {
-                        let target = Operand::Immediate16(memory.read_word(self.next_address));
+                        let target = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
                         self.next_address += 2;
 
                         Instruction::Jp(JumpTest::Unconditional, target)
                     }
                     1 => unreachable!(),
                     2 => {
-                        let port = Operand::Direct8(memory.read_byte(self.next_address));
+                        let port = Operand::Direct8(self.memory.borrow().read_byte(self.next_address));
                         self.next_address += 1;
 
                         Instruction::Out(port, Operand::Register8(cpu::Register8::A))
                     }
                     3 => {
-                        let port = Operand::Direct8(memory.read_byte(self.next_address));
+                        let port = Operand::Direct8(self.memory.borrow().read_byte(self.next_address));
                         self.next_address += 1;
 
                         Instruction::In(Operand::Register8(cpu::Register8::A), port)
@@ -1031,7 +1036,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
             (3, _, 4) => {
                 let jump_test = JumpTest::decode(y);
 
-                let target = Operand::Immediate16(memory.read_word(self.next_address));
+                let target = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
                 self.next_address += 2;
 
                 Instruction::Call(jump_test, target)
@@ -1046,7 +1051,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                         Instruction::Push(source)
                     }
                     1 => if p == 0 {
-                        let target = Operand::Immediate16(memory.read_word(self.next_address));
+                        let target = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
                         self.next_address += 2;
 
                         Instruction::Call(JumpTest::Unconditional, target)
@@ -1057,7 +1062,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
                 }
             }
             (3, _, 6) => {
-                let value = Operand::Immediate8(memory.read_byte(self.next_address));
+                let value = Operand::Immediate8(self.memory.borrow().read_byte(self.next_address));
                 self.next_address += 1;
 
                 self.decode_alu(y, value)
@@ -1097,7 +1102,7 @@ impl Decoder { // based on http://z80.info/decoding.htm
         }
     }
 
-    fn decode_register<M: Read>(&mut self, memory: &M, encoded: u8) -> Operand {
+    fn decode_register(&mut self, encoded: u8) -> Operand {
         match encoded {
             0 => Operand::Register8(cpu::Register8::B),
             1 => Operand::Register8(cpu::Register8::C),
@@ -1128,13 +1133,13 @@ impl Decoder { // based on http://z80.info/decoding.htm
             6 => match self.mode {
                 DecoderMode::PatchIX => {
                     self.patched = true;
-                    let displacement = memory.read_byte(self.next_address) as i8;
+                    let displacement = self.memory.borrow().read_byte(self.next_address) as i8;
                     self.next_address += 1;
                     Operand::Indexed(cpu::Register16::IX, displacement)
                 }
                 DecoderMode::PatchIY => {
                     self.patched = true;
-                    let displacement = memory.read_byte(self.next_address) as i8;
+                    let displacement = self.memory.borrow().read_byte(self.next_address) as i8;
                     self.next_address += 1;
                     Operand::Indexed(cpu::Register16::IY, displacement)
                 }

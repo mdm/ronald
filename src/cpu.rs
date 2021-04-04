@@ -1,4 +1,6 @@
 use std::fmt;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::bus;
 use crate::memory;
@@ -161,18 +163,20 @@ impl Flag {
     }
 }
 
-pub struct CPU {
+pub struct CPU<M, B> {
     pub registers: RegisterFile,
     pub iff1: bool,
     pub iff2: bool,
     pub halted: bool,
-    decoder: Decoder,
+    decoder: Decoder<M>,
     enable_interrupt: bool,
+    memory: Rc<RefCell<M>>,
+    bus: Rc<RefCell<B>>,
 }
 
-impl CPU
-{
-    pub fn new(initial_pc: u16) -> CPU {
+impl<M, B> CPU<M, B>
+where M: memory::Read + memory::Write, B: bus::Bus {
+    pub fn new(memory: Rc<RefCell<M>>, bus: Rc<RefCell<B>>, initial_pc: u16) -> CPU<M, B> {
         let mut registers = RegisterFile::new();
         registers.write_word(&Register16::PC, initial_pc);
 
@@ -181,8 +185,10 @@ impl CPU
             iff1: false,
             iff2: false,
             halted: false,
-            decoder: Decoder::new(),
+            decoder: Decoder::new(memory.clone()),
             enable_interrupt: false,
+            memory: memory.clone(),
+            bus: bus.clone(),
         };
 
         cpu.reset();
@@ -190,8 +196,7 @@ impl CPU
         cpu
     }
 
-    pub fn fetch_and_execute<M>(&mut self, memory: &mut M, connected_bus: Option<&mut bus::Bus>)
-    where M: memory::Read + memory::Write {
+    pub fn fetch_and_execute(&mut self) {
         if self.enable_interrupt {
             self.iff1 = true;
             self.iff2 = true;
@@ -199,20 +204,20 @@ impl CPU
         }
 
         let (instruction, next_address) = self.decoder.decode_at(
-            memory, self.registers.read_word(&Register16::PC) as usize
+            self.registers.read_word(&Register16::PC) as usize
         );
 
         match instruction {
             Instruction::Adc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
-                        let left = self.load_byte(memory, &destination);
-                        let right = self.load_byte(memory, &source);
+                        let left = self.load_byte(&destination);
+                        let right = self.load_byte(&source);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_add(value);
                         let overflow = (left & 0x80) == (right & 0x80) && (right & 0x80) != (value & 0x80);
-                        self.store_byte(memory, &destination, value);
+                        self.store_byte(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0);
                         self.set_flag(Flag::Zero, value == 0);
@@ -222,13 +227,13 @@ impl CPU
                         self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     Operand::Register16(Register16::HL) => {
-                        let left = self.load_word(memory, &destination);
-                        let right = self.load_word(memory, &source);
+                        let left = self.load_word(&destination);
+                        let right = self.load_word(&source);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_add(value);
                         let overflow = (left & 0x8000) == (right & 0x8000) && (right & 0x8000) != (value & 0x8000);
-                        self.store_word(memory, &destination, value);
+                        self.store_word(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i16) < 0);
                         self.set_flag(Flag::Zero, value == 0);
@@ -245,11 +250,11 @@ impl CPU
             Instruction::Add(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => { // ALUOP / checked
-                        let left = self.load_byte(memory, &destination);
-                        let right = self.load_byte(memory, &source);
+                        let left = self.load_byte(&destination);
+                        let right = self.load_byte(&source);
                         let (value, carry) = left.overflowing_add(right);
                         let (_, overflow) = (left as i8).overflowing_add(right as i8);
-                        self.store_byte(memory, &destination, value);
+                        self.store_byte(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
                         self.set_flag(Flag::Zero, value == 0);
@@ -259,10 +264,10 @@ impl CPU
                         self.set_flag(Flag::Carry, carry);
                     }
                     _ => {
-                        let left = self.load_word(memory, &destination);
-                        let right = self.load_word(memory, &source);
+                        let left = self.load_word(&destination);
+                        let right = self.load_word(&source);
                         let (value, carry) = left.overflowing_add(right);
-                        self.store_word(memory, &destination, value);
+                        self.store_word(&destination, value);
 
                         self.set_flag(Flag::HalfCarry, (((left & 0xfff) + (right & 0xfff)) & 0x1000) != 0);
                         self.set_flag(Flag::AddSubtract, false);
@@ -273,7 +278,7 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::And(operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
 
                 let result = self.registers.read_byte(&Register8::A) & value;
                 self.registers.write_byte(&Register8::A, result);
@@ -288,7 +293,7 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Bit(Operand::Bit(bit), operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
 
                 self.set_flag(Flag::Zero, (value & (1 << bit)) == 0);
                 self.set_flag(Flag::HalfCarry, true);
@@ -300,7 +305,7 @@ impl CPU
                 if self.check_jump(jump_test) {
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
-                    memory.write_word(new_sp as usize, next_address as u16);
+                    self.memory.borrow_mut().write_word(new_sp as usize, next_address as u16);
                     self.registers.write_word(&Register16::PC, address);
                 } else {
                     self.registers.write_word(&Register16::PC, next_address as u16);
@@ -318,7 +323,7 @@ impl CPU
             }
             Instruction::Cp(operand) => { // ALUOP / checked
                 let left = self.registers.read_byte(&Register8::A);
-                let right = self.load_byte(memory, &operand);
+                let right = self.load_byte(&operand);
                 let (value, carry) = left.overflowing_sub(right);
                 let (_, overflow) = (left as i8).overflowing_sub(right as i8);
 
@@ -333,7 +338,7 @@ impl CPU
             }
             Instruction::Cpd => {
                 let left = self.registers.read_byte(&Register8::A);
-                let right = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let right = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
                 let value = left.wrapping_sub(right);
 
                 let source = self.registers.read_word(&Register16::HL).wrapping_sub(1);
@@ -352,7 +357,7 @@ impl CPU
             }
             Instruction::Cpdr => {
                 let left = self.registers.read_byte(&Register8::A);
-                let right = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let right = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
                 let value = left.wrapping_sub(right);
 
                 let source = self.registers.read_word(&Register16::HL).wrapping_sub(1);
@@ -373,7 +378,7 @@ impl CPU
             }
             Instruction::Cpi => {
                 let left = self.registers.read_byte(&Register8::A);
-                let right = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let right = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
                 let value = left.wrapping_sub(right);
 
                 let source = self.registers.read_word(&Register16::HL).wrapping_add(1);
@@ -392,7 +397,7 @@ impl CPU
             }
             Instruction::Cpir => {
                 let left = self.registers.read_byte(&Register8::A);
-                let right = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let right = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
                 let value = left.wrapping_sub(right);
 
                 let source = self.registers.read_word(&Register16::HL).wrapping_add(1);
@@ -461,10 +466,10 @@ impl CPU
                         self.registers.write_word(&register, value.wrapping_sub(1));
                     }
                     _ => {
-                        let old_value = self.load_byte(memory, &destination);
+                        let old_value = self.load_byte(&destination);
                         self.set_flag(Flag::ParityOverflow, old_value == 0x80);
                         let (value, _) = old_value.overflowing_sub(1);
-                        self.store_byte(memory, &destination, value);
+                        self.store_byte(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0);
                         self.set_flag(Flag::Zero, value == 0);
@@ -496,11 +501,11 @@ impl CPU
                         self.registers.swap_word(&Register16::AF);
                     }
                     (left, right) => {
-                        let left_value = self.load_word(memory, &left);
-                        let right_value = self.load_word(memory, &right);
+                        let left_value = self.load_word(&left);
+                        let right_value = self.load_word(&right);
 
-                        self.store_word(memory, &left, right_value);
-                        self.store_word(memory, &right, left_value);
+                        self.store_word(&left, right_value);
+                        self.store_word(&right, left_value);
                     }
                 }
 
@@ -513,10 +518,10 @@ impl CPU
                         self.registers.write_word(&register, value.wrapping_add(1));
                     }
                     _ => {
-                        let old_value = self.load_byte(memory, &destination);
+                        let old_value = self.load_byte(&destination);
                         self.set_flag(Flag::ParityOverflow, old_value == 0x7f);
                         let (value, _) = old_value.overflowing_add(1);
-                        self.store_byte(memory, &destination, value);
+                        self.store_byte(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0);
                         self.set_flag(Flag::Zero, value == 0);
@@ -543,25 +548,25 @@ impl CPU
             Instruction::Ld(destination, source) => {
                 match (&destination, &source) {
                     (Operand::Register16(_), _) => {
-                        let value = self.load_word(memory, &source);
-                        self.store_word(memory, &destination, value);
+                        let value = self.load_word(&source);
+                        self.store_word(&destination, value);
                     }
                     (_, Operand::Register16(_)) => {
-                        let value = self.load_word(memory, &source);
-                        self.store_word(memory, &destination, value);
+                        let value = self.load_word(&source);
+                        self.store_word(&destination, value);
                     }
                     _ => {
                         // TODO: store iff2 in parity flag if instruction is ld a,i or ld a,r
-                        let value = self.load_byte(memory, &source);
-                        self.store_byte(memory, &destination, value);
+                        let value = self.load_byte(&source);
+                        self.store_byte(&destination, value);
                     }
                 }
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Ldd => {
-                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::DE), value);
+                let value = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
+                self.store_byte(&Operand::RegisterIndirect(Register16::DE), value);
 
                 let address = self.registers.read_word(&Register16::DE).wrapping_sub(1);
                 self.registers.write_word(&Register16::DE, address);
@@ -579,8 +584,8 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Lddr => {
-                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::DE), value);
+                let value = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
+                self.store_byte(&Operand::RegisterIndirect(Register16::DE), value);
 
                 let address = self.registers.read_word(&Register16::DE).wrapping_sub(1);
                 self.registers.write_word(&Register16::DE, address);
@@ -600,8 +605,8 @@ impl CPU
                 }
             }
             Instruction::Ldi => {
-                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::DE), value);
+                let value = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
+                self.store_byte(&Operand::RegisterIndirect(Register16::DE), value);
 
                 let address = self.registers.read_word(&Register16::DE).wrapping_add(1);
                 self.registers.write_word(&Register16::DE, address);
@@ -619,8 +624,8 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Ldir => {
-                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::DE), value);
+                let value = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
+                self.store_byte(&Operand::RegisterIndirect(Register16::DE), value);
 
                 let address = self.registers.read_word(&Register16::DE).wrapping_add(1);
                 self.registers.write_word(&Register16::DE, address);
@@ -658,7 +663,7 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Or(operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
 
                 let result = self.registers.read_byte(&Register8::A) | value;
                 self.registers.write_byte(&Register8::A, result);
@@ -673,30 +678,28 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Out(Operand::RegisterIndirect(port), Operand::Register8(source)) => {
-                if let Some(bus) = connected_bus {
-                    let address = self.registers.read_word(&port);
-                    let value = self.registers.read_byte(&source);
-                    bus.write_byte(memory, address, value);    
-                }
+                let address = self.registers.read_word(&port);
+                let value = self.registers.read_byte(&source);
+                self.bus.borrow_mut().write_byte(address, value);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Pop(Operand::Register16(destination)) => {
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
-                self.registers.write_word(&destination, memory.read_word(old_sp as usize));
+                self.registers.write_word(&destination, self.memory.borrow().read_word(old_sp as usize));
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Push(Operand::Register16(source)) => {
                 let new_sp = self.registers.read_word(&Register16::SP) - 2;
                 self.registers.write_word(&Register16::SP, new_sp);
-                memory.write_word(new_sp as usize, self.registers.read_word(&source));
+                self.memory.borrow_mut().write_word(new_sp as usize, self.registers.read_word(&source));
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Res(destination, Operand::Bit(bit), operand) => {
-                let value = self.load_byte(memory, &operand) & (!(1 << bit));
-                self.store_byte(memory, &destination, value); // copy for undocumented instructions
-                self.store_byte(memory, &operand, value);
+                let value = self.load_byte(&operand) & (!(1 << bit));
+                self.store_byte(&destination, value); // copy for undocumented instructions
+                self.store_byte(&operand, value);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -704,18 +707,18 @@ impl CPU
                 if self.check_jump(jump_test) {
                     let old_sp = self.registers.read_word(&Register16::SP);
                     self.registers.write_word(&Register16::SP, old_sp + 2);
-                    self.registers.write_word(&Register16::PC, memory.read_word(old_sp as usize));
+                    self.registers.write_word(&Register16::PC, self.memory.borrow().read_word(old_sp as usize));
                 } else {
                     self.registers.write_word(&Register16::PC, next_address as u16);
                 }
             }
             Instruction::Rl(destination, operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
                 let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                 let carry = (value >> 7) != 0;
                 let value = (value.rotate_left(1) & 0xfe) | carry_value;
-                self.store_byte(memory, &destination, value); // copy for undocumented instructions
-                self.store_byte(memory, &operand, value);
+                self.store_byte(&destination, value); // copy for undocumented instructions
+                self.store_byte(&operand, value);
 
                 self.set_flag(Flag::Sign, (value as i8) < 0);
                 self.set_flag(Flag::Zero, value == 0);
@@ -740,9 +743,9 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rlc(destination, operand) => {
-                let value = self.load_byte(memory, &operand).rotate_left(1);
-                self.store_byte(memory, &destination, value); // copy for undocumented instructions
-                self.store_byte(memory, &operand, value);
+                let value = self.load_byte(&operand).rotate_left(1);
+                self.store_byte(&destination, value); // copy for undocumented instructions
+                self.store_byte(&operand, value);
 
                 self.set_flag(Flag::Sign, (value as i8) < 0);
                 self.set_flag(Flag::Zero, value == 0);
@@ -765,12 +768,12 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rr(destination, operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
                 let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                 let carry = (value & 1) != 0;
                 let value = (value.rotate_right(1) & 0x7f) | (carry_value << 7);
-                self.store_byte(memory, &destination, value); // copy for undocumented instructions
-                self.store_byte(memory, &operand, value);
+                self.store_byte(&destination, value); // copy for undocumented instructions
+                self.store_byte(&operand, value);
 
                 self.set_flag(Flag::Sign, (value as i8) < 0);
                 self.set_flag(Flag::Zero, value == 0);
@@ -795,9 +798,9 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rrc(destination, operand) => {
-                let value = self.load_byte(memory, &operand).rotate_right(1);
-                self.store_byte(memory, &destination, value); // copy for undocumented instructions
-                self.store_byte(memory, &operand, value);
+                let value = self.load_byte(&operand).rotate_right(1);
+                self.store_byte(&destination, value); // copy for undocumented instructions
+                self.store_byte(&operand, value);
 
                 self.set_flag(Flag::Sign, (value as i8) < 0);
                 self.set_flag(Flag::Zero, value == 0);
@@ -821,11 +824,11 @@ impl CPU
             }
             Instruction::Rld => {
                 let accumulator = self.registers.read_byte(&Register8::A);
-                let memory_hl = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let memory_hl = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
                 let new_accumulator = (accumulator & 0xf0) | (memory_hl >> 4);
                 self.registers.write_byte(&Register8::A, new_accumulator);
                 let new_memory_hl = (memory_hl << 4) | (accumulator & 0xf);
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), new_memory_hl);
+                self.store_byte(&Operand::RegisterIndirect(Register16::HL), new_memory_hl);
 
                 self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
                 self.set_flag(Flag::Zero, new_accumulator == 0);
@@ -837,11 +840,11 @@ impl CPU
             }
             Instruction::Rrd => {
                 let accumulator = self.registers.read_byte(&Register8::A);
-                let memory_hl = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+                let memory_hl = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
                 let new_accumulator = (accumulator & 0xf0) | (memory_hl & 0xf);
                 self.registers.write_byte(&Register8::A, new_accumulator);
                 let new_memory_hl = ((accumulator & 0xf) << 4) | (memory_hl >> 4);
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), new_memory_hl);
+                self.store_byte(&Operand::RegisterIndirect(Register16::HL), new_memory_hl);
 
                 self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
                 self.set_flag(Flag::Zero, new_accumulator == 0);
@@ -854,13 +857,13 @@ impl CPU
             Instruction::Sbc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
-                        let left = self.load_byte(memory, &destination);
-                        let right = self.load_byte(memory, &source);
+                        let left = self.load_byte(&destination);
+                        let right = self.load_byte(&source);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_sub(value);
                         let overflow = (left & 0x80) != (right & 0x80) && (right & 0x80) == (value & 0x80);
-                        self.store_byte(memory, &destination, value);
+                        self.store_byte(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0);
                         self.set_flag(Flag::Zero, value == 0);
@@ -870,13 +873,13 @@ impl CPU
                         self.set_flag(Flag::Carry, carry1 || carry2);
                     }
                     Operand::Register16(Register16::HL) => {
-                        let left = self.load_word(memory, &destination);
-                        let right = self.load_word(memory, &source);
+                        let left = self.load_word(&destination);
+                        let right = self.load_word(&source);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_sub(value);
                         let overflow = (left & 0x8000) != (right & 0x8000) && (right & 0x8000) == (value & 0x8000);
-                        self.store_word(memory, &destination, value);
+                        self.store_word(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i16) < 0);
                         self.set_flag(Flag::Zero, value == 0);
@@ -898,18 +901,18 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Set(destination, Operand::Bit(bit), operand) => {
-                let value = self.load_byte(memory, &operand) | (1 << bit);
-                self.store_byte(memory, &destination, value); // copy for undocumented instructions
-                self.store_byte(memory, &operand, value);
+                let value = self.load_byte(&operand) | (1 << bit);
+                self.store_byte(&destination, value); // copy for undocumented instructions
+                self.store_byte(&operand, value);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Sla(destination, operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
                 let carry = (value >> 7) != 0;
                 let result = value << 1;
-                self.store_byte(memory, &destination, result); // copy for undocumented instructions
-                self.store_byte(memory, &operand, result);
+                self.store_byte(&destination, result); // copy for undocumented instructions
+                self.store_byte(&operand, result);
 
                 self.set_flag(Flag::Sign, (result as i8) < 0); // TODO: make this reusable?
                 self.set_flag(Flag::Zero, result == 0);
@@ -921,11 +924,11 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Sll(destination, operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
                 let carry = (value >> 7) != 0;
                 let result = (value << 1) | 1;
-                self.store_byte(memory, &destination, result); // copy for undocumented instructions
-                self.store_byte(memory, &operand, result);
+                self.store_byte(&destination, result); // copy for undocumented instructions
+                self.store_byte(&operand, result);
 
                 self.set_flag(Flag::Sign, (result as i8) < 0); // TODO: make this reusable?
                 self.set_flag(Flag::Zero, result == 0);
@@ -937,12 +940,12 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Sra(destination, operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
                 let sign = value & 0x80;
                 let carry = (value & 1) != 0;
                 let result = sign | (value >> 1);
-                self.store_byte(memory, &destination, result); // copy for undocumented instructions
-                self.store_byte(memory, &operand, result);
+                self.store_byte(&destination, result); // copy for undocumented instructions
+                self.store_byte(&operand, result);
 
                 self.set_flag(Flag::Sign, (result as i8) < 0); // TODO: make this reusable?
                 self.set_flag(Flag::Zero, result == 0);
@@ -954,11 +957,11 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Srl(destination, operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
                 let carry = (value & 1) != 0;
                 let result = value >> 1;
-                self.store_byte(memory, &destination, result); // copy for undocumented instructions
-                self.store_byte(memory, &operand, result);
+                self.store_byte(&destination, result); // copy for undocumented instructions
+                self.store_byte(&operand, result);
 
                 self.set_flag(Flag::Sign, (result as i8) < 0); // TODO: make this reusable?
                 self.set_flag(Flag::Zero, result == 0);
@@ -971,7 +974,7 @@ impl CPU
             }
             Instruction::Sub(operand) => { // ALUOP / checked
                 let left = self.registers.read_byte(&Register8::A);
-                let right = self.load_byte(memory, &operand);
+                let right = self.load_byte(&operand);
                 let (value, carry) = left.overflowing_sub(right);
                 let (_, overflow) = (left as i8).overflowing_sub(right as i8);
                 self.registers.write_byte(&Register8::A, value);
@@ -986,7 +989,7 @@ impl CPU
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Xor(operand) => {
-                let value = self.load_byte(memory, &operand);
+                let value = self.load_byte(&operand);
 
                 let result = self.registers.read_byte(&Register8::A) ^ value;
                 self.registers.write_byte(&Register8::A, result);
@@ -1043,73 +1046,73 @@ impl CPU
         }
     }
 
-    fn load_byte<M>(&self, memory: &M, operand: &Operand) -> u8
+    fn load_byte(&self, operand: &Operand) -> u8
     where M: memory::Read {
         match operand {
             Operand::Immediate8(value) => *value,
             Operand::Register8(register) => self.registers.read_byte(register),
             Operand::Direct8(_) => unimplemented!(),
-            Operand::Direct16(address) => memory.read_byte(*address as usize),
+            Operand::Direct16(address) => self.memory.borrow().read_byte(*address as usize),
             Operand::RegisterIndirect(register) => {
                 let address = self.registers.read_word(register);
-                memory.read_byte(address as usize)
+                self.memory.borrow().read_byte(address as usize)
             }
             Operand::Indexed(register, displacement) => {
                 let address = self.registers.read_word(register);
-                memory.read_byte((address as i64 + *displacement as i64) as usize)
+                self.memory.borrow().read_byte((address as i64 + *displacement as i64) as usize)
             }
             _ => unreachable!(),
         }
     }
 
-    fn store_byte<M>(&mut self, memory: &mut M, operand: &Operand, value: u8)
+    fn store_byte(&mut self, operand: &Operand, value: u8)
     where M: memory::Read + memory::Write {
         match operand {
             Operand::Register8(register) => self.registers.write_byte(register, value),
             Operand::Direct8(_) => unimplemented!(),
-            Operand::Direct16(address) => memory.write_byte(*address as usize, value),
+            Operand::Direct16(address) => self.memory.borrow_mut().write_byte(*address as usize, value),
             Operand::RegisterIndirect(register) => {
                 let address = self.registers.read_word(register);
-                memory.write_byte(address as usize, value)
+                self.memory.borrow_mut().write_byte(address as usize, value)
             }
             Operand::Indexed(register, displacement) => {
                 let address = self.registers.read_word(register);
-                memory.write_byte((address as i64 + *displacement as i64) as usize, value)
+                self.memory.borrow_mut().write_byte((address as i64 + *displacement as i64) as usize, value)
             }
             _ => unreachable!(),
         }
     }
 
-    fn load_word<M>(&self, memory: &M, operand: &Operand) -> u16
+    fn load_word(&self, operand: &Operand) -> u16
     where M: memory::Read {
         match operand {
             Operand::Immediate16(value) => *value,
             Operand::Register16(register) => self.registers.read_word(register),
-            Operand::Direct16(address) => memory.read_word(*address as usize),
+            Operand::Direct16(address) => self.memory.borrow().read_word(*address as usize),
             Operand::RegisterIndirect(register) => {
                 let address = self.registers.read_word(register);
-                memory.read_word(address as usize)
+                self.memory.borrow().read_word(address as usize)
             }
             Operand::Indexed(register, displacement) => {
                 let address = self.registers.read_word(register);
-                memory.read_word((address as i64 + *displacement as i64) as usize)
+                self.memory.borrow().read_word((address as i64 + *displacement as i64) as usize)
             }
             _ => unreachable!(),
         }
     }
 
-    fn store_word<M>(&mut self, memory: &mut M, operand: &Operand, value: u16)
+    fn store_word(&mut self, operand: &Operand, value: u16)
     where M: memory::Read + memory::Write {
         match operand {
             Operand::Register16(register) => self.registers.write_word(register, value),
-            Operand::Direct16(address) => memory.write_word(*address as usize, value),
+            Operand::Direct16(address) => self.memory.borrow_mut().write_word(*address as usize, value),
             Operand::RegisterIndirect(register) => {
                 let address = self.registers.read_word(register);
-                memory.write_word(address as usize, value)
+                self.memory.borrow_mut().write_word(address as usize, value)
             }
             Operand::Indexed(register, displacement) => {
                 let address = self.registers.read_word(register);
-                memory.write_word((address as i64 + *displacement as i64) as usize, value)
+                self.memory.borrow_mut().write_word((address as i64 + *displacement as i64) as usize, value)
             }
             _ => unreachable!(),
         }

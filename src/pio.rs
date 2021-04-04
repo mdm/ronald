@@ -8,7 +8,7 @@ pub struct PeripheralInterface { // Peripheral input/output
 }
 
 impl PeripheralInterface {
-    pub fn new() -> PeripheralInterfaceShared {
+    pub fn new_shared() -> PeripheralInterfaceShared {
         let pio = PeripheralInterface {};
 
         Rc::new(RefCell::new(pio))

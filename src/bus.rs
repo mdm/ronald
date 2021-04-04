@@ -1,56 +1,87 @@
 use crate::crtc;
 use crate::fdc;
 use crate::gate_array;
-use crate::memory;
 use crate::pio;
-use crate::screen;
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 
-pub struct Bus {
-    crtc: crtc::CRTController,
-    fdc: fdc::FloppyDiskController,
-    gate_array: gate_array::GateArray,
-    pio: pio::PeripheralInterface,
+pub trait Bus {
+    fn read_byte(&self, port: u16) -> u8;
+    fn write_byte(&mut self, port: u16, value: u8);
 }
 
-impl Bus {
-    pub fn new(
-        crtc: crtc::CRTController,
-        fdc: fdc::FloppyDiskController,
-        gate_array: gate_array::GateArray,
-        pio: pio::PeripheralInterface
-    ) -> Bus {
-        Bus {
+pub struct DummyBus {}
+
+impl DummyBus {
+    pub fn new() -> DummyBus {
+        DummyBus {}
+    }
+}
+
+impl Bus for DummyBus {
+    fn read_byte(&self, _port: u16) -> u8 {
+        unimplemented!()
+    }
+
+    fn write_byte(&mut self, _port: u16, _value: u8) {
+        unimplemented!();
+    }
+}
+
+
+pub type StandardBusShared = Rc<RefCell<StandardBus>>;
+
+pub struct StandardBus {
+    crtc: crtc::CRTControllerShared,
+    fdc: fdc::FloppyDiskControllerShared,
+    gate_array: gate_array::GateArrayShared,
+    pio: pio::PeripheralInterfaceShared,
+}
+
+impl StandardBus {
+    pub fn new_shared(
+        crtc: crtc::CRTControllerShared,
+        fdc: fdc::FloppyDiskControllerShared,
+        gate_array: gate_array::GateArrayShared,
+        pio: pio::PeripheralInterfaceShared
+    ) -> StandardBusShared {
+        let bus = StandardBus {
             crtc,
             fdc,
             gate_array,
             pio
-        }
+        };
+
+        Rc::new(RefCell::new(bus))
     }
 
-    pub fn read_byte(&self, port: u16) -> u8 {
+    pub fn step(&mut self) -> bool {
+        self.crtc.borrow_mut().step();
+        self.gate_array.borrow_mut().step()
+    }
+}
+
+impl Bus for StandardBus {
+    fn read_byte(&self, port: u16) -> u8 {
         // TODO: map read to devices
         match port {
-            _ if 0x4000 & port == 0 => self.crtc.read_byte(port),
-            _ if 0x0800 & port == 0 => self.pio.read_byte(port),
-            0xfb7e | 0xfb7f => self.fdc.read_byte(port),
+            _ if 0x4000 & port == 0 => self.crtc.borrow().read_byte(port),
+            _ if 0x0800 & port == 0 => self.pio.borrow().read_byte(port),
+            0xfb7e | 0xfb7f => self.fdc.borrow().read_byte(port),
             _ => unimplemented!(),
         }
     }
 
-    pub fn write_byte(&mut self, memory: &mut memory::Memory, port: u16, value: u8) {
+    fn write_byte(&mut self, port: u16, value: u8) {
         // TODO: map write to devices
         match port {
-            _ if 0x4000 & port == 0 => self.crtc.write_byte(port, value),
-            _ if 0x8000 & port == 0 && 0x4000 & port != 0 => self.gate_array.write_byte(memory, port, value),
-            _ if 0x0800 & port == 0 => self.pio.write_byte(port, value),
-            0xfa7e | 0xfb7f => self.fdc.write_byte(port, value),
+            _ if 0x4000 & port == 0 => self.crtc.borrow_mut().write_byte(port, value),
+            _ if 0x8000 & port == 0 && 0x4000 & port != 0 => self.gate_array.borrow_mut().write_byte(port, value),
+            _ if 0x0800 & port == 0 => self.pio.borrow_mut().write_byte(port, value),
+            0xfa7e | 0xfb7f => self.fdc.borrow_mut().write_byte(port, value),
             _ => unimplemented!(),
         }
-    }
-
-    pub fn step(&mut self, memory: &mut memory::Memory, _screen: &mut screen::Screen) -> bool {
-        self.crtc.step();
-        self.gate_array.step(memory, &self.crtc)
     }
 }
