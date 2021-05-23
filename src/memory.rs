@@ -112,6 +112,14 @@ impl Memory {
 
         Rc::new(RefCell::new(memory))
     }
+
+    pub fn enable_lower_rom(&mut self, enable: bool) {
+        self.lower_rom_enabled = enable;
+    }
+
+    pub fn enable_upper_rom(&mut self, enable: bool) {
+        self.upper_rom_enabled = enable;
+    }
 }
 
 impl Read for Memory {

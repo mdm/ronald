@@ -67,8 +67,8 @@ impl Bus for StandardBus {
     fn read_byte(&self, port: u16) -> u8 {
         // TODO: map read to devices
         match port {
-            _ if 0x4000 & port == 0 => self.crtc.borrow().read_byte(port),
-            _ if 0x0800 & port == 0 => self.pio.borrow().read_byte(port),
+            _ if port & 0x4000 == 0 => self.crtc.borrow().read_byte(port),
+            _ if port & 0x0800 == 0 => self.pio.borrow().read_byte(port),
             0xfb7e | 0xfb7f => self.fdc.borrow().read_byte(port),
             _ => unimplemented!(),
         }
@@ -77,9 +77,9 @@ impl Bus for StandardBus {
     fn write_byte(&mut self, port: u16, value: u8) {
         // TODO: map write to devices
         match port {
-            _ if 0x4000 & port == 0 => self.crtc.borrow_mut().write_byte(port, value),
-            _ if 0x8000 & port == 0 && 0x4000 & port != 0 => self.gate_array.borrow_mut().write_byte(port, value),
-            _ if 0x0800 & port == 0 => self.pio.borrow_mut().write_byte(port, value),
+            _ if port & 0x4000 == 0 => self.crtc.borrow_mut().write_byte(port, value),
+            _ if port & 0x8000 == 0 && port & 0x4000 != 0 => self.gate_array.borrow_mut().write_byte(port, value),
+            _ if port & 0x0800 == 0 => self.pio.borrow_mut().write_byte(port, value),
             0xfa7e | 0xfb7f => self.fdc.borrow_mut().write_byte(port, value),
             _ => unimplemented!(),
         }

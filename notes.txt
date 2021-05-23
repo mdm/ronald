@@ -6,6 +6,8 @@ CRTC
 * skip interlace modes for first implementation
 * Whenever the microprocessor writes to R12 and R13, the Linear Address Generator is updated at the start of the next vertical frame.
 * Which refresh addresses provided during hsync? see datasheet ("during")
+* HSYNC is not defined until R2 is programmed
+
 
 Debugger
 --------
