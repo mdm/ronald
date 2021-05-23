@@ -19,3 +19,9 @@ Architecture
 ------------
 
 * Use Rc<RefCell>s and interior mutability
+
+
+TODO
+----
+
+* Add timing for instructions targeting IXH, IXL, IYH, and IYL

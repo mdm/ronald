@@ -56,7 +56,9 @@ impl ZexHarness {
                     }
                     self.cpu.fetch_and_execute();
                 }
-                _ => self.cpu.fetch_and_execute(),
+                _ => {
+                    self.cpu.fetch_and_execute();
+                }
             }
         }
         println!();
@@ -94,13 +96,18 @@ impl CPC464 {
 }
 
 impl System for CPC464 {
-    fn emulate(&mut self, _time_limit: Option<u64>) {
+    fn emulate(&mut self, time_limit: Option<u64>) {
         let cycles = self.cpu.fetch_and_execute();
-        
-        self.bus.borrow_mut().step(); // TODO: step multiple times depending on "cycles" and handle interrupts
+
+        for _ in 0..cycles {
+            let interrupt  = self.bus.borrow_mut().step();
+            if interrupt {
+                // TODO: generate interrupt, acknowledge interrupt
+            }
+        }
     }
 
-    fn get_frame_buffer(&self) -> &Vec<u32> {
+    fn get_frame_buffer(&self) -> &Vec<u32> { // TODO: remove need for this method
         self.screen.get_frame_buffer()
     }
 }

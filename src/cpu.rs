@@ -144,10 +144,10 @@ impl fmt::Display for RegisterFile {
 enum Flag {
     Carry,
     AddSubtract,
-    ParityOverflow,
+    ParityOverflow, // even parity makes this true
     HalfCarry,
     Zero,
-    Sign,
+    Sign, // negative values make this true
 }
 
 impl Flag {
@@ -196,7 +196,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
         cpu
     }
 
-    pub fn fetch_and_execute(&mut self) {
+    pub fn fetch_and_execute(&mut self) -> u8 {
         if self.enable_interrupt {
             self.iff1 = true;
             self.iff2 = true;
@@ -206,6 +206,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
         let (instruction, next_address) = self.decoder.decode_at(
             self.registers.read_word(&Register16::PC) as usize
         );
+
+        let mut timing = instruction.timing();
 
         match instruction {
             Instruction::Adc(destination, source) => {
@@ -374,6 +376,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 if counter == 0 || value == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
+                    timing = 5; // not having to adjust the PC saves time
                 }
             }
             Instruction::Cpi => {
@@ -414,6 +417,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 if counter == 0 || value == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
+                    timing = 5; // not having to adjust the PC saves time
                 }
             }
             Instruction::Cpl => {
@@ -490,6 +494,11 @@ where M: memory::Read + memory::Write, B: bus::Bus {
     
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Djnz(_) => {
+                // TODO: don't forget to adjust timing
+                println!("{:#06x}: {}", self.registers.read_word(&Register16::PC), &instruction);
+                unimplemented!();
+            }
             Instruction::Ei => {
                 self.enable_interrupt = false;
 
@@ -564,6 +573,12 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::LdDirect16(destination, source) => {
+                let value = self.load_word(&source);
+                self.store_word(&destination, value);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Ldd => {
                 let value = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
                 self.store_byte(&Operand::RegisterIndirect(Register16::DE), value);
@@ -602,6 +617,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 if counter == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
+                    timing = 5; // not having to adjust the PC saves time
                 }
             }
             Instruction::Ldi => {
@@ -642,6 +658,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 if counter == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
+                    timing = 5; // not having to adjust the PC saves time
                 }
             }
             Instruction::Neg => {
@@ -680,6 +697,13 @@ where M: memory::Read + memory::Write, B: bus::Bus {
             Instruction::Out(Operand::RegisterIndirect(port), Operand::Register8(source)) => {
                 let address = self.registers.read_word(&port);
                 let value = self.registers.read_byte(&source);
+                self.bus.borrow_mut().write_byte(address, value);
+
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Out(Operand::RegisterIndirect(port), Operand::Immediate8(value)) => {
+                // TODO: make this a special case of the other OUT instruction above
+                let address = self.registers.read_word(&port);
                 self.bus.borrow_mut().write_byte(address, value);
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
@@ -1004,10 +1028,14 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             _ => {
+                // TODO: don't forget to adjust timing for:
+                // Indr, Inir, Jr
                 println!("{:#06x}: {}", self.registers.read_word(&Register16::PC), &instruction);
                 unimplemented!();
             }
         }
+
+        timing
     }
 
     fn reset(&mut self) {
