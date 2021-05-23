@@ -1029,7 +1029,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
             }
             _ => {
                 // TODO: don't forget to adjust timing for:
-                // Indr, Inir, Jr
+                // Indr, Inir, Jr, Otdr, Otir
                 println!("{:#06x}: {}", self.registers.read_word(&Register16::PC), &instruction);
                 unimplemented!();
             }
