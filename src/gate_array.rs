@@ -48,6 +48,10 @@ impl GateArray {
         }
     }
 
+    pub fn acknowledge_interrupt(&mut self) {
+        // TODO: reset bit 5 of interrupt counter
+    }
+
     pub fn step(&mut self) -> bool {
         // TODO: on HSYNC set current screen mode
         // TODO: write to screen

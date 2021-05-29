@@ -61,6 +61,10 @@ impl StandardBus {
         self.crtc.borrow_mut().step();
         self.gate_array.borrow_mut().step()
     }
+
+    pub fn acknowledge_interrupt(&mut self) {
+        self.gate_array.borrow_mut().acknowledge_interrupt();
+    }
 }
 
 impl Bus for StandardBus {

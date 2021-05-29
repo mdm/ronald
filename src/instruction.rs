@@ -275,14 +275,8 @@ impl Instruction {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::Defb(_) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
-            Instruction::Defw(_) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            Instruction::Defb(_) => 1,
+            Instruction::Defw(_) => 2,
             Instruction::Di => 1,
             Instruction::Djnz(_) => {
                 println!("No timing for {}", self);

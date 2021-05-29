@@ -170,6 +170,7 @@ pub struct CPU<M, B> {
     pub halted: bool,
     decoder: Decoder<M>,
     enable_interrupt: bool,
+    irq_received: bool,
     memory: Rc<RefCell<M>>,
     bus: Rc<RefCell<B>>,
 }
@@ -187,6 +188,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
             halted: false,
             decoder: Decoder::new(memory.clone()),
             enable_interrupt: false,
+            irq_received: false,
             memory: memory.clone(),
             bus: bus.clone(),
         };
@@ -196,18 +198,20 @@ where M: memory::Read + memory::Write, B: bus::Bus {
         cpu
     }
 
-    pub fn fetch_and_execute(&mut self) -> u8 {
+    pub fn fetch_and_execute(&mut self) -> (u8, bool) {
         if self.enable_interrupt {
             self.iff1 = true;
             self.iff2 = true;
             self.enable_interrupt = false;
         }
 
+        let mut prevent_interrupt = false;
+
         let (instruction, next_address) = self.decoder.decode_at(
             self.registers.read_word(&Register16::PC) as usize
         );
 
-        let mut timing = instruction.timing();
+        let mut timing_in_nops = instruction.timing();
 
         match instruction {
             Instruction::Adc(destination, source) => {
@@ -376,7 +380,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 if counter == 0 || value == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
-                    timing = 5; // not having to adjust the PC saves time
+                    timing_in_nops = 5; // not having to adjust the PC saves time
                 }
             }
             Instruction::Cpi => {
@@ -417,7 +421,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 if counter == 0 || value == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
-                    timing = 5; // not having to adjust the PC saves time
+                    timing_in_nops = 5; // not having to adjust the PC saves time
                 }
             }
             Instruction::Cpl => {
@@ -485,7 +489,11 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Defb(_operand) => {
-                // TODO: disable interrupts
+                prevent_interrupt = true;
+                self.registers.write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Defw(_operand) => {
+                // TODO: disable interrupts??? or not???
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Di => {
@@ -500,7 +508,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 unimplemented!();
             }
             Instruction::Ei => {
-                self.enable_interrupt = false;
+                self.enable_interrupt = true;
 
                 self.registers.write_word(&Register16::PC, next_address as u16);
             }
@@ -617,7 +625,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 if counter == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
-                    timing = 5; // not having to adjust the PC saves time
+                    timing_in_nops = 5; // not having to adjust the PC saves time
                 }
             }
             Instruction::Ldi => {
@@ -658,7 +666,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                 if counter == 0 {
                     self.registers.write_word(&Register16::PC, next_address as u16);
-                    timing = 5; // not having to adjust the PC saves time
+                    timing_in_nops = 5; // not having to adjust the PC saves time
                 }
             }
             Instruction::Neg => {
@@ -1035,7 +1043,14 @@ where M: memory::Read + memory::Write, B: bus::Bus {
             }
         }
 
-        timing
+        let mut interrupt_acknowledged = false;
+        if self.irq_received && self.iff1 && !prevent_interrupt {
+            // TODO: handle interrupt
+            // TODO: allow non-maskable interrupts
+            interrupt_acknowledged = true;
+        }
+
+        (timing_in_nops, interrupt_acknowledged)
     }
 
     fn reset(&mut self) {

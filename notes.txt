@@ -25,3 +25,6 @@ TODO
 ----
 
 * Add timing for instructions targeting IXH, IXL, IYH, and IYL
+* Implement missing instructions in CPU
+* Implement HALT (re-executed until next interrupt)
+* Update I and R registers as necessary

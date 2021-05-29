@@ -97,13 +97,19 @@ impl CPC464 {
 
 impl System for CPC464 {
     fn emulate(&mut self, time_limit: Option<u64>) {
-        let cycles = self.cpu.fetch_and_execute();
+        let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute();
 
         for _ in 0..cycles {
             let interrupt  = self.bus.borrow_mut().step();
             if interrupt {
-                // TODO: generate interrupt, acknowledge interrupt
+                // TODO: generate interrupt
             }
+        }
+
+        if interrupt_acknowledged {
+            // TODO: communicate with gate array directly?
+            // What about external hardware triggering (non-maskable) interrupts?
+            self.bus.borrow_mut().acknowledge_interrupt();
         }
     }
 
