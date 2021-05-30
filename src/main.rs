@@ -6,7 +6,7 @@ mod gate_array;
 mod gui;
 mod instruction;
 mod memory;
-mod pio;
+mod ppi;
 mod screen;
 mod system;
 

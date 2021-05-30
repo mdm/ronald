@@ -9,9 +9,9 @@ pub struct PeripheralInterface { // Peripheral input/output
 
 impl PeripheralInterface {
     pub fn new_shared() -> PeripheralInterfaceShared {
-        let pio = PeripheralInterface {};
+        let ppi = PeripheralInterface {};
 
-        Rc::new(RefCell::new(pio))
+        Rc::new(RefCell::new(ppi))
     }
 
     pub fn read_byte(&self, port: u16) -> u8 {

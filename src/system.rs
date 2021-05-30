@@ -5,7 +5,7 @@ use crate::fdc;
 use crate::gate_array;
 use crate::memory;
 use memory::{ Read, Write };
-use crate::pio;
+use crate::ppi;
 use crate::screen;
 
 use std::cell::RefCell;
@@ -84,7 +84,7 @@ impl CPC464 {
             crtc.clone(),
             fdc::FloppyDiskController::new_shared(),
             gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
-            pio::PeripheralInterface::new_shared()
+            ppi::PeripheralInterface::new_shared()
         );
 
         CPC464 {

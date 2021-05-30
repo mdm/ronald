@@ -1,7 +1,7 @@
 use crate::crtc;
 use crate::fdc;
 use crate::gate_array;
-use crate::pio;
+use crate::ppi;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -37,7 +37,7 @@ pub struct StandardBus {
     crtc: crtc::CRTControllerShared,
     fdc: fdc::FloppyDiskControllerShared,
     gate_array: gate_array::GateArrayShared,
-    pio: pio::PeripheralInterfaceShared,
+    ppi: ppi::PeripheralInterfaceShared,
 }
 
 impl StandardBus {
@@ -45,13 +45,13 @@ impl StandardBus {
         crtc: crtc::CRTControllerShared,
         fdc: fdc::FloppyDiskControllerShared,
         gate_array: gate_array::GateArrayShared,
-        pio: pio::PeripheralInterfaceShared
+        ppi: ppi::PeripheralInterfaceShared
     ) -> StandardBusShared {
         let bus = StandardBus {
             crtc,
             fdc,
             gate_array,
-            pio
+            ppi
         };
 
         Rc::new(RefCell::new(bus))
@@ -72,7 +72,7 @@ impl Bus for StandardBus {
         // TODO: map read to devices
         match port {
             _ if port & 0x4000 == 0 => self.crtc.borrow().read_byte(port),
-            _ if port & 0x0800 == 0 => self.pio.borrow().read_byte(port),
+            _ if port & 0x0800 == 0 => self.ppi.borrow().read_byte(port),
             0xfb7e | 0xfb7f => self.fdc.borrow().read_byte(port),
             _ => unimplemented!(),
         }
@@ -83,7 +83,7 @@ impl Bus for StandardBus {
         match port {
             _ if port & 0x4000 == 0 => self.crtc.borrow_mut().write_byte(port, value),
             _ if port & 0x8000 == 0 && port & 0x4000 != 0 => self.gate_array.borrow_mut().write_byte(port, value),
-            _ if port & 0x0800 == 0 => self.pio.borrow_mut().write_byte(port, value),
+            _ if port & 0x0800 == 0 => self.ppi.borrow_mut().write_byte(port, value),
             0xfa7e | 0xfb7f => self.fdc.borrow_mut().write_byte(port, value),
             _ => unimplemented!(),
         }

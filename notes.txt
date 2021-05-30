@@ -32,7 +32,6 @@ TODO
 Next Steps
 ----------
 
-* Rename PIO to PPI
 * Implement PPI
 * Implement debugger
   * Basic break points
