@@ -28,3 +28,15 @@ TODO
 * Implement missing instructions in CPU
 * Implement HALT (re-executed until next interrupt)
 * Update I and R registers as necessary
+
+Next Steps
+----------
+
+* Rename PIO to PPI
+* Implement PPI
+* Implement debugger
+  * Basic break points
+  * Step/run command
+  * State inspection commands
+* Add screen output to gate array
+* Tie emulation speed to frame rate

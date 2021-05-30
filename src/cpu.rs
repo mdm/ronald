@@ -1044,9 +1044,10 @@ where M: memory::Read + memory::Write, B: bus::Bus {
         }
 
         let mut interrupt_acknowledged = false;
-        if self.irq_received && self.iff1 && !prevent_interrupt {
-            // TODO: handle interrupt
-            // TODO: allow non-maskable interrupts
+        if self.irq_received && self.iff1 && !prevent_interrupt { // TODO: allow non-maskable interrupts (they are not used in the CPC)?
+            println!("handle interrupt");
+            unimplemented!(); // TODO: handle interrupt
+            
             interrupt_acknowledged = true;
         }
 
