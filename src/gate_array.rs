@@ -85,7 +85,7 @@ impl GateArray {
 
         if self.hsyncs_since_last_vsync == 2 {
             self.interrupt_counter = 0;
-            generate_interrupt = self.interrupt_counter & 0x20 == 0;
+            generate_interrupt = self.interrupt_counter & 0x20 != 0;
         }
 
         generate_interrupt
