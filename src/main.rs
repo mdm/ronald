@@ -5,6 +5,7 @@ mod fdc;
 mod gate_array;
 mod gui;
 mod instruction;
+mod keyboard;
 mod memory;
 mod ppi;
 mod screen;

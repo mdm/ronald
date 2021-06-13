@@ -3,6 +3,7 @@ use crate::cpu;
 use crate::crtc;
 use crate::fdc;
 use crate::gate_array;
+use crate::keyboard;
 use crate::memory;
 use memory::{ Read, Write };
 use crate::ppi;
@@ -68,12 +69,14 @@ impl ZexHarness {
 pub trait System {
     fn emulate(&mut self, time_limit: Option<u64>);
     fn get_frame_buffer(&self) -> &Vec<u32>;
+    fn get_keyboard(&self) -> Rc<RefCell<keyboard::Keyboard>>;
 }
 
 pub struct CPC464 {
     cpu: cpu::CPU<memory::Memory, bus::StandardBus>,
     bus: bus::StandardBusShared,
     screen: screen::Screen,
+    keyboard: keyboard::KeyboardShared,
 }
 
 impl CPC464 {
@@ -91,6 +94,7 @@ impl CPC464 {
             cpu: cpu::CPU::new(memory.clone(), bus.clone(), 0),
             bus: bus.clone(),
             screen: screen::Screen::new(),
+            keyboard: keyboard::Keyboard::new_shared(),
         }
     }
 }
@@ -113,7 +117,11 @@ impl System for CPC464 {
         }
     }
 
-    fn get_frame_buffer(&self) -> &Vec<u32> { // TODO: remove need for this method
+    fn get_frame_buffer(&self) -> &Vec<u32> { // TODO: should the GUI own the buffer?
         self.screen.get_frame_buffer()
+    }
+
+    fn get_keyboard(&self) -> keyboard::KeyboardShared {
+        self.keyboard.clone()
     }
 }
