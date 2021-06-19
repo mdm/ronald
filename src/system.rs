@@ -83,18 +83,19 @@ impl CPC464 {
     pub fn new() -> CPC464 { // TODO: receive shared screen here
         let memory = memory::Memory::new_shared();
         let crtc = crtc::CRTController::new_shared();
+        let keyboard = keyboard::Keyboard::new_shared();
         let bus = bus::StandardBus::new_shared(
             crtc.clone(),
             fdc::FloppyDiskController::new_shared(),
             gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
-            ppi::PeripheralInterface::new_shared()
+            ppi::PeripheralInterface::new_shared(keyboard.clone())
         );
 
         CPC464 {
             cpu: cpu::CPU::new(memory.clone(), bus.clone(), 0),
             bus: bus.clone(),
             screen: screen::Screen::new(),
-            keyboard: keyboard::Keyboard::new_shared(),
+            keyboard: keyboard.clone(),
         }
     }
 }
