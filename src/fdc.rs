@@ -3,9 +3,7 @@ use std::rc::Rc;
 
 pub type FloppyDiskControllerShared = Rc<RefCell<FloppyDiskController>>;
 
-pub struct FloppyDiskController {
-
-}
+pub struct FloppyDiskController {}
 
 impl FloppyDiskController {
     pub fn new_shared() -> FloppyDiskControllerShared {

@@ -5,13 +5,12 @@ use crate::fdc;
 use crate::gate_array;
 use crate::keyboard;
 use crate::memory;
-use memory::{ Read, Write };
 use crate::ppi;
 use crate::screen;
+use memory::{Read, Write};
 
 use std::cell::RefCell;
 use std::rc::Rc;
-
 
 pub struct ZexHarness {
     cpu: cpu::CPU<memory::RAM, bus::DummyBus>,
@@ -39,15 +38,18 @@ impl ZexHarness {
                 0x0000 => break,
                 0x0005 => {
                     match self.cpu.registers.read_byte(&cpu::Register8::C) {
-                        2 => print!("{}", self.cpu.registers.read_byte(&cpu::Register8::E) as char),
+                        2 => print!(
+                            "{}",
+                            self.cpu.registers.read_byte(&cpu::Register8::E) as char
+                        ),
                         9 => {
-                            let mut address = self.cpu.registers.read_word(&cpu::Register16::DE) as usize;
+                            let mut address =
+                                self.cpu.registers.read_word(&cpu::Register16::DE) as usize;
                             loop {
                                 let character = self.memory.borrow().read_byte(address) as char;
                                 if character == '$' {
                                     break;
-                                }
-                                else {
+                                } else {
                                     print!("{}", character);
                                 }
                                 address += 1;
@@ -80,7 +82,8 @@ pub struct CPC464 {
 }
 
 impl CPC464 {
-    pub fn new() -> CPC464 { // TODO: receive shared screen here
+    pub fn new() -> CPC464 {
+        // TODO: receive shared screen here
         let memory = memory::Memory::new_shared();
         let crtc = crtc::CRTController::new_shared();
         let keyboard = keyboard::Keyboard::new_shared();
@@ -88,7 +91,7 @@ impl CPC464 {
             crtc.clone(),
             fdc::FloppyDiskController::new_shared(),
             gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
-            ppi::PeripheralInterface::new_shared(keyboard.clone())
+            ppi::PeripheralInterface::new_shared(keyboard.clone()),
         );
 
         CPC464 {
@@ -105,7 +108,7 @@ impl System for CPC464 {
         let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute();
 
         for _ in 0..cycles {
-            let interrupt  = self.bus.borrow_mut().step();
+            let interrupt = self.bus.borrow_mut().step();
             if interrupt {
                 // TODO: generate interrupt
             }
@@ -118,7 +121,8 @@ impl System for CPC464 {
         }
     }
 
-    fn get_frame_buffer(&self) -> &Vec<u32> { // TODO: should the GUI own the buffer?
+    fn get_frame_buffer(&self) -> &Vec<u32> {
+        // TODO: should the GUI own the buffer?
         self.screen.get_frame_buffer()
     }
 

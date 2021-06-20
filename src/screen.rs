@@ -76,6 +76,6 @@ impl Screen {
     }
 
     fn trigger_vsync(&mut self) {
-        self.waiting_for_vsync = false;       
+        self.waiting_for_vsync = false;
     }
 }

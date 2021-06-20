@@ -1,10 +1,10 @@
-use std::fmt;
 use std::cell::RefCell;
+use std::fmt;
 use std::rc::Rc;
 
 use crate::bus;
+use crate::instruction::{Decoder, Instruction, JumpTest, Operand};
 use crate::memory;
-use crate::instruction::{ Decoder, Instruction, JumpTest, Operand };
 
 pub enum Register8 {
     A,
@@ -60,28 +60,57 @@ impl RegisterFile {
             Register8::IYH => self.data[11] >> 8,
             Register8::IYL => self.data[11] & 0xff,
         };
-        
+
         value as u8
     }
 
-    fn write_byte(&mut self, register: &Register8, value: u8) { // TODO: add tests
+    fn write_byte(&mut self, register: &Register8, value: u8) {
+        // TODO: add tests
         let value = value as u16;
 
         match register {
-            Register8::A => { self.data[0] = (value << 8) + (self.data[0] & 0xff); }
-            Register8::F => { self.data[0] = (self.data[0] & 0xff00) + value; }
-            Register8::B => { self.data[1] = (value << 8) + (self.data[1] & 0xff); }
-            Register8::C => { self.data[1] = (self.data[1] & 0xff00) + value; }
-            Register8::D => { self.data[2] = (value << 8) + (self.data[2] & 0xff); }
-            Register8::E => { self.data[2] = (self.data[2] & 0xff00) + value; }
-            Register8::H => { self.data[3] = (value << 8) + (self.data[3] & 0xff); }
-            Register8::L => { self.data[3] = (self.data[3] & 0xff00) + value; }
-            Register8::I => { self.data[8] = (self.data[8] & 0xff00) + value; }
-            Register8::R => { self.data[9] = (self.data[9] & 0xff00) + value; }
-            Register8::IXH => { self.data[10] = (value << 8) + (self.data[10] & 0xff); }
-            Register8::IXL => { self.data[10] = (self.data[10] & 0xff00) + value; }
-            Register8::IYH => { self.data[11] = (value << 8) + (self.data[11] & 0xff); }
-            Register8::IYL => { self.data[11] = (self.data[11] & 0xff00) + value; }
+            Register8::A => {
+                self.data[0] = (value << 8) + (self.data[0] & 0xff);
+            }
+            Register8::F => {
+                self.data[0] = (self.data[0] & 0xff00) + value;
+            }
+            Register8::B => {
+                self.data[1] = (value << 8) + (self.data[1] & 0xff);
+            }
+            Register8::C => {
+                self.data[1] = (self.data[1] & 0xff00) + value;
+            }
+            Register8::D => {
+                self.data[2] = (value << 8) + (self.data[2] & 0xff);
+            }
+            Register8::E => {
+                self.data[2] = (self.data[2] & 0xff00) + value;
+            }
+            Register8::H => {
+                self.data[3] = (value << 8) + (self.data[3] & 0xff);
+            }
+            Register8::L => {
+                self.data[3] = (self.data[3] & 0xff00) + value;
+            }
+            Register8::I => {
+                self.data[8] = (self.data[8] & 0xff00) + value;
+            }
+            Register8::R => {
+                self.data[9] = (self.data[9] & 0xff00) + value;
+            }
+            Register8::IXH => {
+                self.data[10] = (value << 8) + (self.data[10] & 0xff);
+            }
+            Register8::IXL => {
+                self.data[10] = (self.data[10] & 0xff00) + value;
+            }
+            Register8::IYH => {
+                self.data[11] = (value << 8) + (self.data[11] & 0xff);
+            }
+            Register8::IYL => {
+                self.data[11] = (self.data[11] & 0xff00) + value;
+            }
         }
     }
 
@@ -100,23 +129,55 @@ impl RegisterFile {
 
     fn write_word(&mut self, register: &Register16, value: u16) {
         match register {
-            Register16::AF => { self.data[0] = value; },
-            Register16::BC => { self.data[1] = value; },
-            Register16::DE => { self.data[2] = value; },
-            Register16::HL => { self.data[3] = value; },
-            Register16::IX => { self.data[10] = value; },
-            Register16::IY => { self.data[11] = value; },
-            Register16::SP => { self.data[12] = value; },
-            Register16::PC => { self.data[13] = value; },
+            Register16::AF => {
+                self.data[0] = value;
+            }
+            Register16::BC => {
+                self.data[1] = value;
+            }
+            Register16::DE => {
+                self.data[2] = value;
+            }
+            Register16::HL => {
+                self.data[3] = value;
+            }
+            Register16::IX => {
+                self.data[10] = value;
+            }
+            Register16::IY => {
+                self.data[11] = value;
+            }
+            Register16::SP => {
+                self.data[12] = value;
+            }
+            Register16::PC => {
+                self.data[13] = value;
+            }
         }
     }
 
     fn swap_word(&mut self, register: &Register16) {
         match register {
-            Register16::AF => { let tmp = self.data[0]; self.data[0] = self.data[4]; self.data[4] = tmp; },
-            Register16::BC => { let tmp = self.data[1]; self.data[1] = self.data[5]; self.data[5] = tmp; },
-            Register16::DE => { let tmp = self.data[2]; self.data[2] = self.data[6]; self.data[6] = tmp; },
-            Register16::HL => { let tmp = self.data[3]; self.data[3] = self.data[7]; self.data[7] = tmp; },
+            Register16::AF => {
+                let tmp = self.data[0];
+                self.data[0] = self.data[4];
+                self.data[4] = tmp;
+            }
+            Register16::BC => {
+                let tmp = self.data[1];
+                self.data[1] = self.data[5];
+                self.data[5] = tmp;
+            }
+            Register16::DE => {
+                let tmp = self.data[2];
+                self.data[2] = self.data[6];
+                self.data[6] = tmp;
+            }
+            Register16::HL => {
+                let tmp = self.data[3];
+                self.data[3] = self.data[7];
+                self.data[7] = tmp;
+            }
             _ => unreachable!(),
         }
     }
@@ -176,7 +237,10 @@ pub struct CPU<M, B> {
 }
 
 impl<M, B> CPU<M, B>
-where M: memory::Read + memory::Write, B: bus::Bus {
+where
+    M: memory::Read + memory::Write,
+    B: bus::Bus,
+{
     pub fn new(memory: Rc<RefCell<M>>, bus: Rc<RefCell<B>>, initial_pc: u16) -> CPU<M, B> {
         let mut registers = RegisterFile::new();
         registers.write_word(&Register16::PC, initial_pc);
@@ -207,9 +271,9 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
         let mut prevent_interrupt = false;
 
-        let (instruction, next_address) = self.decoder.decode_at(
-            self.registers.read_word(&Register16::PC) as usize
-        );
+        let (instruction, next_address) = self
+            .decoder
+            .decode_at(self.registers.read_word(&Register16::PC) as usize);
 
         let mut timing_in_nops = instruction.timing();
 
@@ -222,12 +286,16 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_add(value);
-                        let overflow = (left & 0x80) == (right & 0x80) && (right & 0x80) != (value & 0x80);
+                        let overflow =
+                            (left & 0x80) == (right & 0x80) && (right & 0x80) != (value & 0x80);
                         self.store_byte(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0);
                         self.set_flag(Flag::Zero, value == 0);
-                        self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf) + carry_value) & 0x10) != 0);
+                        self.set_flag(
+                            Flag::HalfCarry,
+                            (((left & 0xf) + (right & 0xf) + carry_value) & 0x10) != 0,
+                        );
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, false);
                         self.set_flag(Flag::Carry, carry1 || carry2);
@@ -238,12 +306,16 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_add(value);
-                        let overflow = (left & 0x8000) == (right & 0x8000) && (right & 0x8000) != (value & 0x8000);
+                        let overflow = (left & 0x8000) == (right & 0x8000)
+                            && (right & 0x8000) != (value & 0x8000);
                         self.store_word(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i16) < 0);
                         self.set_flag(Flag::Zero, value == 0);
-                        self.set_flag(Flag::HalfCarry, (((left & 0xfff) + (right & 0xfff) + carry_value) & 0x1000) != 0);
+                        self.set_flag(
+                            Flag::HalfCarry,
+                            (((left & 0xfff) + (right & 0xfff) + carry_value) & 0x1000) != 0,
+                        );
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, false);
                         self.set_flag(Flag::Carry, carry1 || carry2);
@@ -251,11 +323,13 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                     _ => unreachable!(),
                 }
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Add(destination, source) => {
                 match destination {
-                    Operand::Register8(Register8::A) => { // ALUOP / checked
+                    Operand::Register8(Register8::A) => {
+                        // ALUOP / checked
                         let left = self.load_byte(&destination);
                         let right = self.load_byte(&source);
                         let (value, carry) = left.overflowing_add(right);
@@ -264,7 +338,10 @@ where M: memory::Read + memory::Write, B: bus::Bus {
 
                         self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?
                         self.set_flag(Flag::Zero, value == 0);
-                        self.set_flag(Flag::HalfCarry, (((left & 0xf) + (right & 0xf)) & 0x10) != 0);
+                        self.set_flag(
+                            Flag::HalfCarry,
+                            (((left & 0xf) + (right & 0xf)) & 0x10) != 0,
+                        );
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, false);
                         self.set_flag(Flag::Carry, carry);
@@ -275,13 +352,17 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                         let (value, carry) = left.overflowing_add(right);
                         self.store_word(&destination, value);
 
-                        self.set_flag(Flag::HalfCarry, (((left & 0xfff) + (right & 0xfff)) & 0x1000) != 0);
+                        self.set_flag(
+                            Flag::HalfCarry,
+                            (((left & 0xfff) + (right & 0xfff)) & 0x1000) != 0,
+                        );
                         self.set_flag(Flag::AddSubtract, false);
                         self.set_flag(Flag::Carry, carry);
                     }
                 }
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::And(operand) => {
                 let value = self.load_byte(&operand);
@@ -296,7 +377,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, false);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Bit(Operand::Bit(bit), operand) => {
                 let value = self.load_byte(&operand);
@@ -305,18 +387,21 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::HalfCarry, true);
                 self.set_flag(Flag::AddSubtract, false);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Call(jump_test, Operand::Immediate16(address)) => {
                 if self.check_jump(jump_test) {
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
-                    self.memory.borrow_mut().write_word(new_sp as usize, next_address as u16);
+                    self.memory
+                        .borrow_mut()
+                        .write_word(new_sp as usize, next_address as u16);
                     self.registers.write_word(&Register16::PC, address);
                 } else {
-                    self.registers.write_word(&Register16::PC, next_address as u16);
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
                 }
-
             }
             Instruction::Ccf => {
                 let carry = self.check_flag(Flag::Carry);
@@ -325,9 +410,11 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, !carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::Cp(operand) => { // ALUOP / checked
+            Instruction::Cp(operand) => {
+                // ALUOP / checked
                 let left = self.registers.read_byte(&Register8::A);
                 let right = self.load_byte(&operand);
                 let (value, carry) = left.overflowing_sub(right);
@@ -340,7 +427,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, true);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Cpd => {
                 let left = self.registers.read_byte(&Register8::A);
@@ -359,7 +447,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::ParityOverflow, counter != 0);
                 self.set_flag(Flag::AddSubtract, true);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Cpdr => {
                 let left = self.registers.read_byte(&Register8::A);
@@ -379,7 +468,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, true);
 
                 if counter == 0 || value == 0 {
-                    self.registers.write_word(&Register16::PC, next_address as u16);
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
                     timing_in_nops = 5; // not having to adjust the PC saves time
                 }
             }
@@ -400,7 +490,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::ParityOverflow, counter != 0);
                 self.set_flag(Flag::AddSubtract, true);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Cpir => {
                 let left = self.registers.read_byte(&Register8::A);
@@ -420,7 +511,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, true);
 
                 if counter == 0 || value == 0 {
-                    self.registers.write_word(&Register16::PC, next_address as u16);
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
                     timing_in_nops = 5; // not having to adjust the PC saves time
                 }
             }
@@ -431,7 +523,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::HalfCarry, true);
                 self.set_flag(Flag::AddSubtract, true);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Daa => {
                 let mut value = self.registers.read_byte(&Register8::A);
@@ -465,7 +558,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::ParityOverflow, (value.count_ones() & 1) == 0);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Dec(destination) => {
                 match destination {
@@ -486,31 +580,40 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                     }
                 }
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Defb(_operand) => {
                 prevent_interrupt = true;
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Defw(_operand) => {
                 // TODO: disable interrupts??? or not???
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Di => {
                 self.iff1 = false;
                 self.iff2 = false;
-    
-                self.registers.write_word(&Register16::PC, next_address as u16);
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Djnz(_) => {
                 // TODO: don't forget to adjust timing
-                println!("{:#06x}: {}", self.registers.read_word(&Register16::PC), &instruction);
+                println!(
+                    "{:#06x}: {}",
+                    self.registers.read_word(&Register16::PC),
+                    &instruction
+                );
                 unimplemented!();
             }
             Instruction::Ei => {
                 self.enable_interrupt = true;
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Ex(left, right) => {
                 match (left, right) {
@@ -526,7 +629,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                     }
                 }
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Inc(destination) => {
                 match destination {
@@ -547,7 +651,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                     }
                 }
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Jp(jump_test, target) => {
                 if self.check_jump(jump_test) {
@@ -559,7 +664,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                     };
                     self.registers.write_word(&Register16::PC, address);
                 } else {
-                    self.registers.write_word(&Register16::PC, next_address as u16);
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
                 }
             }
             Instruction::Ld(destination, source) => {
@@ -579,13 +685,15 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                     }
                 }
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::LdDirect16(destination, source) => {
                 let value = self.load_word(&source);
                 self.store_word(&destination, value);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Ldd => {
                 let value = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
@@ -604,7 +712,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::ParityOverflow, counter != 0);
                 self.set_flag(Flag::AddSubtract, false);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Lddr => {
                 let value = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
@@ -624,7 +733,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
 
                 if counter == 0 {
-                    self.registers.write_word(&Register16::PC, next_address as u16);
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
                     timing_in_nops = 5; // not having to adjust the PC saves time
                 }
             }
@@ -645,7 +755,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::ParityOverflow, counter != 0);
                 self.set_flag(Flag::AddSubtract, false);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Ldir => {
                 let value = self.load_byte(&Operand::RegisterIndirect(Register16::HL));
@@ -665,7 +776,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
 
                 if counter == 0 {
-                    self.registers.write_word(&Register16::PC, next_address as u16);
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
                     timing_in_nops = 5; // not having to adjust the PC saves time
                 }
             }
@@ -682,10 +794,12 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, true);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Nop => {
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Or(operand) => {
                 let value = self.load_byte(&operand);
@@ -700,48 +814,63 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, false);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Out(Operand::RegisterIndirect(port), Operand::Register8(source)) => {
                 let address = self.registers.read_word(&port);
                 let value = self.registers.read_byte(&source);
                 self.bus.borrow_mut().write_byte(address, value);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Out(Operand::RegisterIndirect(port), Operand::Immediate8(value)) => {
                 // TODO: make this a special case of the other OUT instruction above
                 let address = self.registers.read_word(&port);
                 self.bus.borrow_mut().write_byte(address, value);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Pop(Operand::Register16(destination)) => {
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
-                self.registers.write_word(&destination, self.memory.borrow().read_word(old_sp as usize));
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers.write_word(
+                    &destination,
+                    self.memory.borrow().read_word(old_sp as usize),
+                );
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Push(Operand::Register16(source)) => {
                 let new_sp = self.registers.read_word(&Register16::SP) - 2;
                 self.registers.write_word(&Register16::SP, new_sp);
-                self.memory.borrow_mut().write_word(new_sp as usize, self.registers.read_word(&source));
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.memory
+                    .borrow_mut()
+                    .write_word(new_sp as usize, self.registers.read_word(&source));
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Res(destination, Operand::Bit(bit), operand) => {
                 let value = self.load_byte(&operand) & (!(1 << bit));
                 self.store_byte(&destination, value); // copy for undocumented instructions
                 self.store_byte(&operand, value);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Ret(jump_test) => {
                 if self.check_jump(jump_test) {
                     let old_sp = self.registers.read_word(&Register16::SP);
                     self.registers.write_word(&Register16::SP, old_sp + 2);
-                    self.registers.write_word(&Register16::PC, self.memory.borrow().read_word(old_sp as usize));
+                    self.registers.write_word(
+                        &Register16::PC,
+                        self.memory.borrow().read_word(old_sp as usize),
+                    );
                 } else {
-                    self.registers.write_word(&Register16::PC, next_address as u16);
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
                 }
             }
             Instruction::Rl(destination, operand) => {
@@ -759,7 +888,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rla => {
                 let value = self.registers.read_byte(&Register8::A);
@@ -772,7 +902,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rlc(destination, operand) => {
                 let value = self.load_byte(&operand).rotate_left(1);
@@ -786,7 +917,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, (value & 1) != 0);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rlca => {
                 let value = self.registers.read_byte(&Register8::A);
@@ -797,7 +929,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, (result & 1) != 0);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rr(destination, operand) => {
                 let value = self.load_byte(&operand);
@@ -814,7 +947,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rra => {
                 let value = self.registers.read_byte(&Register8::A);
@@ -827,7 +961,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rrc(destination, operand) => {
                 let value = self.load_byte(&operand).rotate_right(1);
@@ -841,7 +976,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, (value & 0x80) != 0);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rrca => {
                 let value = self.registers.read_byte(&Register8::A);
@@ -852,7 +988,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, (result & 0x80) != 0);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rld => {
                 let accumulator = self.registers.read_byte(&Register8::A);
@@ -865,10 +1002,14 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
                 self.set_flag(Flag::Zero, new_accumulator == 0);
                 self.set_flag(Flag::HalfCarry, false);
-                self.set_flag(Flag::ParityOverflow, (new_accumulator.count_ones() & 1) == 0);
+                self.set_flag(
+                    Flag::ParityOverflow,
+                    (new_accumulator.count_ones() & 1) == 0,
+                );
                 self.set_flag(Flag::AddSubtract, false);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rrd => {
                 let accumulator = self.registers.read_byte(&Register8::A);
@@ -881,10 +1022,14 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
                 self.set_flag(Flag::Zero, new_accumulator == 0);
                 self.set_flag(Flag::HalfCarry, false);
-                self.set_flag(Flag::ParityOverflow, (new_accumulator.count_ones() & 1) == 0);
+                self.set_flag(
+                    Flag::ParityOverflow,
+                    (new_accumulator.count_ones() & 1) == 0,
+                );
                 self.set_flag(Flag::AddSubtract, false);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Sbc(destination, source) => {
                 match destination {
@@ -894,7 +1039,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_sub(value);
-                        let overflow = (left & 0x80) != (right & 0x80) && (right & 0x80) == (value & 0x80);
+                        let overflow =
+                            (left & 0x80) != (right & 0x80) && (right & 0x80) == (value & 0x80);
                         self.store_byte(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i8) < 0);
@@ -910,12 +1056,16 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
                         let (value, carry2) = left.overflowing_sub(value);
-                        let overflow = (left & 0x8000) != (right & 0x8000) && (right & 0x8000) == (value & 0x8000);
+                        let overflow = (left & 0x8000) != (right & 0x8000)
+                            && (right & 0x8000) == (value & 0x8000);
                         self.store_word(&destination, value);
 
                         self.set_flag(Flag::Sign, (value as i16) < 0);
                         self.set_flag(Flag::Zero, value == 0);
-                        self.set_flag(Flag::HalfCarry, (left & 0xfff) < (right & 0xfff) + carry_value);
+                        self.set_flag(
+                            Flag::HalfCarry,
+                            (left & 0xfff) < (right & 0xfff) + carry_value,
+                        );
                         self.set_flag(Flag::ParityOverflow, overflow);
                         self.set_flag(Flag::AddSubtract, true);
                         self.set_flag(Flag::Carry, carry1 || carry2);
@@ -923,21 +1073,24 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                     _ => unreachable!(),
                 }
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Scf => {
                 self.set_flag(Flag::HalfCarry, false);
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, true);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Set(destination, Operand::Bit(bit), operand) => {
                 let value = self.load_byte(&operand) | (1 << bit);
                 self.store_byte(&destination, value); // copy for undocumented instructions
                 self.store_byte(&operand, value);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Sla(destination, operand) => {
                 let value = self.load_byte(&operand);
@@ -953,7 +1106,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Sll(destination, operand) => {
                 let value = self.load_byte(&operand);
@@ -969,7 +1123,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Sra(destination, operand) => {
                 let value = self.load_byte(&operand);
@@ -986,7 +1141,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Srl(destination, operand) => {
                 let value = self.load_byte(&operand);
@@ -1002,9 +1158,11 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::Sub(operand) => { // ALUOP / checked
+            Instruction::Sub(operand) => {
+                // ALUOP / checked
                 let left = self.registers.read_byte(&Register8::A);
                 let right = self.load_byte(&operand);
                 let (value, carry) = left.overflowing_sub(right);
@@ -1018,7 +1176,8 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, true);
                 self.set_flag(Flag::Carry, carry);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Xor(operand) => {
                 let value = self.load_byte(&operand);
@@ -1033,21 +1192,27 @@ where M: memory::Read + memory::Write, B: bus::Bus {
                 self.set_flag(Flag::AddSubtract, false);
                 self.set_flag(Flag::Carry, false);
 
-                self.registers.write_word(&Register16::PC, next_address as u16);
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
             }
             _ => {
                 // TODO: don't forget to adjust timing for:
                 // Indr, Inir, Jr, Otdr, Otir
-                println!("{:#06x}: {}", self.registers.read_word(&Register16::PC), &instruction);
+                println!(
+                    "{:#06x}: {}",
+                    self.registers.read_word(&Register16::PC),
+                    &instruction
+                );
                 unimplemented!();
             }
         }
 
         let mut interrupt_acknowledged = false;
-        if self.irq_received && self.iff1 && !prevent_interrupt { // TODO: allow non-maskable interrupts (they are not used in the CPC)?
+        if self.irq_received && self.iff1 && !prevent_interrupt {
+            // TODO: allow non-maskable interrupts (they are not used in the CPC)?
             println!("handle interrupt");
             unimplemented!(); // TODO: handle interrupt
-            
+
             interrupt_acknowledged = true;
         }
 
@@ -1072,7 +1237,7 @@ where M: memory::Read + memory::Write, B: bus::Bus {
         } else {
             old_flags & (!flag.mask()) // TODO: add tests
         };
-        
+
         self.registers.write_byte(&Register8::F, new_flags);
     }
 
@@ -1091,7 +1256,9 @@ where M: memory::Read + memory::Write, B: bus::Bus {
     }
 
     fn load_byte(&self, operand: &Operand) -> u8
-    where M: memory::Read {
+    where
+        M: memory::Read,
+    {
         match operand {
             Operand::Immediate8(value) => *value,
             Operand::Register8(register) => self.registers.read_byte(register),
@@ -1103,32 +1270,43 @@ where M: memory::Read + memory::Write, B: bus::Bus {
             }
             Operand::Indexed(register, displacement) => {
                 let address = self.registers.read_word(register);
-                self.memory.borrow().read_byte((address as i64 + *displacement as i64) as usize)
+                self.memory
+                    .borrow()
+                    .read_byte((address as i64 + *displacement as i64) as usize)
             }
             _ => unreachable!(),
         }
     }
 
     fn store_byte(&mut self, operand: &Operand, value: u8)
-    where M: memory::Read + memory::Write {
+    where
+        M: memory::Read + memory::Write,
+    {
         match operand {
             Operand::Register8(register) => self.registers.write_byte(register, value),
             Operand::Direct8(_) => unimplemented!(),
-            Operand::Direct16(address) => self.memory.borrow_mut().write_byte(*address as usize, value),
+            Operand::Direct16(address) => self
+                .memory
+                .borrow_mut()
+                .write_byte(*address as usize, value),
             Operand::RegisterIndirect(register) => {
                 let address = self.registers.read_word(register);
                 self.memory.borrow_mut().write_byte(address as usize, value)
             }
             Operand::Indexed(register, displacement) => {
                 let address = self.registers.read_word(register);
-                self.memory.borrow_mut().write_byte((address as i64 + *displacement as i64) as usize, value)
+                self.memory
+                    .borrow_mut()
+                    .write_byte((address as i64 + *displacement as i64) as usize, value)
             }
             _ => unreachable!(),
         }
     }
 
     fn load_word(&self, operand: &Operand) -> u16
-    where M: memory::Read {
+    where
+        M: memory::Read,
+    {
         match operand {
             Operand::Immediate16(value) => *value,
             Operand::Register16(register) => self.registers.read_word(register),
@@ -1139,24 +1317,33 @@ where M: memory::Read + memory::Write, B: bus::Bus {
             }
             Operand::Indexed(register, displacement) => {
                 let address = self.registers.read_word(register);
-                self.memory.borrow().read_word((address as i64 + *displacement as i64) as usize)
+                self.memory
+                    .borrow()
+                    .read_word((address as i64 + *displacement as i64) as usize)
             }
             _ => unreachable!(),
         }
     }
 
     fn store_word(&mut self, operand: &Operand, value: u16)
-    where M: memory::Read + memory::Write {
+    where
+        M: memory::Read + memory::Write,
+    {
         match operand {
             Operand::Register16(register) => self.registers.write_word(register, value),
-            Operand::Direct16(address) => self.memory.borrow_mut().write_word(*address as usize, value),
+            Operand::Direct16(address) => self
+                .memory
+                .borrow_mut()
+                .write_word(*address as usize, value),
             Operand::RegisterIndirect(register) => {
                 let address = self.registers.read_word(register);
                 self.memory.borrow_mut().write_word(address as usize, value)
             }
             Operand::Indexed(register, displacement) => {
                 let address = self.registers.read_word(register);
-                self.memory.borrow_mut().write_word((address as i64 + *displacement as i64) as usize, value)
+                self.memory
+                    .borrow_mut()
+                    .write_word((address as i64 + *displacement as i64) as usize, value)
             }
             _ => unreachable!(),
         }
@@ -1174,13 +1361,16 @@ where M: memory::Read + memory::Write, B: bus::Bus {
             "IX = {:#06x}, IY = {:#06x}, HL = {:#06x}, DE = {:#06x}, BC = {:#06x}, AF = {:#06x}, SP = {:#06x}",
             ix, iy, hl, de, bc, af, sp
         );
-        
+
         let s = self.check_flag(Flag::Sign);
         let z = self.check_flag(Flag::Zero);
         let h = self.check_flag(Flag::HalfCarry);
         let pv = self.check_flag(Flag::ParityOverflow);
         let n = self.check_flag(Flag::AddSubtract);
         let c = self.check_flag(Flag::Carry);
-        println!("S = {}, Z = {}, H = {}, P/V = {}, N = {}, C = {}", s, z, h, pv, n, c);
+        println!(
+            "S = {}, Z = {}, H = {}, P/V = {}, N = {}, C = {}",
+            s, z, h, pv, n, c
+        );
     }
 }

@@ -17,7 +17,8 @@ enum Mode {
     Bidirectional,
 }
 
-pub struct PeripheralInterface { // Peripheral input/output
+pub struct PeripheralInterface {
+    // Peripheral input/output
     direction_a: Direction,
     direction_b: Direction,
     direction_c_lower: Direction,
@@ -48,16 +49,20 @@ impl PeripheralInterface {
     }
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
-        println!("PPI (write) {:#06x} {:#10b}", port, value);
         let function = port & 0x03;
+
         match function {
-            0 => if self.direction_a == Direction::Output {
-                self.psg.write_byte(value);
+            0 => {
+                if self.direction_a == Direction::Output {
+                    self.psg.write_byte(value);
+                }
             }
-            1 => {},
+            1 => {}
             2 => {
                 if self.direction_c_lower == Direction::Output {
-                    self.keyboard.borrow_mut().set_active_line(value as usize & 0x0f);
+                    self.keyboard
+                        .borrow_mut()
+                        .set_active_line(value as usize & 0x0f);
                 }
 
                 if self.direction_c_upper == Direction::Output {

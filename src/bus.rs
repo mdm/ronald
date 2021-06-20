@@ -6,7 +6,6 @@ use crate::ppi;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-
 pub trait Bus {
     fn read_byte(&self, port: u16) -> u8;
     fn write_byte(&mut self, port: u16, value: u8);
@@ -30,7 +29,6 @@ impl Bus for DummyBus {
     }
 }
 
-
 pub type StandardBusShared = Rc<RefCell<StandardBus>>;
 
 pub struct StandardBus {
@@ -45,13 +43,13 @@ impl StandardBus {
         crtc: crtc::CRTControllerShared,
         fdc: fdc::FloppyDiskControllerShared,
         gate_array: gate_array::GateArrayShared,
-        ppi: ppi::PeripheralInterfaceShared
+        ppi: ppi::PeripheralInterfaceShared,
     ) -> StandardBusShared {
         let bus = StandardBus {
             crtc,
             fdc,
             gate_array,
-            ppi
+            ppi,
         };
 
         Rc::new(RefCell::new(bus))
@@ -82,7 +80,9 @@ impl Bus for StandardBus {
         // TODO: map write to devices
         match port {
             _ if port & 0x4000 == 0 => self.crtc.borrow_mut().write_byte(port, value),
-            _ if port & 0x8000 == 0 && port & 0x4000 != 0 => self.gate_array.borrow_mut().write_byte(port, value),
+            _ if port & 0x8000 == 0 && port & 0x4000 != 0 => {
+                self.gate_array.borrow_mut().write_byte(port, value)
+            }
             _ if port & 0x0800 == 0 => self.ppi.borrow_mut().write_byte(port, value),
             0xfa7e | 0xfb7f => self.fdc.borrow_mut().write_byte(port, value),
             _ => unimplemented!(),

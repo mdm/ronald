@@ -2,7 +2,7 @@ use crate::{screen, system};
 
 pub struct GUI {
     system: Box<dyn system::System>,
-    window: minifb::Window,   
+    window: minifb::Window,
 }
 
 impl GUI {
@@ -12,28 +12,28 @@ impl GUI {
             screen::BUFFER_WIDTH,
             screen::BUFFER_HEIGHT,
             minifb::WindowOptions::default(),
-        ).unwrap(); // TODO: handle errors properly
+        )
+        .unwrap(); // TODO: handle errors properly
 
         window.limit_update_rate(Some(std::time::Duration::from_micros(20_000))); // 50 fps
-        // TODO: measure actual fps
+                                                                                  // TODO: measure actual fps
 
-        GUI {
-            system,
-            window,
-        }
+        GUI { system, window }
     }
-    
+
     pub fn run(&mut self) {
         while self.window.is_open() && !self.should_quit() {
             self.update_keys();
 
             self.system.emulate(None);
-            
-            self.window.update_with_buffer(
-                self.system.get_frame_buffer(),
-                screen::BUFFER_WIDTH,
-                screen::BUFFER_HEIGHT,
-            ).unwrap(); // TODO: handle errors properly
+
+            self.window
+                .update_with_buffer(
+                    self.system.get_frame_buffer(),
+                    screen::BUFFER_WIDTH,
+                    screen::BUFFER_HEIGHT,
+                )
+                .unwrap(); // TODO: handle errors properly
         }
     }
 

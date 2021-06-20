@@ -35,7 +35,9 @@ impl ROM {
     pub fn from_file(path: &str) -> ROM {
         // TODO: better error handling
         // TODO: check ROM size (should be 16k)
-        ROM { data: std::fs::read(path).expect(&format!("ROM file \"{}\" could not be read.", path)) }
+        ROM {
+            data: std::fs::read(path).expect(&format!("ROM file \"{}\" could not be read.", path)),
+        }
     }
 }
 
@@ -51,7 +53,9 @@ pub struct RAM {
 
 impl RAM {
     pub fn new(size: usize) -> RAM {
-        RAM { data: vec![0; size] }
+        RAM {
+            data: vec![0; size],
+        }
     }
 
     pub fn from_file(size: usize, path: &str, offset: usize) -> RAM {

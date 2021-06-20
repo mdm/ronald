@@ -1,5 +1,5 @@
-use crate::memory;
 use crate::crtc;
+use crate::memory;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -18,7 +18,10 @@ pub struct GateArray {
 }
 
 impl GateArray {
-    pub fn new_shared(memory: memory::MemoryShared, crtc: crtc::CRTControllerShared) -> GateArrayShared {
+    pub fn new_shared(
+        memory: memory::MemoryShared,
+        crtc: crtc::CRTControllerShared,
+    ) -> GateArrayShared {
         let gate_array = GateArray {
             memory,
             crtc,
@@ -33,7 +36,8 @@ impl GateArray {
         Rc::new(RefCell::new(gate_array))
     }
 
-    pub fn write_byte(&mut self, port: u16, value: u8) { // TODO: remove port parameter?
+    pub fn write_byte(&mut self, port: u16, value: u8) {
+        // TODO: remove port parameter?
         match value {
             _ if value & 0x80 != 0 && value & 0x40 == 0 => {
                 self.requested_screen_mode = value & 0x03;
@@ -47,7 +51,7 @@ impl GateArray {
             }
             _ => {
                 println!("GA {:#06x} {:#10b}", port, value);
-                unimplemented!();        
+                unimplemented!();
             }
         }
     }

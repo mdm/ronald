@@ -1,10 +1,9 @@
-use std::fmt;
 use std::cell::RefCell;
+use std::fmt;
 use std::rc::Rc;
 
-use crate::memory::Read;
 use crate::cpu;
-
+use crate::memory::Read;
 
 pub enum Operand {
     Immediate8(u8),
@@ -38,7 +37,7 @@ impl fmt::Display for Operand {
                 cpu::Register8::IXL => write!(f, "ixl"),
                 cpu::Register8::IYH => write!(f, "iyh"),
                 cpu::Register8::IYL => write!(f, "iyl"),
-            }
+            },
             Operand::Register16(register) => match register {
                 cpu::Register16::AF => write!(f, "af"),
                 cpu::Register16::BC => write!(f, "bc"),
@@ -48,8 +47,9 @@ impl fmt::Display for Operand {
                 cpu::Register16::IY => write!(f, "iy"),
                 cpu::Register16::SP => write!(f, "sp"),
                 cpu::Register16::PC => write!(f, "pc"),
-            }
-            Operand::RegisterIndirect(register) => match register { // TODO: remove unused match arms
+            },
+            Operand::RegisterIndirect(register) => match register {
+                // TODO: remove unused match arms
                 cpu::Register16::AF => write!(f, "(af)"),
                 cpu::Register16::BC => write!(f, "(bc)"),
                 cpu::Register16::DE => write!(f, "(de)"),
@@ -58,20 +58,21 @@ impl fmt::Display for Operand {
                 cpu::Register16::IY => write!(f, "(iy)"),
                 cpu::Register16::SP => write!(f, "(sp)"),
                 cpu::Register16::PC => write!(f, "(pc)"),
-            }
+            },
             Operand::Direct8(address) => write!(f, "({:#04x})", address),
             Operand::Direct16(address) => write!(f, "({:#06x})", address),
             Operand::Indexed(register, displacement) => match register {
                 cpu::Register16::IX => write!(f, "(ix{:+})", displacement),
                 cpu::Register16::IY => write!(f, "(iy{:+})", displacement),
                 _ => unreachable!(),
-            }
+            },
             Operand::Bit(bit) => write!(f, "{}", bit),
         }
     }
 }
 
-pub enum InterruptMode { // TODO: move to CPU?
+pub enum InterruptMode {
+    // TODO: move to CPU?
     Mode0,
     Mode1,
     Mode2,
@@ -89,7 +90,8 @@ pub enum JumpTest {
     SignNegative,
 }
 
-impl JumpTest { // TODO: move to decoder?
+impl JumpTest {
+    // TODO: move to decoder?
     fn decode(encoded: u8) -> JumpTest {
         match encoded {
             0 => JumpTest::NonZero,
@@ -198,19 +200,34 @@ pub enum Instruction {
 impl Instruction {
     pub fn timing(&self) -> u8 {
         match self {
-            Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::IXH)) => 2,
-            Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::IXL)) => {
+            Instruction::Adc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::IXH),
+            ) => 2,
+            Instruction::Adc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::IXL),
+            ) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::IYH)) => 2,
-            Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::IYL)) => {
+            Instruction::Adc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::IYH),
+            ) => 2,
+            Instruction::Adc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::IYL),
+            ) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
             Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Register8(_)) => 1,
             Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Immediate8(_)) => 2,
-            Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
+            Instruction::Adc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::RegisterIndirect(cpu::Register16::HL),
+            ) => 2,
             Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Indexed(_, _)) => 5,
             Instruction::Adc(Operand::Register16(cpu::Register16::HL), Operand::Register16(_)) => 4,
             Instruction::Adc(_, _) => {
@@ -219,7 +236,10 @@ impl Instruction {
             }
             Instruction::Add(Operand::Register8(cpu::Register8::A), Operand::Register8(_)) => 1,
             Instruction::Add(Operand::Register8(cpu::Register8::A), Operand::Immediate8(_)) => 2,
-            Instruction::Add(Operand::Register8(cpu::Register8::A), Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
+            Instruction::Add(
+                Operand::Register8(cpu::Register8::A),
+                Operand::RegisterIndirect(cpu::Register16::HL),
+            ) => 2,
             Instruction::Add(Operand::Register8(cpu::Register8::A), Operand::Indexed(_, _)) => 5,
             Instruction::Add(Operand::Register16(cpu::Register16::HL), Operand::Register16(_)) => 3,
             Instruction::Add(_, _) => {
@@ -283,11 +303,26 @@ impl Instruction {
                 unimplemented!()
             }
             Instruction::Ei => 1,
-            Instruction::Ex(Operand::Register16(cpu::Register16::AF), Operand::Register16(cpu::Register16::AF)) => 1,
-            Instruction::Ex(Operand::Register16(cpu::Register16::DE), Operand::Register16(cpu::Register16::HL)) => 1,
-            Instruction::Ex(Operand::RegisterIndirect(cpu::Register16::SP), Operand::Register16(cpu::Register16::HL)) => 6,
-            Instruction::Ex(Operand::RegisterIndirect(cpu::Register16::SP), Operand::Register16(cpu::Register16::IX)) => 7,
-            Instruction::Ex(Operand::RegisterIndirect(cpu::Register16::SP), Operand::Register16(cpu::Register16::IY)) => 7,
+            Instruction::Ex(
+                Operand::Register16(cpu::Register16::AF),
+                Operand::Register16(cpu::Register16::AF),
+            ) => 1,
+            Instruction::Ex(
+                Operand::Register16(cpu::Register16::DE),
+                Operand::Register16(cpu::Register16::HL),
+            ) => 1,
+            Instruction::Ex(
+                Operand::RegisterIndirect(cpu::Register16::SP),
+                Operand::Register16(cpu::Register16::HL),
+            ) => 6,
+            Instruction::Ex(
+                Operand::RegisterIndirect(cpu::Register16::SP),
+                Operand::Register16(cpu::Register16::IX),
+            ) => 7,
+            Instruction::Ex(
+                Operand::RegisterIndirect(cpu::Register16::SP),
+                Operand::Register16(cpu::Register16::IY),
+            ) => 7,
             Instruction::Ex(_, _) => {
                 println!("No timing for {}", self);
                 unimplemented!()
@@ -315,9 +350,18 @@ impl Instruction {
             Instruction::Indr => 6,
             Instruction::Ini => 5,
             Instruction::Inir => 6,
-            Instruction::Jp(JumpTest::Unconditional, Operand::RegisterIndirect(cpu::Register16::HL)) => 1,
-            Instruction::Jp(JumpTest::Unconditional, Operand::RegisterIndirect(cpu::Register16::IX)) => 2,
-            Instruction::Jp(JumpTest::Unconditional, Operand::RegisterIndirect(cpu::Register16::IY)) => 2,
+            Instruction::Jp(
+                JumpTest::Unconditional,
+                Operand::RegisterIndirect(cpu::Register16::HL),
+            ) => 1,
+            Instruction::Jp(
+                JumpTest::Unconditional,
+                Operand::RegisterIndirect(cpu::Register16::IX),
+            ) => 2,
+            Instruction::Jp(
+                JumpTest::Unconditional,
+                Operand::RegisterIndirect(cpu::Register16::IY),
+            ) => 2,
             Instruction::Jp(_, Operand::Immediate16(_)) => 3,
             Instruction::Jp(_, _) => {
                 println!("No timing for {}", self);
@@ -331,10 +375,22 @@ impl Instruction {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::Ld(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::I)) => 3,
-            Instruction::Ld(Operand::Register8(cpu::Register8::I), Operand::Register8(cpu::Register8::A)) => 3,
-            Instruction::Ld(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::R)) => 3,
-            Instruction::Ld(Operand::Register8(cpu::Register8::R), Operand::Register8(cpu::Register8::A)) => 3,
+            Instruction::Ld(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::I),
+            ) => 3,
+            Instruction::Ld(
+                Operand::Register8(cpu::Register8::I),
+                Operand::Register8(cpu::Register8::A),
+            ) => 3,
+            Instruction::Ld(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::R),
+            ) => 3,
+            Instruction::Ld(
+                Operand::Register8(cpu::Register8::R),
+                Operand::Register8(cpu::Register8::A),
+            ) => 3,
             Instruction::Ld(Operand::Register8(_), Operand::Register8(cpu::Register8::IXL)) => 2,
             Instruction::Ld(Operand::Register8(cpu::Register8::IXL), Operand::Register8(_)) => 2,
             Instruction::Ld(Operand::Register8(_), Operand::Register8(cpu::Register8::IXH)) => 2,
@@ -344,18 +400,39 @@ impl Instruction {
             Instruction::Ld(Operand::Register8(_), Operand::Register8(cpu::Register8::IYH)) => 2,
             Instruction::Ld(Operand::Register8(cpu::Register8::IYH), Operand::Register8(_)) => 2,
             Instruction::Ld(Operand::Register8(_), Operand::Register8(_)) => 1,
-            Instruction::Ld(Operand::Register8(cpu::Register8::A), Operand::RegisterIndirect(cpu::Register16::BC)) => 2,
-            Instruction::Ld(Operand::RegisterIndirect(cpu::Register16::BC), Operand::Register8(cpu::Register8::A)) => 2,
-            Instruction::Ld(Operand::Register8(cpu::Register8::A), Operand::RegisterIndirect(cpu::Register16::DE)) => 2,
-            Instruction::Ld(Operand::RegisterIndirect(cpu::Register16::DE), Operand::Register8(cpu::Register8::A)) => 2,
-            Instruction::Ld(Operand::Register8(_), Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
-            Instruction::Ld(Operand::RegisterIndirect(cpu::Register16::HL), Operand::Register8(_)) => 2,
+            Instruction::Ld(
+                Operand::Register8(cpu::Register8::A),
+                Operand::RegisterIndirect(cpu::Register16::BC),
+            ) => 2,
+            Instruction::Ld(
+                Operand::RegisterIndirect(cpu::Register16::BC),
+                Operand::Register8(cpu::Register8::A),
+            ) => 2,
+            Instruction::Ld(
+                Operand::Register8(cpu::Register8::A),
+                Operand::RegisterIndirect(cpu::Register16::DE),
+            ) => 2,
+            Instruction::Ld(
+                Operand::RegisterIndirect(cpu::Register16::DE),
+                Operand::Register8(cpu::Register8::A),
+            ) => 2,
+            Instruction::Ld(
+                Operand::Register8(_),
+                Operand::RegisterIndirect(cpu::Register16::HL),
+            ) => 2,
+            Instruction::Ld(
+                Operand::RegisterIndirect(cpu::Register16::HL),
+                Operand::Register8(_),
+            ) => 2,
             Instruction::Ld(Operand::Register8(cpu::Register8::IXL), Operand::Immediate8(_)) => 3,
             Instruction::Ld(Operand::Register8(cpu::Register8::IXH), Operand::Immediate8(_)) => 3,
             Instruction::Ld(Operand::Register8(cpu::Register8::IYL), Operand::Immediate8(_)) => 3,
             Instruction::Ld(Operand::Register8(cpu::Register8::IYH), Operand::Immediate8(_)) => 3,
             Instruction::Ld(Operand::Register8(_), Operand::Immediate8(_)) => 2,
-            Instruction::Ld(Operand::RegisterIndirect(cpu::Register16::HL), Operand::Immediate8(_)) => 3,
+            Instruction::Ld(
+                Operand::RegisterIndirect(cpu::Register16::HL),
+                Operand::Immediate8(_),
+            ) => 3,
             Instruction::Ld(Operand::Register16(cpu::Register16::IX), Operand::Immediate16(_)) => 4,
             Instruction::Ld(Operand::Register16(cpu::Register16::IY), Operand::Immediate16(_)) => 4,
             Instruction::Ld(Operand::Register16(_), Operand::Immediate16(_)) => 3,
@@ -370,19 +447,31 @@ impl Instruction {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::LdDirect16(Operand::Register16(cpu::Register16::IX), Operand::Direct16(_)) => {
+            Instruction::LdDirect16(
+                Operand::Register16(cpu::Register16::IX),
+                Operand::Direct16(_),
+            ) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::LdDirect16(Operand::Direct16(_), Operand::Register16(cpu::Register16::IX)) => {
+            Instruction::LdDirect16(
+                Operand::Direct16(_),
+                Operand::Register16(cpu::Register16::IX),
+            ) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::LdDirect16(Operand::Register16(cpu::Register16::IY), Operand::Direct16(_)) => {
+            Instruction::LdDirect16(
+                Operand::Register16(cpu::Register16::IY),
+                Operand::Direct16(_),
+            ) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::LdDirect16(Operand::Direct16(_), Operand::Register16(cpu::Register16::IY)) => {
+            Instruction::LdDirect16(
+                Operand::Direct16(_),
+                Operand::Register16(cpu::Register16::IY),
+            ) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
@@ -417,8 +506,14 @@ impl Instruction {
                 unimplemented!()
             }
             Instruction::Out(Operand::Direct8(_), Operand::Register8(cpu::Register8::A)) => 3,
-            Instruction::Out(Operand::RegisterIndirect(cpu::Register16::BC), Operand::Register8(_)) => 4,
-            Instruction::Out(Operand::RegisterIndirect(cpu::Register16::BC), Operand::Immediate8(_)) => 4,
+            Instruction::Out(
+                Operand::RegisterIndirect(cpu::Register16::BC),
+                Operand::Register8(_),
+            ) => 4,
+            Instruction::Out(
+                Operand::RegisterIndirect(cpu::Register16::BC),
+                Operand::Immediate8(_),
+            ) => 4,
             Instruction::Out(_, _) => {
                 println!("No timing for {}", self);
                 unimplemented!()
@@ -498,19 +593,34 @@ impl Instruction {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::IXH)) => 2,
-            Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::IXL)) => {
+            Instruction::Sbc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::IXH),
+            ) => 2,
+            Instruction::Sbc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::IXL),
+            ) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
-            Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::IYH)) => 2,
-            Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::IYL)) => {
+            Instruction::Sbc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::IYH),
+            ) => 2,
+            Instruction::Sbc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::Register8(cpu::Register8::IYL),
+            ) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
             Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Register8(_)) => 1,
             Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Immediate8(_)) => 2,
-            Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
+            Instruction::Sbc(
+                Operand::Register8(cpu::Register8::A),
+                Operand::RegisterIndirect(cpu::Register16::HL),
+            ) => 2,
             Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Indexed(_, _)) => 5,
             Instruction::Sbc(Operand::Register16(cpu::Register16::HL), Operand::Register16(_)) => 4,
             Instruction::Sbc(_, _) => {
@@ -603,7 +713,7 @@ impl fmt::Display for Instruction {
             Instruction::Call(jump_test, target) => match jump_test {
                 JumpTest::Unconditional => write!(f, "call {}", target),
                 _ => write!(f, "call {},{}", jump_test, target),
-            }
+            },
             Instruction::Ccf => write!(f, "ccf"),
             Instruction::Cp(value) => write!(f, "cp {}", value),
             Instruction::Cpd => write!(f, "cpd"),
@@ -626,7 +736,7 @@ impl fmt::Display for Instruction {
                 InterruptMode::Mode0 => write!(f, "im 0"),
                 InterruptMode::Mode1 => write!(f, "im 1"),
                 InterruptMode::Mode2 => write!(f, "im 2"),
-            }
+            },
             Instruction::In(destination, port) => write!(f, "in {},{}", destination, port), // TODO: account for special case where (BC) is printed as (C)
             Instruction::Inc(destination) => write!(f, "inc {}", destination),
             Instruction::Ind => write!(f, "ind"),
@@ -636,13 +746,15 @@ impl fmt::Display for Instruction {
             Instruction::Jp(jump_test, target) => match jump_test {
                 JumpTest::Unconditional => write!(f, "jp {}", target),
                 _ => write!(f, "jp {},{}", jump_test, target),
-            }
+            },
             Instruction::Jr(jump_test, target) => match jump_test {
                 JumpTest::Unconditional => write!(f, "jr {}", target),
                 _ => write!(f, "jr {},{}", jump_test, target),
-            }
+            },
             Instruction::Ld(destination, source) => write!(f, "ld {},{}", destination, source),
-            Instruction::LdDirect16(destination, source) => write!(f, "ld {},{}", destination, source),
+            Instruction::LdDirect16(destination, source) => {
+                write!(f, "ld {},{}", destination, source)
+            }
             Instruction::Ldd => write!(f, "ldd"),
             Instruction::Lddr => write!(f, "lddr"),
             Instruction::Ldi => write!(f, "ldi"),
@@ -661,46 +773,47 @@ impl fmt::Display for Instruction {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "res {},{}", bit, operand),
                     _ => write!(f, "res {},{}->{}", bit, operand, destination),
-                }
+                },
                 _ => write!(f, "res {},{}", bit, operand),
-            }
+            },
             Instruction::Ret(jump_test) => match jump_test {
                 JumpTest::Unconditional => write!(f, "ret"),
                 _ => write!(f, "ret {}", jump_test),
-            }
+            },
             Instruction::Reti => write!(f, "reti"),
             Instruction::Retn => write!(f, "retn"),
             Instruction::Rl(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "rl {}", operand),
                     _ => write!(f, "rl {}->{}", operand, destination),
-                }
+                },
                 _ => write!(f, "rl {}", operand),
-            }
+            },
             Instruction::Rla => write!(f, "rla"),
-            Instruction::Rlc(destination, operand) => match operand { // TODO: extract this into reusable method. how to handle helpers in traits?
+            Instruction::Rlc(destination, operand) => match operand {
+                // TODO: extract this into reusable method. how to handle helpers in traits?
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "rlc {}", operand),
                     _ => write!(f, "rlc {}->{}", operand, destination),
-                }
+                },
                 _ => write!(f, "rlc {}", operand),
-            }
+            },
             Instruction::Rlca => write!(f, "rlca"),
             Instruction::Rld => write!(f, "rld"),
             Instruction::Rr(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "rr {}", operand),
                     _ => write!(f, "rr {}->{}", operand, destination),
-                }
+                },
                 _ => write!(f, "rr {}", operand),
-            }
+            },
             Instruction::Rrc(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "rrc {}", operand),
                     _ => write!(f, "rrc {}->{}", operand, destination),
-                }
+                },
                 _ => write!(f, "rrc {}", operand),
-            }
+            },
             Instruction::Rra => write!(f, "rra"),
             Instruction::Rrca => write!(f, "rrca"),
             Instruction::Rrd => write!(f, "rrd"),
@@ -711,37 +824,37 @@ impl fmt::Display for Instruction {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "set {},{}", bit, operand),
                     _ => write!(f, "set {},{}->{}", bit, operand, destination),
-                }
+                },
                 _ => write!(f, "set {},{}", bit, operand),
-            }
+            },
             Instruction::Sla(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "sla {}", operand),
                     _ => write!(f, "sla {}->{}", operand, destination),
-                }
+                },
                 _ => write!(f, "sla {}", operand),
-            }
+            },
             Instruction::Sll(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "sll {}", operand),
                     _ => write!(f, "sll {}->{}", operand, destination),
-                }
+                },
                 _ => write!(f, "sll {}", operand),
-            }
+            },
             Instruction::Sra(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "sra {}", operand),
                     _ => write!(f, "sra {}->{}", operand, destination),
-                }
+                },
                 _ => write!(f, "sra {}", operand),
-            }
+            },
             Instruction::Srl(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
                     Operand::Indexed(_, _) => write!(f, "srl {}", operand),
                     _ => write!(f, "srl {}->{}", operand, destination),
-                }
+                },
                 _ => write!(f, "srl {}", operand),
-            }
+            },
             Instruction::Sub(value) => write!(f, "sub {}", value),
             Instruction::Xor(value) => write!(f, "xor {}", value),
         }
@@ -773,13 +886,16 @@ pub struct Decoder<M> {
 }
 
 impl<M> Decoder<M>
-where M: Read { // based on http://z80.info/decoding.htm
+where
+    M: Read,
+{
+    // based on http://z80.info/decoding.htm
     pub fn new(memory: Rc<RefCell<M>>) -> Decoder<M> {
         Decoder {
             memory,
             next_address: 0,
             mode: DecoderMode::Default,
-            patched: false
+            patched: false,
         }
     }
 
@@ -792,8 +908,14 @@ where M: Read { // based on http://z80.info/decoding.htm
         match opcode {
             0xcb => (self.decode_cb_instruction(), self.next_address),
             0xed => (self.decode_ed_instruction(), self.next_address),
-            0xdd => (self.decode_prefixed(DecoderMode::PatchIX), self.next_address),
-            0xfd => (self.decode_prefixed(DecoderMode::PatchIY), self.next_address),
+            0xdd => (
+                self.decode_prefixed(DecoderMode::PatchIX),
+                self.next_address,
+            ),
+            0xfd => (
+                self.decode_prefixed(DecoderMode::PatchIY),
+                self.next_address,
+            ),
             _ => (self.decode_instruction(opcode), self.next_address),
         }
     }
@@ -1009,15 +1131,11 @@ where M: Read { // based on http://z80.info/decoding.htm
                     _ => unreachable!(),
                 }
             }
-            (1, _, 4) => {
-                Instruction::Neg
-            }
-            (1, _, 5) => {
-                match y {
-                    1 => Instruction::Reti,
-                    _ => Instruction::Retn,
-                }
-            }
+            (1, _, 4) => Instruction::Neg,
+            (1, _, 5) => match y {
+                1 => Instruction::Reti,
+                _ => Instruction::Retn,
+            },
             (1, _, 6) => {
                 let mode = match y {
                     0 => InterruptMode::Mode0,
@@ -1033,55 +1151,69 @@ where M: Read { // based on http://z80.info/decoding.htm
 
                 Instruction::Im(mode)
             }
-            (1, _, 7) => {
-                match y {
-                    0 => Instruction::Ld(Operand::Register8(cpu::Register8::I), Operand::Register8(cpu::Register8::A)),
-                    1 => Instruction::Ld(Operand::Register8(cpu::Register8::R), Operand::Register8(cpu::Register8::A)),
-                    2 => Instruction::Ld(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::I)),
-                    3 => Instruction::Ld(Operand::Register8(cpu::Register8::A), Operand::Register8(cpu::Register8::R)),
-                    4 => Instruction::Rrd,
-                    5 => Instruction::Rld,
-                    6 => Instruction::Nop,
-                    7 => Instruction::Nop,
-                    _ => unreachable!(),
-                }
-            }
-            (2, _, _) => {
-                match z {
-                    0 => match y {
-                        4 => Instruction::Ldi,
-                        5 => Instruction::Ldd,
-                        6 => Instruction::Ldir,
-                        7 => Instruction::Lddr,
-                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+            (1, _, 7) => match y {
+                0 => Instruction::Ld(
+                    Operand::Register8(cpu::Register8::I),
+                    Operand::Register8(cpu::Register8::A),
+                ),
+                1 => Instruction::Ld(
+                    Operand::Register8(cpu::Register8::R),
+                    Operand::Register8(cpu::Register8::A),
+                ),
+                2 => Instruction::Ld(
+                    Operand::Register8(cpu::Register8::A),
+                    Operand::Register8(cpu::Register8::I),
+                ),
+                3 => Instruction::Ld(
+                    Operand::Register8(cpu::Register8::A),
+                    Operand::Register8(cpu::Register8::R),
+                ),
+                4 => Instruction::Rrd,
+                5 => Instruction::Rld,
+                6 => Instruction::Nop,
+                7 => Instruction::Nop,
+                _ => unreachable!(),
+            },
+            (2, _, _) => match z {
+                0 => match y {
+                    4 => Instruction::Ldi,
+                    5 => Instruction::Ldd,
+                    6 => Instruction::Ldir,
+                    7 => Instruction::Lddr,
+                    _ => {
+                        Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
                     }
-                    1 => match y {
-                        4 => Instruction::Cpi,
-                        5 => Instruction::Cpd,
-                        6 => Instruction::Cpir,
-                        7 => Instruction::Cpdr,
-                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                },
+                1 => match y {
+                    4 => Instruction::Cpi,
+                    5 => Instruction::Cpd,
+                    6 => Instruction::Cpir,
+                    7 => Instruction::Cpdr,
+                    _ => {
+                        Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
                     }
-                    2 => match y {
-                        4 => Instruction::Ini,
-                        5 => Instruction::Ind,
-                        6 => Instruction::Inir,
-                        7 => Instruction::Indr,
-                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                },
+                2 => match y {
+                    4 => Instruction::Ini,
+                    5 => Instruction::Ind,
+                    6 => Instruction::Inir,
+                    7 => Instruction::Indr,
+                    _ => {
+                        Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
                     }
-                    3 => match y {
-                        4 => Instruction::Outi,
-                        5 => Instruction::Outd,
-                        6 => Instruction::Otir,
-                        7 => Instruction::Otdr,
-                        _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
+                },
+                3 => match y {
+                    4 => Instruction::Outi,
+                    5 => Instruction::Outd,
+                    6 => Instruction::Otir,
+                    7 => Instruction::Otdr,
+                    _ => {
+                        Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
                     }
-                    _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
-                }
-            }
-            _ => {
-                Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode])))
-            }
+                },
+                _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode]))),
+            },
+            _ => Instruction::Defw(Operand::Immediate16(u16::from_le_bytes([0xed, opcode]))),
         }
     }
 
@@ -1125,20 +1257,18 @@ where M: Read { // based on http://z80.info/decoding.htm
         let z = opcode & 7;
 
         match (x, y, z) {
-            (0, 0, 0) =>
-                Instruction::Nop,
-            (0, 1, 0) =>
-                Instruction::Ex(
-                    Operand::Register16(cpu::Register16::AF),
-                    // this instruction swaps AF and AF', but using AF below uniquely identifies the instruction
-                    Operand::Register16(cpu::Register16::AF),
-                ),
+            (0, 0, 0) => Instruction::Nop,
+            (0, 1, 0) => Instruction::Ex(
+                Operand::Register16(cpu::Register16::AF),
+                // this instruction swaps AF and AF', but using AF below uniquely identifies the instruction
+                Operand::Register16(cpu::Register16::AF),
+            ),
             (0, 2, 0) => {
                 let displacement = self.memory.borrow().read_byte(self.next_address) as i8;
                 self.next_address += 1;
-                Instruction::Djnz(
-                    Operand::Immediate16((self.next_address as u16).wrapping_add(displacement as u16))
-                )
+                Instruction::Djnz(Operand::Immediate16(
+                    (self.next_address as u16).wrapping_add(displacement as u16),
+                ))
             }
             (0, _, 0) => {
                 let jump_test = if y == 3 {
@@ -1150,7 +1280,9 @@ where M: Read { // based on http://z80.info/decoding.htm
                 self.next_address += 1;
                 Instruction::Jr(
                     jump_test,
-                    Operand::Immediate16((self.next_address as u16).wrapping_add(displacement as u16))
+                    Operand::Immediate16(
+                        (self.next_address as u16).wrapping_add(displacement as u16),
+                    ),
                 )
             }
             (0, _, 1) => {
@@ -1161,7 +1293,8 @@ where M: Read { // based on http://z80.info/decoding.htm
 
                 match q {
                     0 => {
-                        let value = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
+                        let value =
+                            Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
                         self.next_address += 2;
                         Instruction::Ld(register_pair, value)
                     }
@@ -1207,7 +1340,7 @@ where M: Read { // based on http://z80.info/decoding.htm
                             Operand::Register16(cpu::Register16::IY)
                         }
                         _ => Operand::Register16(cpu::Register16::HL),
-                    }
+                    },
                     _ => Operand::Register8(cpu::Register8::A),
                 };
 
@@ -1215,11 +1348,11 @@ where M: Read { // based on http://z80.info/decoding.htm
                     0 => match register {
                         Operand::Register8(cpu::Register8::A) => Instruction::Ld(address, register),
                         _ => Instruction::Ld(address, register),
-                    }
+                    },
                     1 => match register {
                         Operand::Register8(cpu::Register8::A) => Instruction::Ld(register, address),
                         _ => Instruction::Ld(register, address),
-                    }
+                    },
                     _ => unreachable!(),
                 }
             }
@@ -1230,12 +1363,8 @@ where M: Read { // based on http://z80.info/decoding.htm
                 let register_pair = self.decode_register_pair(p, false);
 
                 match q {
-                    0 => {
-                        Instruction::Inc(register_pair)
-                    }
-                    1 => {
-                        Instruction::Dec(register_pair)
-                    }
+                    0 => Instruction::Inc(register_pair),
+                    1 => Instruction::Dec(register_pair),
                     _ => unreachable!(),
                 }
             }
@@ -1255,23 +1384,18 @@ where M: Read { // based on http://z80.info/decoding.htm
 
                 Instruction::Ld(register, Operand::Immediate8(value))
             }
-            (0, _, 7) => {
-                match y {
-                    0 => Instruction::Rlca,
-                    1 => Instruction::Rrca,
-                    2 => Instruction::Rla,
-                    3 => Instruction::Rra,
-                    4 => Instruction::Daa,
-                    5 => Instruction::Cpl,
-                    6 => Instruction::Scf,
-                    7 => Instruction::Ccf,
-                    _ => unreachable!(),
-                }
-            
-            }
-            (1, 6, 6) => {
-                Instruction::Halt
-            }
+            (0, _, 7) => match y {
+                0 => Instruction::Rlca,
+                1 => Instruction::Rrca,
+                2 => Instruction::Rla,
+                3 => Instruction::Rra,
+                4 => Instruction::Daa,
+                5 => Instruction::Cpl,
+                6 => Instruction::Scf,
+                7 => Instruction::Ccf,
+                _ => unreachable!(),
+            },
+            (1, 6, 6) => Instruction::Halt,
             (1, 6, _) => {
                 let destination = self.decode_register(y);
 
@@ -1317,66 +1441,76 @@ where M: Read { // based on http://z80.info/decoding.htm
                     1 => match p {
                         0 => Instruction::Ret(JumpTest::Unconditional),
                         1 => Instruction::Exx,
-                        2 => Instruction::Jp(JumpTest::Unconditional, Operand::RegisterIndirect(cpu::Register16::HL)), // TODO: decode Jp (IX) as well
-                        3 => Instruction::Ld(Operand::Register16(cpu::Register16::SP), Operand::Register16(cpu::Register16::HL)),
+                        2 => Instruction::Jp(
+                            JumpTest::Unconditional,
+                            Operand::RegisterIndirect(cpu::Register16::HL),
+                        ), // TODO: decode Jp (IX) as well
+                        3 => Instruction::Ld(
+                            Operand::Register16(cpu::Register16::SP),
+                            Operand::Register16(cpu::Register16::HL),
+                        ),
                         _ => unreachable!(),
-                    }
+                    },
                     _ => unreachable!(),
                 }
             }
             (3, _, 2) => {
                 let jump_test = JumpTest::decode(y);
 
-                let target = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
+                let target =
+                    Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
                 self.next_address += 2;
 
                 Instruction::Jp(jump_test, target)
             }
-            (3, _, 3) => {
-                match y {
-                    0 => {
-                        let target = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
-                        self.next_address += 2;
+            (3, _, 3) => match y {
+                0 => {
+                    let target =
+                        Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
+                    self.next_address += 2;
 
-                        Instruction::Jp(JumpTest::Unconditional, target)
-                    }
-                    1 => unreachable!(),
-                    2 => {
-                        let port = Operand::Direct8(self.memory.borrow().read_byte(self.next_address));
-                        self.next_address += 1;
-
-                        Instruction::Out(port, Operand::Register8(cpu::Register8::A))
-                    }
-                    3 => {
-                        let port = Operand::Direct8(self.memory.borrow().read_byte(self.next_address));
-                        self.next_address += 1;
-
-                        Instruction::In(Operand::Register8(cpu::Register8::A), port)
-                    }
-                    4 => {
-                        let right = match self.mode {
-                            DecoderMode::PatchIX => {
-                                self.patched = true;
-                                Operand::Register16(cpu::Register16::IX)
-                            }
-                            DecoderMode::PatchIY => {
-                                self.patched = true;
-                                Operand::Register16(cpu::Register16::IY)
-                            }
-                            _ => Operand::Register16(cpu::Register16::HL),
-                        };
-                        Instruction::Ex(Operand::RegisterIndirect(cpu::Register16::SP), right)
-                    }
-                    5 => Instruction::Ex(Operand::Register16(cpu::Register16::DE), Operand::Register16(cpu::Register16::HL)),
-                    6 => Instruction::Di,
-                    7 => Instruction::Ei,
-                    _ => unreachable!(),
+                    Instruction::Jp(JumpTest::Unconditional, target)
                 }
-            }
+                1 => unreachable!(),
+                2 => {
+                    let port = Operand::Direct8(self.memory.borrow().read_byte(self.next_address));
+                    self.next_address += 1;
+
+                    Instruction::Out(port, Operand::Register8(cpu::Register8::A))
+                }
+                3 => {
+                    let port = Operand::Direct8(self.memory.borrow().read_byte(self.next_address));
+                    self.next_address += 1;
+
+                    Instruction::In(Operand::Register8(cpu::Register8::A), port)
+                }
+                4 => {
+                    let right = match self.mode {
+                        DecoderMode::PatchIX => {
+                            self.patched = true;
+                            Operand::Register16(cpu::Register16::IX)
+                        }
+                        DecoderMode::PatchIY => {
+                            self.patched = true;
+                            Operand::Register16(cpu::Register16::IY)
+                        }
+                        _ => Operand::Register16(cpu::Register16::HL),
+                    };
+                    Instruction::Ex(Operand::RegisterIndirect(cpu::Register16::SP), right)
+                }
+                5 => Instruction::Ex(
+                    Operand::Register16(cpu::Register16::DE),
+                    Operand::Register16(cpu::Register16::HL),
+                ),
+                6 => Instruction::Di,
+                7 => Instruction::Ei,
+                _ => unreachable!(),
+            },
             (3, _, 4) => {
                 let jump_test = JumpTest::decode(y);
 
-                let target = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
+                let target =
+                    Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
                 self.next_address += 2;
 
                 Instruction::Call(jump_test, target)
@@ -1390,13 +1524,17 @@ where M: Read { // based on http://z80.info/decoding.htm
                         let source = self.decode_register_pair(p, true);
                         Instruction::Push(source)
                     }
-                    1 => if p == 0 {
-                        let target = Operand::Immediate16(self.memory.borrow().read_word(self.next_address));
-                        self.next_address += 2;
+                    1 => {
+                        if p == 0 {
+                            let target = Operand::Immediate16(
+                                self.memory.borrow().read_word(self.next_address),
+                            );
+                            self.next_address += 2;
 
-                        Instruction::Call(JumpTest::Unconditional, target)
-                    } else {
-                        unreachable!()
+                            Instruction::Call(JumpTest::Unconditional, target)
+                        } else {
+                            unreachable!()
+                        }
                     }
                     _ => unreachable!(),
                 }
@@ -1407,9 +1545,7 @@ where M: Read { // based on http://z80.info/decoding.htm
 
                 self.decode_alu(y, value)
             }
-            (3, _, 7) => {
-                Instruction::Rst(Operand::Immediate8(y * 8))
-            }
+            (3, _, 7) => Instruction::Rst(Operand::Immediate8(y * 8)),
             _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
         }
     }
@@ -1458,7 +1594,7 @@ where M: Read { // based on http://z80.info/decoding.htm
                     Operand::Register8(cpu::Register8::IYH)
                 }
                 _ => Operand::Register8(cpu::Register8::H),
-            }
+            },
             5 => match self.mode {
                 DecoderMode::PatchIX => {
                     self.patched = true;
@@ -1469,7 +1605,7 @@ where M: Read { // based on http://z80.info/decoding.htm
                     Operand::Register8(cpu::Register8::IYL)
                 }
                 _ => Operand::Register8(cpu::Register8::L),
-            }
+            },
             6 => match self.mode {
                 DecoderMode::PatchIX => {
                     self.patched = true;
@@ -1484,7 +1620,7 @@ where M: Read { // based on http://z80.info/decoding.htm
                     Operand::Indexed(cpu::Register16::IY, displacement)
                 }
                 _ => Operand::RegisterIndirect(cpu::Register16::HL),
-            }
+            },
             7 => Operand::Register8(cpu::Register8::A),
             _ => unreachable!(),
         }
@@ -1504,11 +1640,13 @@ where M: Read { // based on http://z80.info/decoding.htm
                     Operand::Register16(cpu::Register16::IY)
                 }
                 _ => Operand::Register16(cpu::Register16::HL),
-            }
-            3 => if alternate {
-                Operand::Register16(cpu::Register16::AF)
-            } else {
-                Operand::Register16(cpu::Register16::SP)
+            },
+            3 => {
+                if alternate {
+                    Operand::Register16(cpu::Register16::AF)
+                } else {
+                    Operand::Register16(cpu::Register16::SP)
+                }
             }
             _ => unreachable!(),
         }
