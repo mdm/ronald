@@ -2,6 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::keyboard;
+use crate::psg;
+use crate::tape;
 
 pub type PeripheralInterfaceShared = Rc<RefCell<PeripheralInterface>>;
 
@@ -26,10 +28,16 @@ pub struct PeripheralInterface {
     mode_a_and_c_upper: Mode,
     mode_b_and_c_lower: Mode,
     keyboard: keyboard::KeyboardShared,
+    psg: psg::SoundGeneratorShared,
+    tape: tape::TapeControllerShared,
 }
 
 impl PeripheralInterface {
-    pub fn new_shared(keyboard: keyboard::KeyboardShared) -> PeripheralInterfaceShared {
+    pub fn new_shared(
+        keyboard: keyboard::KeyboardShared,
+        psg: psg::SoundGeneratorShared,
+        tape: tape::TapeControllerShared,
+    ) -> PeripheralInterfaceShared {
         let ppi = PeripheralInterface {
             direction_a: Direction::Input,
             direction_b: Direction::Input,
@@ -38,6 +46,8 @@ impl PeripheralInterface {
             mode_a_and_c_upper: Mode::Basic,
             mode_b_and_c_lower: Mode::Basic,
             keyboard,
+            psg,
+            tape,
         };
 
         Rc::new(RefCell::new(ppi))
@@ -54,7 +64,7 @@ impl PeripheralInterface {
         match function {
             0 => {
                 if self.direction_a == Direction::Output {
-                    self.psg.write_byte(value);
+                    self.psg.borrow_mut().write_byte(value);
                 }
             }
             1 => {}
@@ -66,9 +76,11 @@ impl PeripheralInterface {
                 }
 
                 if self.direction_c_upper == Direction::Output {
-                    self.psg.perform_function((value & 0xc0) >> 3);
-                    self.tape.write_bit((value >> 5) & 0x01);
-                    self.tape.switch_motor(value & 0x10 != 0);
+                    self.psg.borrow_mut().perform_function((value & 0xc0) >> 3);
+                    self.tape
+                        .borrow_mut()
+                        .write_sample((value >> 5) & 0x01 != 0);
+                    self.tape.borrow_mut().switch_motor(value & 0x10 != 0);
                 }
             }
             3 => {

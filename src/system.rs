@@ -6,7 +6,9 @@ use crate::gate_array;
 use crate::keyboard;
 use crate::memory;
 use crate::ppi;
+use crate::psg;
 use crate::screen;
+use crate::tape;
 use memory::{Read, Write};
 
 use std::cell::RefCell;
@@ -87,11 +89,13 @@ impl CPC464 {
         let memory = memory::Memory::new_shared();
         let crtc = crtc::CRTController::new_shared();
         let keyboard = keyboard::Keyboard::new_shared();
+        let psg = psg::SoundGenerator::new_shared();
+        let tape = tape::TapeController::new_shared();
         let bus = bus::StandardBus::new_shared(
             crtc.clone(),
             fdc::FloppyDiskController::new_shared(),
             gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
-            ppi::PeripheralInterface::new_shared(keyboard.clone()),
+            ppi::PeripheralInterface::new_shared(keyboard.clone(), psg.clone(), tape.clone()),
         );
 
         CPC464 {

@@ -8,8 +8,10 @@ mod instruction;
 mod keyboard;
 mod memory;
 mod ppi;
+mod psg;
 mod screen;
 mod system;
+mod tape;
 
 use clap::{App, Arg};
 
