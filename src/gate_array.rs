@@ -50,7 +50,7 @@ impl GateArray {
                 }
             }
             _ => {
-                println!("GA {:#06x} {:#10b}", port, value);
+                println!("GA {:#06x} {:#010b}", port, value);
                 unimplemented!();
             }
         }
