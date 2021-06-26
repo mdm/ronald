@@ -298,10 +298,7 @@ impl Instruction {
             Instruction::Defb(_) => 1,
             Instruction::Defw(_) => 2,
             Instruction::Di => 1,
-            Instruction::Djnz(_) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            Instruction::Djnz(_) => 3,
             Instruction::Ei => 1,
             Instruction::Ex(
                 Operand::Register16(cpu::Register16::AF),

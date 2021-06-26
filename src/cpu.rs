@@ -596,6 +596,7 @@ where
                         }
                     };
                     self.registers.write_word(&Register16::PC, *address);
+                    timing_in_nops = 4;
                 } else {
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
