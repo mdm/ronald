@@ -327,8 +327,8 @@ impl Instruction {
             Instruction::Exx => 1,
             Instruction::Halt => 1,
             Instruction::Im(_) => 2,
-            Instruction::In(Operand::Register8(cpu::Register8::A), _) => 3,
-            Instruction::In(Operand::Register8(_), _) => 4,
+            Instruction::In(_, Operand::RegisterIndirect(cpu::Register16::BC)) => 4,
+            Instruction::In(Operand::Register8(_), _) => 3,
             Instruction::In(_, _) => {
                 println!("No timing for {}", self);
                 unimplemented!()

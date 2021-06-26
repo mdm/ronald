@@ -625,6 +625,25 @@ where
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::In(Operand::Register8(Register8::A), Operand::Direct8(port_low)) => {
+                let port_high = self.registers.read_byte(&Register8::A);
+                let port = (port_high as u16) << 8 | (*port_low as u16);
+
+                let value = self.bus.borrow().read_byte(port);
+                self.registers.write_byte(&Register8::A, value);
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::In(Operand::Register8(destination), Operand::RegisterIndirect(Register16::BC)) => {
+                let port = self.registers.read_word(&Register16::BC);
+
+                let value = self.bus.borrow().read_byte(port);
+                self.registers.write_byte(destination, value);
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Inc(destination) => {
                 match destination {
                     Operand::Register16(register) => {
