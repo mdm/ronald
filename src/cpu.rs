@@ -680,6 +680,20 @@ where
                         .write_word(&Register16::PC, next_address as u16);
                 }
             }
+            Instruction::Jr(jump_test, target) => {
+                if self.check_jump(jump_test) {
+                    let address = match target {
+                        Operand::Immediate16(address) => address,
+                        _ => {
+                            unimplemented!();
+                        }
+                    };
+                    self.registers.write_word(&Register16::PC, *address);
+                } else {
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
+                }
+            }
             Instruction::Ld(destination, source) => {
                 match (&destination, &source) {
                     (Operand::Register16(_), _) => {
