@@ -364,6 +364,7 @@ impl Instruction {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
+            Instruction::Jr(JumpTest::Unconditional, _) => 3,
             Instruction::Jr(JumpTest::NonZero, _) => 3,
             Instruction::Jr(JumpTest::Zero, _) => 3,
             Instruction::Jr(JumpTest::NoCarry, _) => 3,

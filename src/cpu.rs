@@ -692,6 +692,7 @@ where
                 } else {
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
+                    timing_in_nops = 2;
                 }
             }
             Instruction::Ld(destination, source) => {
