@@ -16,7 +16,7 @@ impl TapeController {
         unimplemented!()
     }
 
-    pub fn read_sample(&self) -> u8 {
+    pub fn read_sample(&self) -> bool {
         unimplemented!()
     }
 

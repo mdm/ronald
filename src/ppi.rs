@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::crtc;
 use crate::keyboard;
 use crate::psg;
 use crate::tape;
@@ -27,6 +28,7 @@ pub struct PeripheralInterface {
     direction_c_upper: Direction,
     mode_a_and_c_upper: Mode,
     mode_b_and_c_lower: Mode,
+    crtc: crtc::CRTControllerShared,
     keyboard: keyboard::KeyboardShared,
     psg: psg::SoundGeneratorShared,
     tape: tape::TapeControllerShared,
@@ -34,6 +36,7 @@ pub struct PeripheralInterface {
 
 impl PeripheralInterface {
     pub fn new_shared(
+        crtc: crtc::CRTControllerShared,
         keyboard: keyboard::KeyboardShared,
         psg: psg::SoundGeneratorShared,
         tape: tape::TapeControllerShared,
@@ -45,6 +48,7 @@ impl PeripheralInterface {
             direction_c_upper: Direction::Input,
             mode_a_and_c_upper: Mode::Basic,
             mode_b_and_c_lower: Mode::Basic,
+            crtc,
             keyboard,
             psg,
             tape,
@@ -54,8 +58,37 @@ impl PeripheralInterface {
     }
 
     pub fn read_byte(&self, port: u16) -> u8 {
-        println!("PPI (read) {:#06x}", port);
-        unimplemented!()
+        let function = port & 0x03;
+
+        match function {
+            0 => {
+                if self.direction_a == Direction::Input {
+                    self.psg.borrow().read_byte()
+                } else {
+                    0
+                }
+            }
+            1 => {
+                if self.direction_b == Direction::Input {
+                    let mut value = 0x07 << 1 | 0x01 << 4; // distributor ID: Amstrad, 50 Hz monitor
+
+                    if self.crtc.borrow().read_vertical_sync() {
+                        value |= 0x01;
+                    }
+
+                    if self.tape.borrow().read_sample() {
+                        value |= 0x01 << 7;
+                    }
+
+                    value
+                } else {
+                    0
+                }
+            }
+            2 => 0,
+            3 => 0,
+            _ => unreachable!(),
+        }
     }
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
@@ -67,7 +100,7 @@ impl PeripheralInterface {
                     self.psg.borrow_mut().write_byte(value);
                 }
             }
-            1 => {}
+            1 => (),
             2 => {
                 if self.direction_c_lower == Direction::Output {
                     self.keyboard

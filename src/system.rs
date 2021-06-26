@@ -94,8 +94,8 @@ impl CPC464 {
         let bus = bus::StandardBus::new_shared(
             crtc.clone(),
             fdc::FloppyDiskController::new_shared(),
-            gate_array::GateArray::new_shared(memory.clone(), crtc),
-            ppi::PeripheralInterface::new_shared(keyboard.clone(), psg, tape),
+            gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
+            ppi::PeripheralInterface::new_shared(crtc, keyboard.clone(), psg, tape),
         );
 
         CPC464 {
