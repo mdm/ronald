@@ -158,26 +158,10 @@ impl RegisterFile {
 
     fn swap_word(&mut self, register: &Register16) {
         match register {
-            Register16::AF => {
-                let tmp = self.data[0];
-                self.data[0] = self.data[4];
-                self.data[4] = tmp;
-            }
-            Register16::BC => {
-                let tmp = self.data[1];
-                self.data[1] = self.data[5];
-                self.data[5] = tmp;
-            }
-            Register16::DE => {
-                let tmp = self.data[2];
-                self.data[2] = self.data[6];
-                self.data[6] = tmp;
-            }
-            Register16::HL => {
-                let tmp = self.data[3];
-                self.data[3] = self.data[7];
-                self.data[7] = tmp;
-            }
+            Register16::AF => self.data.swap(0, 4),
+            Register16::BC => self.data.swap(1, 5),
+            Register16::DE => self.data.swap(2, 6),
+            Register16::HL => self.data.swap(3, 7),
             _ => unreachable!(),
         }
     }
@@ -253,8 +237,8 @@ where
             decoder: Decoder::new(memory.clone()),
             enable_interrupt: false,
             irq_received: false,
-            memory: memory.clone(),
-            bus: bus.clone(),
+            memory: memory,
+            bus: bus,
         };
 
         cpu.reset();
@@ -277,11 +261,11 @@ where
 
         let mut timing_in_nops = instruction.timing();
 
-        match instruction {
+        match &instruction {
             Instruction::Adc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
-                        let left = self.load_byte(&destination);
+                        let left = self.load_byte(destination);
                         let right = self.load_byte(&source);
                         let carry_value = if self.check_flag(Flag::Carry) { 1 } else { 0 };
                         let (value, carry1) = right.overflowing_add(carry_value);
@@ -397,7 +381,7 @@ where
                     self.memory
                         .borrow_mut()
                         .write_word(new_sp as usize, next_address as u16);
-                    self.registers.write_word(&Register16::PC, address);
+                    self.registers.write_word(&Register16::PC, *address);
                 } else {
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
@@ -600,14 +584,22 @@ where
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::Djnz(_) => {
-                // TODO: don't forget to adjust timing
-                println!(
-                    "{:#06x}: {}",
-                    self.registers.read_word(&Register16::PC),
-                    &instruction
-                );
-                unimplemented!();
+            Instruction::Djnz(target) => {
+                let value = self.registers.read_byte(&Register8::B).wrapping_sub(1);
+                self.registers.write_byte(&Register8::B, value);
+
+                if value != 0 {
+                    let address = match target {
+                        Operand::Immediate16(address) => address,
+                        _ => {
+                            unimplemented!();
+                        }
+                    };
+                    self.registers.write_word(&Register16::PC, *address);
+                } else {
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
+                }
             }
             Instruction::Ei => {
                 self.enable_interrupt = true;
@@ -662,7 +654,7 @@ where
                             unimplemented!();
                         }
                     };
-                    self.registers.write_word(&Register16::PC, address);
+                    self.registers.write_word(&Register16::PC, *address);
                 } else {
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
@@ -828,7 +820,7 @@ where
             Instruction::Out(Operand::RegisterIndirect(port), Operand::Immediate8(value)) => {
                 // TODO: make this a special case of the other OUT instruction above
                 let address = self.registers.read_word(&port);
-                self.bus.borrow_mut().write_byte(address, value);
+                self.bus.borrow_mut().write_byte(address, *value);
 
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
@@ -1211,9 +1203,11 @@ where
         if self.irq_received && self.iff1 && !prevent_interrupt {
             // TODO: allow non-maskable interrupts (they are not used in the CPC)?
             println!("handle interrupt");
-            unimplemented!(); // TODO: handle interrupt
-
+            // TODO: handle interrupt - assume interrupt mode 1
+            
+            timing_in_nops += 4;
             interrupt_acknowledged = true;
+            unimplemented!();
         }
 
         (timing_in_nops, interrupt_acknowledged)
@@ -1241,7 +1235,7 @@ where
         self.registers.write_byte(&Register8::F, new_flags);
     }
 
-    fn check_jump(&self, jump_test: JumpTest) -> bool {
+    fn check_jump(&self, jump_test: &JumpTest) -> bool {
         match jump_test {
             JumpTest::Unconditional => true,
             JumpTest::NonZero => !self.check_flag(Flag::Zero),
@@ -1362,15 +1356,15 @@ where
             ix, iy, hl, de, bc, af, sp
         );
 
-        let s = self.check_flag(Flag::Sign);
-        let z = self.check_flag(Flag::Zero);
-        let h = self.check_flag(Flag::HalfCarry);
-        let pv = self.check_flag(Flag::ParityOverflow);
-        let n = self.check_flag(Flag::AddSubtract);
-        let c = self.check_flag(Flag::Carry);
+        let sign = self.check_flag(Flag::Sign);
+        let zero = self.check_flag(Flag::Zero);
+        let half_carry = self.check_flag(Flag::HalfCarry);
+        let parity_oveflow = self.check_flag(Flag::ParityOverflow);
+        let add_subtract = self.check_flag(Flag::AddSubtract);
+        let carry = self.check_flag(Flag::Carry);
         println!(
             "S = {}, Z = {}, H = {}, P/V = {}, N = {}, C = {}",
-            s, z, h, pv, n, c
+            sign, zero, half_carry, parity_oveflow, add_subtract, carry
         );
     }
 }

@@ -79,7 +79,7 @@ impl CRTController {
 
         let bits_14_and_15 = (refresh_memory_address & (0b11 << 12)) << 2;
         let bits_11_to_13 = ((self.scan_line_counter & 0b111) as u16) << 11;
-        let bits_0_to_10 = (refresh_memory_address & 0b11_11111111) << 1;
+        let bits_0_to_10 = (refresh_memory_address & 0b11_1111_1111) << 1;
 
         (bits_14_and_15 | bits_11_to_13 | bits_0_to_10) as usize
     }
