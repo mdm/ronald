@@ -29,8 +29,8 @@ impl ZexHarness {
         let bus_shared = Rc::new(RefCell::new(bus::DummyBus::new()));
 
         ZexHarness {
-            cpu: cpu::CPU::new(memory_shared.clone(), bus_shared.clone(), 0x100),
-            memory: memory_shared.clone(),
+            cpu: cpu::CPU::new(memory_shared.clone(), bus_shared, 0x100),
+            memory: memory_shared,
         }
     }
 
@@ -94,15 +94,15 @@ impl CPC464 {
         let bus = bus::StandardBus::new_shared(
             crtc.clone(),
             fdc::FloppyDiskController::new_shared(),
-            gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
-            ppi::PeripheralInterface::new_shared(keyboard.clone(), psg.clone(), tape.clone()),
+            gate_array::GateArray::new_shared(memory.clone(), crtc),
+            ppi::PeripheralInterface::new_shared(keyboard.clone(), psg, tape),
         );
 
         CPC464 {
-            cpu: cpu::CPU::new(memory.clone(), bus.clone(), 0),
-            bus: bus.clone(),
+            cpu: cpu::CPU::new(memory, bus.clone(), 0),
+            bus,
             screen: screen::Screen::new(),
-            keyboard: keyboard.clone(),
+            keyboard,
         }
     }
 }

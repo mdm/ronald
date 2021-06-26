@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables)]
+
 mod bus;
 mod cpu;
 mod crtc;

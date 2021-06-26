@@ -36,7 +36,7 @@ impl ROM {
         // TODO: better error handling
         // TODO: check ROM size (should be 16k)
         ROM {
-            data: std::fs::read(path).expect(&format!("ROM file \"{}\" could not be read.", path)),
+            data: std::fs::read(path).unwrap_or_else(|_| panic!("ROM file \"{}\" could not be read.", path)),
         }
     }
 }
@@ -62,7 +62,7 @@ impl RAM {
         // TODO: better error handling
         // TODO: check if ROM fits
         let mut ram = RAM::new(size);
-        let rom = read(path).expect(&format!("ROM file \"{}\" could not be read.", path));
+        let rom = read(path).unwrap_or_else(|_| panic!("ROM file \"{}\" could not be read.", path));
 
         for (i, byte) in rom.into_iter().enumerate() {
             ram.write_byte(offset + i, byte);

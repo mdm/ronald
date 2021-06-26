@@ -866,7 +866,7 @@ enum DecoderMode {
 }
 
 impl DecoderMode {
-    fn into_instruction(&self) -> Instruction {
+    fn as_instruction(&self) -> Instruction {
         match self {
             DecoderMode::PatchIX => Instruction::Defb(Operand::Immediate8(0xdd)),
             DecoderMode::PatchIY => Instruction::Defb(Operand::Immediate8(0xfd)),
@@ -1224,9 +1224,9 @@ where
                 self.next_address += 1;
                 self.decode_cb_instruction()
             }
-            0xed => self.mode.into_instruction(),
-            0xdd => self.mode.into_instruction(),
-            0xfd => self.mode.into_instruction(),
+            0xed => self.mode.as_instruction(),
+            0xdd => self.mode.as_instruction(),
+            0xfd => self.mode.as_instruction(),
             _ => {
                 self.patched = false;
 
@@ -1238,7 +1238,7 @@ where
                     instruction
                 } else {
                     self.next_address = start;
-                    self.mode.into_instruction()
+                    self.mode.as_instruction()
                 }
             }
         };

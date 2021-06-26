@@ -1,6 +1,7 @@
 pub const BUFFER_WIDTH: usize = 64 * 16;
 pub const BUFFER_HEIGHT: usize = 39 * 16;
 
+#[allow(clippy::identity_op, clippy::eq_op)]
 const COLORS: [u32; 32] = [
     0x00 << 16 | 0x00 << 8 | 0x00, // 0
     0x00 << 16 | 0x00 << 8 | 0x80, // 1

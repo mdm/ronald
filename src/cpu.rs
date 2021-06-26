@@ -237,8 +237,8 @@ where
             decoder: Decoder::new(memory.clone()),
             enable_interrupt: false,
             irq_received: false,
-            memory: memory,
-            bus: bus,
+            memory,
+            bus,
         };
 
         cpu.reset();
@@ -776,8 +776,8 @@ where
             }
             Instruction::Neg => {
                 let right = self.registers.read_byte(&Register8::A);
-                let (value, carry) = (0 as u8).overflowing_sub(right);
-                let (_, overflow) = (0 as i8).overflowing_sub(right as i8);
+                let (value, carry) = (0_u8).overflowing_sub(right);
+                let (_, overflow) = (0_i8).overflowing_sub(right as i8);
                 self.registers.write_byte(&Register8::A, value);
 
                 self.set_flag(Flag::Sign, (value as i8) < 0); // TODO: make this reusable?

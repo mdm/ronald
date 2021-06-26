@@ -46,7 +46,7 @@ impl GUI {
         let keyboard = self.system.get_keyboard();
         keyboard.borrow_mut().reset_all();
 
-        self.window.get_keys().map(|keys| {
+        if let Some(keys) = self.window.get_keys() {
             for key in keys {
                 match key {
                     minifb::Key::Up => keyboard.borrow_mut().set_key(0, 0),
@@ -133,6 +133,6 @@ impl GUI {
                     _ => {}
                 }
             }
-        });
+        }
     }
 }
