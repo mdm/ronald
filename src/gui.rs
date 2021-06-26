@@ -23,10 +23,13 @@ impl GUI {
 
     pub fn run(&mut self) {
         while self.window.is_open() && !self.should_quit() {
-            self.update_keys();
 
-            self.system.emulate(None);
-
+            let mut elapsed_microseconds: u32 = 0;
+            while elapsed_microseconds < 20_000 {
+                self.update_keys();
+                elapsed_microseconds += self.system.emulate() as u32;
+            }
+            
             self.window
                 .update_with_buffer(
                     self.system.get_frame_buffer(),

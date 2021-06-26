@@ -71,7 +71,7 @@ impl ZexHarness {
 }
 
 pub trait System {
-    fn emulate(&mut self, time_limit: Option<u64>);
+    fn emulate(&mut self) -> u8;
     fn get_frame_buffer(&self) -> &Vec<u32>;
     fn get_keyboard(&self) -> Rc<RefCell<keyboard::Keyboard>>;
 }
@@ -108,7 +108,7 @@ impl CPC464 {
 }
 
 impl System for CPC464 {
-    fn emulate(&mut self, time_limit: Option<u64>) {
+    fn emulate(&mut self) -> u8 {
         let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute();
 
         for _ in 0..cycles {
@@ -123,6 +123,8 @@ impl System for CPC464 {
             // What about external hardware triggering (non-maskable) interrupts?
             self.bus.borrow_mut().acknowledge_interrupt();
         }
+
+        cycles
     }
 
     fn get_frame_buffer(&self) -> &Vec<u32> {

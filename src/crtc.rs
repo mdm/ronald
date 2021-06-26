@@ -55,8 +55,13 @@ impl CRTController {
     }
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
-        dbg!(port, value);
-        unimplemented!()
+        let function = (port >> 8) & 0x03;
+
+        match function {
+            0 => self.select_register(value as usize),
+            1 => self.write_register(value),
+            _ => (),
+        }
     }
 
     fn select_register(&mut self, register: usize) {
@@ -90,6 +95,7 @@ impl CRTController {
     }
 
     pub fn read_horizontal_sync(&self) -> bool {
+        // TODO: what happens before registers are initialized?
         let sync_start = self.registers[Register::HorizontalSyncPosition as usize];
         let sync_end = self.registers[Register::HorizontalSyncPosition as usize]
             + (self.registers[Register::HorizontalAndVerticalSyncWidths as usize] & 0b1111);
@@ -98,6 +104,7 @@ impl CRTController {
     }
 
     pub fn read_vertical_sync(&self) -> bool {
+        // TODO: what happens before registers are initialized?
         let sync_start = self.registers[Register::VerticalSyncPosition as usize];
         let sync_end = self.registers[Register::VerticalSyncPosition as usize] + 16; // this can be switched between 0 and 16 on type 0
         self.character_row_counter >= sync_start && self.character_row_counter < sync_end

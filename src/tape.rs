@@ -13,14 +13,14 @@ impl TapeController {
     }
 
     pub fn switch_motor(&mut self, on: bool) {
-        unimplemented!()
+        () // TODO: implement this
     }
 
     pub fn read_sample(&self) -> bool {
-        unimplemented!()
+        false // TODO: implement this
     }
 
     pub fn write_sample(&mut self, high_amplitude: bool) {
-        unimplemented!()
+        () // TODO: implement this
     }
 }

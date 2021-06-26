@@ -58,7 +58,7 @@ impl PeripheralInterface {
     }
 
     pub fn read_byte(&self, port: u16) -> u8 {
-        let function = port & 0x03;
+        let function = (port >> 8) & 0x03;
 
         match function {
             0 => {
@@ -92,7 +92,7 @@ impl PeripheralInterface {
     }
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
-        let function = port & 0x03;
+        let function = (port >> 8) & 0x03;
 
         match function {
             0 => {
