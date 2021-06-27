@@ -32,10 +32,8 @@ TODO
 Next Steps
 ----------
 
-* Implement PPI
 * Implement debugger
   * Basic break points
   * Step/run command
   * State inspection commands
 * Add screen output to gate array
-* Tie emulation speed to frame rate
