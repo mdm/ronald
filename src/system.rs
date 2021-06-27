@@ -115,6 +115,7 @@ impl System for CPC464 {
             let interrupt = self.bus.borrow_mut().step();
             if interrupt {
                 // TODO: generate interrupt
+                unimplemented!();
             }
         }
 

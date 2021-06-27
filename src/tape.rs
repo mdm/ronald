@@ -13,7 +13,7 @@ impl TapeController {
     }
 
     pub fn switch_motor(&mut self, on: bool) {
-        () // TODO: implement this
+        // TODO: implement this
     }
 
     pub fn read_sample(&self) -> bool {
@@ -21,6 +21,6 @@ impl TapeController {
     }
 
     pub fn write_sample(&mut self, high_amplitude: bool) {
-        () // TODO: implement this
+        // TODO: implement this
     }
 }

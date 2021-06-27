@@ -25,7 +25,7 @@ impl GUI {
         while self.window.is_open() && !self.should_quit() {
 
             let mut elapsed_microseconds: u32 = 0;
-            while elapsed_microseconds < 20_000 {
+            while elapsed_microseconds < 20_000 { // TODO: tie this to vsync instead of fixed value
                 self.update_keys();
                 elapsed_microseconds += self.system.emulate() as u32;
             }

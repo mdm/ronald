@@ -208,12 +208,19 @@ impl Flag {
     }
 }
 
+enum InterruptMode {
+    Mode0,
+    Mode1,
+    Mode2,
+}
+
 pub struct CPU<M, B> {
     pub registers: RegisterFile,
     pub iff1: bool,
     pub iff2: bool,
     pub halted: bool,
     decoder: Decoder<M>,
+    interrupt_mode: InterruptMode,
     enable_interrupt: bool,
     irq_received: bool,
     memory: Rc<RefCell<M>>,
@@ -235,6 +242,7 @@ where
             iff2: false,
             halted: false,
             decoder: Decoder::new(memory.clone()),
+            interrupt_mode: InterruptMode::Mode0,
             enable_interrupt: false,
             irq_received: false,
             memory,
@@ -1234,18 +1242,34 @@ where
             }
         }
 
-        let mut interrupt_acknowledged = false;
         if self.irq_received && self.iff1 && !prevent_interrupt {
             // TODO: allow non-maskable interrupts (they are not used in the CPC)?
             println!("handle interrupt");
-            // TODO: handle interrupt - assume interrupt mode 1
-            
-            timing_in_nops += 4;
-            interrupt_acknowledged = true;
-            unimplemented!();
-        }
+            self.irq_received = false; // TODO: make requester hold interrupt until acknowledged?
 
-        (timing_in_nops, interrupt_acknowledged)
+            match self.interrupt_mode {
+                InterruptMode::Mode1 => {
+                    let old_pc = self.registers.read_word(&Register16::PC);
+                    let new_sp = self.registers.read_word(&Register16::SP) - 2;
+                    self.registers.write_word(&Register16::SP, new_sp);
+                    self.memory
+                        .borrow_mut()
+                        .write_word(new_sp as usize, old_pc);
+                    self.registers.write_word(&Register16::PC, 0x0038);
+
+                    timing_in_nops += 4; // + Instruction::Rst(_).timing()
+                }
+                _ => unimplemented!(),
+            }
+            
+            (timing_in_nops, true)
+        } else {
+            (timing_in_nops, false)
+        }
+    }
+
+    pub fn request_interrupt(&mut self) {
+        self.irq_received = true;
     }
 
     fn reset(&mut self) {
