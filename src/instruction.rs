@@ -207,10 +207,7 @@ impl Instruction {
             Instruction::Adc(
                 Operand::Register8(cpu::Register8::A),
                 Operand::Register8(cpu::Register8::IXL),
-            ) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            ) => 2,
             Instruction::Adc(
                 Operand::Register8(cpu::Register8::A),
                 Operand::Register8(cpu::Register8::IYH),
@@ -218,10 +215,7 @@ impl Instruction {
             Instruction::Adc(
                 Operand::Register8(cpu::Register8::A),
                 Operand::Register8(cpu::Register8::IYL),
-            ) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            ) => 2,
             Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Register8(_)) => 1,
             Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Immediate8(_)) => 2,
             Instruction::Adc(
@@ -242,10 +236,16 @@ impl Instruction {
             ) => 2,
             Instruction::Add(Operand::Register8(cpu::Register8::A), Operand::Indexed(_, _)) => 5,
             Instruction::Add(Operand::Register16(cpu::Register16::HL), Operand::Register16(_)) => 3,
+            Instruction::Add(Operand::Register16(cpu::Register16::IX), Operand::Register16(_)) => 4,
+            Instruction::Add(Operand::Register16(cpu::Register16::IY), Operand::Register16(_)) => 4,
             Instruction::Add(_, _) => {
                 println!("No timing for {}", self);
                 unimplemented!()
             }
+            Instruction::And(Operand::Register8(cpu::Register8::IXH)) => 2,
+            Instruction::And(Operand::Register8(cpu::Register8::IXL)) => 2,
+            Instruction::And(Operand::Register8(cpu::Register8::IYH)) => 2,
+            Instruction::And(Operand::Register8(cpu::Register8::IYL)) => 2,
             Instruction::And(Operand::Register8(_)) => 1,
             Instruction::And(Operand::Immediate8(_)) => 2,
             Instruction::And(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
@@ -438,9 +438,14 @@ impl Instruction {
             Instruction::Ld(Operand::Direct16(_), Operand::Register8(cpu::Register8::A)) => 4,
             Instruction::Ld(Operand::Register16(cpu::Register16::HL), Operand::Direct16(_)) => 5,
             Instruction::Ld(Operand::Direct16(_), Operand::Register16(cpu::Register16::HL)) => 5,
+            Instruction::Ld(Operand::Register16(cpu::Register16::IX), Operand::Direct16(_)) => 5,
+            Instruction::Ld(Operand::Direct16(_), Operand::Register16(cpu::Register16::IX)) => 5,
+            Instruction::Ld(Operand::Register16(cpu::Register16::IY), Operand::Direct16(_)) => 5,
+            Instruction::Ld(Operand::Direct16(_), Operand::Register16(cpu::Register16::IY)) => 5,
             Instruction::Ld(Operand::Register8(_), Operand::Indexed(_, _)) => 5,
             Instruction::Ld(Operand::Indexed(_, _), Operand::Register8(_)) => 5,
             Instruction::Ld(Operand::Indexed(_, _), Operand::Immediate8(_)) => 6,
+            Instruction::Ld(Operand::Register16(cpu::Register16::SP), Operand::Register16(cpu::Register16::HL)) => 2,
             Instruction::Ld(_, _) => {
                 println!("No timing for {}", self);
                 unimplemented!()
@@ -448,31 +453,19 @@ impl Instruction {
             Instruction::LdDirect16(
                 Operand::Register16(cpu::Register16::IX),
                 Operand::Direct16(_),
-            ) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            ) => 6,
             Instruction::LdDirect16(
                 Operand::Direct16(_),
                 Operand::Register16(cpu::Register16::IX),
-            ) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            ) => 6,
             Instruction::LdDirect16(
                 Operand::Register16(cpu::Register16::IY),
                 Operand::Direct16(_),
-            ) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            ) => 6,
             Instruction::LdDirect16(
                 Operand::Direct16(_),
                 Operand::Register16(cpu::Register16::IY),
-            ) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            ) => 6,
             Instruction::LdDirect16(Operand::Register16(_), Operand::Direct16(_)) => 6,
             Instruction::LdDirect16(Operand::Direct16(_), Operand::Register16(_)) => 6,
             Instruction::LdDirect16(_, _) => {
@@ -486,15 +479,9 @@ impl Instruction {
             Instruction::Neg => 2,
             Instruction::Nop => 4,
             Instruction::Or(Operand::Register8(cpu::Register8::IXH)) => 2,
-            Instruction::Or(Operand::Register8(cpu::Register8::IXL)) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            Instruction::Or(Operand::Register8(cpu::Register8::IXL)) => 2,
             Instruction::Or(Operand::Register8(cpu::Register8::IYH)) => 2,
-            Instruction::Or(Operand::Register8(cpu::Register8::IYL)) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            Instruction::Or(Operand::Register8(cpu::Register8::IYL)) => 2,
             Instruction::Or(Operand::Register8(_)) => 1,
             Instruction::Or(Operand::Immediate8(_)) => 2,
             Instruction::Or(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
@@ -598,10 +585,7 @@ impl Instruction {
             Instruction::Sbc(
                 Operand::Register8(cpu::Register8::A),
                 Operand::Register8(cpu::Register8::IXL),
-            ) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            ) => 2,
             Instruction::Sbc(
                 Operand::Register8(cpu::Register8::A),
                 Operand::Register8(cpu::Register8::IYH),
@@ -609,10 +593,7 @@ impl Instruction {
             Instruction::Sbc(
                 Operand::Register8(cpu::Register8::A),
                 Operand::Register8(cpu::Register8::IYL),
-            ) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            ) => 2,
             Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Register8(_)) => 1,
             Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Immediate8(_)) => 2,
             Instruction::Sbc(
@@ -662,15 +643,9 @@ impl Instruction {
                 unimplemented!()
             }
             Instruction::Sub(Operand::Register8(cpu::Register8::IXH)) => 2,
-            Instruction::Sub(Operand::Register8(cpu::Register8::IXL)) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            Instruction::Sub(Operand::Register8(cpu::Register8::IXL)) => 2,
             Instruction::Sub(Operand::Register8(cpu::Register8::IYH)) => 2,
-            Instruction::Sub(Operand::Register8(cpu::Register8::IYL)) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            Instruction::Sub(Operand::Register8(cpu::Register8::IYL)) => 2,
             Instruction::Sub(Operand::Register8(_)) => 1,
             Instruction::Sub(Operand::Immediate8(_)) => 2,
             Instruction::Sub(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
@@ -680,15 +655,9 @@ impl Instruction {
                 unimplemented!()
             }
             Instruction::Xor(Operand::Register8(cpu::Register8::IXH)) => 2,
-            Instruction::Xor(Operand::Register8(cpu::Register8::IXL)) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            Instruction::Xor(Operand::Register8(cpu::Register8::IXL)) => 2,
             Instruction::Xor(Operand::Register8(cpu::Register8::IYH)) => 2,
-            Instruction::Xor(Operand::Register8(cpu::Register8::IYL)) => {
-                println!("No timing for {}", self);
-                unimplemented!()
-            }
+            Instruction::Xor(Operand::Register8(cpu::Register8::IYL)) => 2,
             Instruction::Xor(Operand::Register8(_)) => 1,
             Instruction::Xor(Operand::Immediate8(_)) => 2,
             Instruction::Xor(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
@@ -1124,7 +1093,7 @@ where
                 let register = self.decode_register_pair(opcode_p, false);
 
                 match opcode_q {
-                    0 => Instruction::LdDirect16(address, register),
+                    0 => Instruction::LdDirect16(address, register), // TODO: does this include LD IX,(nnnn)?
                     1 => Instruction::LdDirect16(register, address),
                     _ => unreachable!(),
                 }
