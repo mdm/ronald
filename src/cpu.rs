@@ -3,7 +3,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use crate::bus;
-use crate::instruction::{Decoder, Instruction, JumpTest, Operand};
+use crate::instruction::{Decoder, Instruction, JumpTest, Operand, InterruptMode};
 use crate::memory;
 
 pub enum Register8 {
@@ -206,12 +206,6 @@ impl Flag {
             Flag::Sign => 1 << 7,
         }
     }
-}
-
-enum InterruptMode {
-    Mode0,
-    Mode1,
-    Mode2,
 }
 
 pub struct CPU<M, B> {
@@ -633,6 +627,20 @@ where
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Exx => {
+                self.registers.swap_word(&Register16::BC);
+                self.registers.swap_word(&Register16::DE);
+                self.registers.swap_word(&Register16::HL);
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Im(mode) => {
+                self.interrupt_mode = *mode;
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::In(Operand::Register8(Register8::A), Operand::Direct8(port_low)) => {
                 let port_high = self.registers.read_byte(&Register8::A);
                 let port = (port_high as u16) << 8 | (*port_low as u16);
@@ -677,13 +685,9 @@ where
             }
             Instruction::Jp(jump_test, target) => {
                 if self.check_jump(jump_test) {
-                    let address = match target {
-                        Operand::Immediate16(address) => address,
-                        _ => {
-                            unimplemented!();
-                        }
-                    };
-                    self.registers.write_word(&Register16::PC, *address);
+                    let address = self.load_word(target);
+
+                    self.registers.write_word(&Register16::PC, address);
                 } else {
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
@@ -1067,6 +1071,17 @@ where
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Rst(target) => {
+                let old_pc = self.registers.read_word(&Register16::PC);
+                let new_sp = self.registers.read_word(&Register16::SP) - 2;
+                self.registers.write_word(&Register16::SP, new_sp);
+                self.memory
+                    .borrow_mut()
+                    .write_word(new_sp as usize, old_pc);
+                let address_lower = self.load_byte(target);
+                
+                self.registers.write_word(&Register16::PC, address_lower as u16);
+            }
             Instruction::Sbc(destination, source) => {
                 match destination {
                     Operand::Register8(Register8::A) => {
@@ -1245,17 +1260,18 @@ where
 
         if self.irq_received && self.iff1 && !prevent_interrupt {
             // TODO: allow non-maskable interrupts (they are not used in the CPC)?
-            println!("handle interrupt");
             self.irq_received = false; // TODO: make requester hold interrupt until acknowledged?
 
             match self.interrupt_mode {
                 InterruptMode::Mode1 => {
+                    // println!("handle interrupt");
                     let old_pc = self.registers.read_word(&Register16::PC);
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
                     self.memory
                         .borrow_mut()
                         .write_word(new_sp as usize, old_pc);
+                    
                     self.registers.write_word(&Register16::PC, 0x0038);
 
                     timing_in_nops += 4; // + Instruction::Rst(_).timing()

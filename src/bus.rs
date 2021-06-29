@@ -1,6 +1,7 @@
 use crate::crtc;
 use crate::fdc;
 use crate::gate_array;
+use crate::memory;
 use crate::ppi;
 
 use std::cell::RefCell;
@@ -35,6 +36,7 @@ pub struct StandardBus {
     crtc: crtc::CRTControllerShared,
     fdc: fdc::FloppyDiskControllerShared,
     gate_array: gate_array::GateArrayShared,
+    memory: memory::MemoryShared,
     ppi: ppi::PeripheralInterfaceShared,
 }
 
@@ -43,12 +45,14 @@ impl StandardBus {
         crtc: crtc::CRTControllerShared,
         fdc: fdc::FloppyDiskControllerShared,
         gate_array: gate_array::GateArrayShared,
+        memory: memory::MemoryShared,
         ppi: ppi::PeripheralInterfaceShared,
     ) -> StandardBusShared {
         let bus = StandardBus {
             crtc,
             fdc,
             gate_array,
+            memory,
             ppi,
         };
 
@@ -67,7 +71,6 @@ impl StandardBus {
 
 impl Bus for StandardBus {
     fn read_byte(&self, port: u16) -> u8 {
-        // TODO: map read to devices
         match port {
             _ if port & 0x4000 == 0 => self.crtc.borrow().read_byte(port),
             _ if port & 0x0800 == 0 => self.ppi.borrow().read_byte(port),
@@ -77,15 +80,17 @@ impl Bus for StandardBus {
     }
 
     fn write_byte(&mut self, port: u16, value: u8) {
-        // TODO: map write to devices
+        // TODO: do we need "value" or is it always the lower half of "port"?
         match port {
-            _ if port & 0x4000 == 0 => self.crtc.borrow_mut().write_byte(port, value),
             _ if port & 0x8000 == 0 && port & 0x4000 != 0 => {
                 self.gate_array.borrow_mut().write_byte(port, value)
             }
+            _ if port & 0x4000 == 0 => self.crtc.borrow_mut().write_byte(port, value),
+            _ if port & 0xdf00 == 0xdf00 => self.memory.borrow_mut().select_upper_rom(value),
+            _ if port & 0xef00 == 0xef00 => (), // printer port (unsupported)
             _ if port & 0x0800 == 0 => self.ppi.borrow_mut().write_byte(port, value),
             0xfa7e | 0xfb7f => self.fdc.borrow_mut().write_byte(port, value),
-            _ if port & 0xef00 == 0xef00 => (), // printer port (unsupported)
+            0xf8ff => (), // peripheral soft reset (ignored)
             _ => {
                 println!("BUS {:#06x} {:#010b}", port, value);
                 unimplemented!();

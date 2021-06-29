@@ -109,7 +109,7 @@ impl PeripheralInterface {
                 }
 
                 if self.direction_c_upper == Direction::Output {
-                    self.psg.borrow_mut().perform_function((value & 0xc0) >> 3);
+                    self.psg.borrow_mut().perform_function((value >> 6) & 0x03);
                     self.tape
                         .borrow_mut()
                         .write_sample((value >> 5) & 0x01 != 0);

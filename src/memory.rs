@@ -124,6 +124,10 @@ impl Memory {
     pub fn enable_upper_rom(&mut self, enable: bool) {
         self.upper_rom_enabled = enable;
     }
+
+    pub fn select_upper_rom(&mut self, upper_rom_nr: u8) {
+        self.selected_upper_rom = upper_rom_nr;
+    }
 }
 
 impl Read for Memory {

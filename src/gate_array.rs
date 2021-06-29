@@ -15,6 +15,8 @@ pub struct GateArray {
     vsync_active: bool,
     hsyncs_since_last_vsync: u8,
     interrupt_counter: u8,
+    selected_pen: usize,
+    pen_colors: Vec<u8>,
 }
 
 impl GateArray {
@@ -31,6 +33,8 @@ impl GateArray {
             vsync_active: false,
             hsyncs_since_last_vsync: 0,
             interrupt_counter: 0,
+            selected_pen: 0,
+            pen_colors: vec![0; 17],
         };
 
         Rc::new(RefCell::new(gate_array))
@@ -38,8 +42,20 @@ impl GateArray {
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
         // TODO: remove port parameter?
-        match value {
-            _ if value & 0x80 != 0 && value & 0x40 == 0 => {
+        let function = (value >> 6) & 0x03;
+
+        match function {
+            0 => {
+                if value & 0x10 == 0 {
+                    self.selected_pen = value as usize & 0x0f; // TODO: what if pen number exceeds max. number of pens for mode?
+                } else {
+                    self.selected_pen = 0x10; // select border
+                }
+            }
+            1 => {
+                self.pen_colors[self.selected_pen] = value & 0x1f;
+            }
+            2 => {
                 self.requested_screen_mode = value & 0x03;
 
                 self.memory.borrow_mut().enable_lower_rom(value & 0x04 == 0);
@@ -49,9 +65,13 @@ impl GateArray {
                     self.interrupt_counter = 0;
                 }
             }
-            _ => {
+            3 => {
+                // ROM banking (only available in CPC 6128)
                 println!("GA {:#06x} {:#010b}", port, value);
                 unimplemented!();
+            }
+            _ => {
+                unreachable!();
             }
         }
     }

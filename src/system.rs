@@ -95,6 +95,7 @@ impl CPC464 {
             crtc.clone(),
             fdc::FloppyDiskController::new_shared(),
             gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
+            memory.clone(),
             ppi::PeripheralInterface::new_shared(crtc, keyboard.clone(), psg, tape),
         );
 
@@ -114,8 +115,7 @@ impl System for CPC464 {
         for _ in 0..cycles {
             let interrupt = self.bus.borrow_mut().step();
             if interrupt {
-                // TODO: generate interrupt
-                unimplemented!();
+                self.cpu.request_interrupt();
             }
         }
 

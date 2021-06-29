@@ -32,6 +32,7 @@ TODO
 Next Steps
 ----------
 
+* Check number of interrupts per frame (why 5 instead of 6?)
 * Implement debugger
   * Basic break points
   * Step/run command

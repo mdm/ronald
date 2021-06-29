@@ -71,8 +71,8 @@ impl fmt::Display for Operand {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum InterruptMode {
-    // TODO: move to CPU?
     Mode0,
     Mode1,
     Mode2,

@@ -22,7 +22,10 @@ impl GUI {
     }
 
     pub fn run(&mut self) {
+        self.window.limit_update_rate(Some(std::time::Duration::from_micros(20_000)));
+
         while self.window.is_open() && !self.should_quit() {
+            // println!("new frame");
 
             let mut elapsed_microseconds: u32 = 0;
             while elapsed_microseconds < 20_000 { // TODO: tie this to vsync instead of fixed value
