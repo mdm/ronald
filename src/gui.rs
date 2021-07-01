@@ -27,6 +27,10 @@ impl GUI {
         while self.window.is_open() && !self.should_quit() {
             // println!("new frame");
 
+            if self.window.is_key_down(minifb::Key::F12) {
+                self.system.activate_debugger();
+            }
+
             let mut elapsed_microseconds: u32 = 0;
             while elapsed_microseconds < 20_000 { // TODO: tie this to vsync instead of fixed value
                 self.update_keys();

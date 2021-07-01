@@ -32,6 +32,9 @@ TODO
 Next Steps
 ----------
 
+* Find keyboard scan routine (0x00d9)
+* Implement screen output
+* Allow instruction tracing / logging
 * Check number of interrupts per frame (why 5 instead of 6?)
 * Implement debugger
   * Basic break points

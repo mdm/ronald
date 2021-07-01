@@ -3,6 +3,7 @@
 mod bus;
 mod cpu;
 mod crtc;
+mod debugger;
 mod fdc;
 mod gate_array;
 mod gui;
@@ -17,10 +18,20 @@ mod tape;
 
 use clap::{App, Arg};
 
+use crate::system::System;
+
 fn main() {
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about("an Amstrad CPC emulator")
+        .arg(
+            Arg::with_name("debug")
+                .short("d")
+                .long("debug")
+                .value_name("DEBUG")
+                .help("Runs the emulator in debug mode (not available for zexdoc)")
+                .takes_value(false),
+        )
         .arg(
             Arg::with_name("system")
                 .short("s")
@@ -35,7 +46,12 @@ fn main() {
 
     match system {
         "cpc464" => {
-            let cpc = Box::new(system::CPC464::new());
+            let debug = matches.is_present("debug");
+            let mut cpc = Box::new(system::CPC464::new());
+            if debug {
+                cpc.activate_debugger();
+            }
+
             let mut gui = gui::GUI::new(cpc);
             gui.run();
         }

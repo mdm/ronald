@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 clap = "2.33.3"
 minifb = "0.19.2"
+nom = "6.2.1"

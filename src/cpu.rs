@@ -208,17 +208,19 @@ impl Flag {
     }
 }
 
+pub type CPUShared<M, B> = Rc<RefCell<CPU<M, B>>>;
+
 pub struct CPU<M, B> {
     pub registers: RegisterFile,
-    pub iff1: bool,
-    pub iff2: bool,
-    pub halted: bool,
-    decoder: Decoder<M>,
+    pub memory: Rc<RefCell<M>>,
+    pub bus: Rc<RefCell<B>>,
+    pub decoder: Decoder<M>,
+    iff1: bool,
+    iff2: bool,
+    halted: bool,
     interrupt_mode: InterruptMode,
     enable_interrupt: bool,
     irq_received: bool,
-    memory: Rc<RefCell<M>>,
-    bus: Rc<RefCell<B>>,
 }
 
 impl<M, B> CPU<M, B>
@@ -226,7 +228,7 @@ where
     M: memory::Read + memory::Write,
     B: bus::Bus,
 {
-    pub fn new(memory: Rc<RefCell<M>>, bus: Rc<RefCell<B>>, initial_pc: u16) -> CPU<M, B> {
+    pub fn new_shared(memory: Rc<RefCell<M>>, bus: Rc<RefCell<B>>, initial_pc: u16) -> CPUShared<M, B> {
         let mut registers = RegisterFile::new();
         registers.write_word(&Register16::PC, initial_pc);
 
@@ -245,7 +247,7 @@ where
 
         cpu.reset();
 
-        cpu
+        Rc::new(RefCell::new(cpu))
     }
 
     pub fn fetch_and_execute(&mut self) -> (u8, bool) {
@@ -1294,12 +1296,14 @@ where
     }
 
     fn check_flag(&self, flag: Flag) -> bool {
+        // TODO: move this from CPU to register file
         let flags = self.registers.read_byte(&Register8::F);
 
         flags & flag.mask() != 0
     }
 
     fn set_flag(&mut self, flag: Flag, value: bool) {
+        // TODO: move this from CPU to register file
         let old_flags = self.registers.read_byte(&Register8::F);
 
         let new_flags = if value {
@@ -1325,10 +1329,7 @@ where
         }
     }
 
-    fn load_byte(&self, operand: &Operand) -> u8
-    where
-        M: memory::Read,
-    {
+    fn load_byte(&self, operand: &Operand) -> u8 {
         match operand {
             Operand::Immediate8(value) => *value,
             Operand::Register8(register) => self.registers.read_byte(register),
@@ -1348,10 +1349,7 @@ where
         }
     }
 
-    fn store_byte(&mut self, operand: &Operand, value: u8)
-    where
-        M: memory::Read + memory::Write,
-    {
+    fn store_byte(&mut self, operand: &Operand, value: u8) {
         match operand {
             Operand::Register8(register) => self.registers.write_byte(register, value),
             Operand::Direct8(_) => unimplemented!(),
@@ -1373,10 +1371,7 @@ where
         }
     }
 
-    fn load_word(&self, operand: &Operand) -> u16
-    where
-        M: memory::Read,
-    {
+    fn load_word(&self, operand: &Operand) -> u16 {
         match operand {
             Operand::Immediate16(value) => *value,
             Operand::Register16(register) => self.registers.read_word(register),
@@ -1395,10 +1390,7 @@ where
         }
     }
 
-    fn store_word(&mut self, operand: &Operand, value: u16)
-    where
-        M: memory::Read + memory::Write,
-    {
+    fn store_word(&mut self, operand: &Operand, value: u16) {
         match operand {
             Operand::Register16(register) => self.registers.write_word(register, value),
             Operand::Direct16(address) => self
@@ -1419,7 +1411,8 @@ where
         }
     }
 
-    fn print_state(&self) {
+    pub fn print_state(&self) {
+        // TODO: move this from CPU to register file
         let ix = self.registers.read_word(&Register16::IX);
         let iy = self.registers.read_word(&Register16::IY);
         let hl = self.registers.read_word(&Register16::HL);
