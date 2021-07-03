@@ -8,14 +8,14 @@ use crate::memory;
 enum Command {
     ToggleBreakpoint(u16),
     ShowCpuRegisters,
-    Step,
+    Step(u16),
     Run,
     Disassemble(u16),
 }
 
 impl Command {
     fn parse(input: &str) -> IResult<&str, Command> {
-
+        Ok((input, Command::Run))
     }
 }
 
@@ -58,8 +58,8 @@ where
     }
 
     pub fn run_command_shell(&mut self) {
-        let mut address = self.cpu.borrow().registers.read_word(&cpu::Register16::PC) as usize;
-        let (instruction, _) = self.cpu.borrow().decoder.decode_at(address);
+        let address = self.cpu.borrow().registers.read_word(&cpu::Register16::PC) as usize;
+        let (instruction, _) = self.cpu.borrow_mut().decoder.decode_at(address);
         println!("{:#06x}: {}", address, &instruction);
 
         let mut input = String::new();
@@ -78,8 +78,8 @@ where
                             Command::ShowCpuRegisters => {
                                 self.cpu.borrow().print_state();
                             }
-                            Command::Step => {
-                                self.countdown = Some(1);
+                            Command::Step(count) => {
+                                self.countdown = Some(count);
                                 break;
                             }
                             Command::Run => {
@@ -88,7 +88,7 @@ where
                             Command::Disassemble(count) => {
                                 let mut address = self.cpu.borrow().registers.read_word(&cpu::Register16::PC) as usize;
                                 for _ in 0..count {
-                                    let (instruction, next_adress) = self.cpu.borrow().decoder.decode_at(address);
+                                    let (instruction, next_adress) = self.cpu.borrow_mut().decoder.decode_at(address);
                                     println!("{:#06x}: {}", address, &instruction);
                                     address = next_adress;                    
                                 }
@@ -106,8 +106,8 @@ where
     }
 
     fn breakpoint_at(&self, address: u16) -> bool {
-        for breakpoint in self.breakpoints {
-            if breakpoint == address {
+        for breakpoint in &self.breakpoints {
+            if *breakpoint == address {
                 return true;
             }
         }

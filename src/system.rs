@@ -73,15 +73,15 @@ impl ZexHarness {
 
 pub trait System {
     fn emulate(&mut self) -> u8;
-    fn get_frame_buffer(&self) -> &Vec<u32>;
-    fn get_keyboard(&self) -> Rc<RefCell<keyboard::Keyboard>>;
+    fn get_screen(&self) -> screen::ScreenShared;
+    fn get_keyboard(&self) -> keyboard::KeyboardShared;
     fn activate_debugger(&mut self);
 }
 
 pub struct CPC464 {
     cpu: cpu::CPUShared<memory::Memory, bus::StandardBus>,
     bus: bus::StandardBusShared,
-    screen: screen::Screen,
+    screen: screen::ScreenShared,
     keyboard: keyboard::KeyboardShared,
     debugger: debugger::Debugger<memory::Memory, bus::StandardBus>,
 }
@@ -93,11 +93,12 @@ impl CPC464 {
         let crtc = crtc::CRTController::new_shared();
         let keyboard = keyboard::Keyboard::new_shared();
         let psg = psg::SoundGenerator::new_shared();
+        let screen = screen::Screen::new_shared();
         let tape = tape::TapeController::new_shared();
         let bus = bus::StandardBus::new_shared(
             crtc.clone(),
             fdc::FloppyDiskController::new_shared(),
-            gate_array::GateArray::new_shared(memory.clone(), crtc.clone()),
+            gate_array::GateArray::new_shared(memory.clone(), crtc.clone(), screen.clone()),
             memory.clone(),
             ppi::PeripheralInterface::new_shared(crtc, keyboard.clone(), psg, tape),
         );
@@ -107,7 +108,7 @@ impl CPC464 {
         CPC464 {
             cpu,
             bus,
-            screen: screen::Screen::new(),
+            screen,
             keyboard,
             debugger,
         }
@@ -138,9 +139,9 @@ impl System for CPC464 {
         cycles
     }
 
-    fn get_frame_buffer(&self) -> &Vec<u32> {
-        // TODO: should the GUI own the buffer?
-        self.screen.get_frame_buffer()
+    fn get_screen(&self) -> screen::ScreenShared {
+        // TODO: should the GUI own the frame buffer?
+        self.screen.clone()
     }
 
     fn get_keyboard(&self) -> keyboard::KeyboardShared {

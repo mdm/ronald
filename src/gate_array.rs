@@ -1,5 +1,7 @@
 use crate::crtc;
 use crate::memory;
+use crate::memory::Read;
+use crate::screen;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,6 +11,7 @@ pub type GateArrayShared = Rc<RefCell<GateArray>>;
 pub struct GateArray {
     memory: memory::MemoryShared,
     crtc: crtc::CRTControllerShared,
+    screen: screen::ScreenShared,
     current_screen_mode: u8,
     requested_screen_mode: u8,
     hsync_active: bool,
@@ -23,10 +26,12 @@ impl GateArray {
     pub fn new_shared(
         memory: memory::MemoryShared,
         crtc: crtc::CRTControllerShared,
+        screen: screen::ScreenShared,
     ) -> GateArrayShared {
         let gate_array = GateArray {
             memory,
             crtc,
+            screen,
             current_screen_mode: 0,
             requested_screen_mode: 0,
             hsync_active: false,
@@ -53,6 +58,7 @@ impl GateArray {
                 }
             }
             1 => {
+                // println!("color select (pen {}): {:#04x} ({:#04x})", self.selected_pen, value, value & 0x1f);
                 self.pen_colors[self.selected_pen] = value & 0x1f;
             }
             2 => {
@@ -83,19 +89,24 @@ impl GateArray {
     pub fn step(&mut self) -> bool {
         let generate_interrupt = self.update_interrupt_counter();
         self.update_screen_mode();
+        self.write_to_screen();
 
-        self.hsync_active = self.crtc.borrow_mut().read_horizontal_sync();
-
-        // TODO: write to screen
+        self.hsync_active = self.crtc.borrow().read_horizontal_sync();
+        self.vsync_active = self.crtc.borrow().read_vertical_sync();
 
         generate_interrupt
     }
 
     fn update_interrupt_counter(&mut self) -> bool {
         let mut generate_interrupt = false;
-        if self.hsync_active && !self.crtc.borrow_mut().read_horizontal_sync() {
+        if self.hsync_active && !self.crtc.borrow().read_horizontal_sync() {
             self.interrupt_counter += 1;
             self.hsyncs_since_last_vsync += 1;
+
+            // TODO: handle this case properly
+            if self.hsyncs_since_last_vsync > 3 {
+                self.hsyncs_since_last_vsync = 3;
+            }
 
             if self.interrupt_counter == 52 {
                 self.interrupt_counter = 0;
@@ -103,7 +114,7 @@ impl GateArray {
             }
         }
 
-        if !self.vsync_active && self.crtc.borrow_mut().read_vertical_sync() {
+        if !self.vsync_active && self.crtc.borrow().read_vertical_sync() {
             self.hsyncs_since_last_vsync = 0;
         }
 
@@ -116,8 +127,69 @@ impl GateArray {
     }
 
     fn update_screen_mode(&mut self) {
-        if !self.hsync_active && self.crtc.borrow_mut().read_horizontal_sync() {
+        if !self.hsync_active && self.crtc.borrow().read_horizontal_sync() {
             self.current_screen_mode = self.requested_screen_mode;
+            // println!("screen mode {}", self.current_screen_mode);
+        }
+    }
+
+    fn write_to_screen(&self) {
+        if !self.vsync_active && self.crtc.borrow().read_vertical_sync() {
+            self.screen.borrow_mut().trigger_vsync();
+        }
+
+        if self.crtc.borrow().read_horizontal_sync() { // TODO: output black for vsync, too? || self.crtc.borrow().read_horizontal_sync()
+            for _ in 0..16 {
+                self.screen.borrow_mut().write(20); // black
+            }
+            return;
+        }
+
+        if !self.crtc.borrow().read_display_enabled() {
+            for _ in 0..16 {
+                self.screen.borrow_mut().write(12); // bright red
+            }
+            return;
+        }
+
+        for offset in 0..2 {
+            let address = self.crtc.borrow().read_address() + offset;
+            let packed = self.memory.borrow().read_byte(address);
+            match self.current_screen_mode {
+                0 => {
+                    let pixels = [
+                        ((packed & 0x80) >> 7) | ((packed & 0x08) >> 2) | ((packed & 0x20) >> 3) | ((packed & 0x02) << 2),
+                        ((packed & 0x40) >> 6) | ((packed & 0x04) >> 1) | ((packed & 0x10) >> 2) | ((packed & 0x01) << 3),
+                    ];
+
+                    for pixel in pixels {
+                        for _ in 0..4 {
+                            self.screen.borrow_mut().write(self.pen_colors[pixel as usize] as usize);
+                        }
+                    }
+                }
+                1 => {
+                    let pixels = [
+                        ((packed & 0x80) >> 7) | ((packed & 0x08) >> 2),
+                        ((packed & 0x40) >> 6) | ((packed & 0x04) >> 1),
+                        ((packed & 0x20) >> 5) | ((packed & 0x02) >> 0),
+                        ((packed & 0x10) >> 4) | ((packed & 0x01) << 1),
+                    ];
+
+                    for pixel in pixels {
+                        for _ in 0..2 {
+                            self.screen.borrow_mut().write(self.pen_colors[pixel as usize] as usize);
+                        }
+                    }
+                }
+                2 => {
+                    for bit in 0..8 {
+                        let pixel = (packed >> (7 - bit)) & 1;
+                        self.screen.borrow_mut().write(self.pen_colors[pixel as usize] as usize);
+                    }                    
+                }
+                _ => unimplemented!(),
+            }
         }
     }
 }

@@ -39,7 +39,7 @@ impl GUI {
             
             self.window
                 .update_with_buffer(
-                    self.system.get_frame_buffer(),
+                    self.system.get_screen().borrow().get_frame_buffer(),
                     screen::BUFFER_WIDTH,
                     screen::BUFFER_HEIGHT,
                 )
