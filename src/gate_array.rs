@@ -138,7 +138,8 @@ impl GateArray {
             self.screen.borrow_mut().trigger_vsync();
         }
 
-        if self.crtc.borrow().read_horizontal_sync() { // TODO: output black for vsync, too? || self.crtc.borrow().read_horizontal_sync()
+        if self.crtc.borrow().read_horizontal_sync() || self.crtc.borrow().read_vertical_sync() {
+            // TODO: use modified hsync/vsync durations (see http://www.cpcwiki.eu/index.php?title=CRTC#HSYNC_and_VSYNC)
             for _ in 0..16 {
                 self.screen.borrow_mut().write(20); // black
             }
