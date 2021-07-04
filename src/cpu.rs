@@ -687,7 +687,12 @@ where
             }
             Instruction::Jp(jump_test, target) => {
                 if self.check_jump(jump_test) {
-                    let address = self.load_word(target);
+                    let address = match target {
+                        Operand::RegisterIndirect(register) => {
+                            self.registers.read_word(register) // special case for JP (HL) and friends
+                        }
+                        _ => self.load_word(target),
+                    };
 
                     self.registers.write_word(&Register16::PC, address);
                 } else {

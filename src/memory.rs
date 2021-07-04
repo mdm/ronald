@@ -140,7 +140,7 @@ impl Read for Memory {
         if self.upper_rom_enabled && address >= 0xc000 {
             match self.upper_roms.get(&self.selected_upper_rom) {
                 Some(upper_rom) => {
-                    return upper_rom.read_byte(address);
+                    return upper_rom.read_byte(address - 0xc000);
                 }
                 None => {
                     panic!("No upper ROM loaded in slot {}", self.selected_upper_rom);
