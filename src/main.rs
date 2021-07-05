@@ -21,6 +21,8 @@ use clap::{App, Arg};
 use crate::system::System;
 
 fn main() {
+    env_logger::init();
+
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about("an Amstrad CPC emulator")

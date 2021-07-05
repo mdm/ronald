@@ -2,6 +2,8 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
+use log;
+
 use crate::bus;
 use crate::instruction::{Decoder, Instruction, JumpTest, Operand, InterruptMode};
 use crate::memory;
@@ -259,9 +261,13 @@ where
 
         let mut prevent_interrupt = false;
 
+        let pc = self.registers.read_word(&Register16::PC);
+
         let (instruction, next_address) = self
             .decoder
-            .decode_at(self.registers.read_word(&Register16::PC) as usize);
+            .decode_at(pc as usize);
+
+        log::trace!("{:#06x}: {}", pc, &instruction);
 
         let mut timing_in_nops = instruction.timing();
 

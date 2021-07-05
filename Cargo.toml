@@ -8,5 +8,7 @@ edition = "2018"
 
 [dependencies]
 clap = "2.33.3"
+env_logger = "0.8.4"
+log = "0.4.14"
 minifb = "0.19.2"
 nom = "6.2.1"
