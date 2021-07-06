@@ -1085,12 +1085,11 @@ where
                     .write_word(&Register16::PC, next_address as u16);
             }
             Instruction::Rst(target) => {
-                let old_pc = self.registers.read_word(&Register16::PC);
                 let new_sp = self.registers.read_word(&Register16::SP) - 2;
                 self.registers.write_word(&Register16::SP, new_sp);
                 self.memory
                     .borrow_mut()
-                    .write_word(new_sp as usize, old_pc);
+                    .write_word(new_sp as usize, next_address as u16);
                 let address_lower = self.load_byte(target);
                 
                 self.registers.write_word(&Register16::PC, address_lower as u16);
@@ -1278,7 +1277,7 @@ where
             match self.interrupt_mode {
                 InterruptMode::Mode1 => {
                     // println!("handle interrupt");
-                    let old_pc = self.registers.read_word(&Register16::PC);
+                    let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
                     self.memory
