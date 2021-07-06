@@ -1,16 +1,20 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::keyboard;
+
 pub type SoundGeneratorShared = Rc<RefCell<SoundGenerator>>;
 
 pub struct SoundGenerator {
+    keyboard: keyboard::KeyboardShared,
     buffer: u8,
     selected_register: u8,
 }
 
 impl SoundGenerator {
-    pub fn new_shared() -> SoundGeneratorShared {
+    pub fn new_shared(keyboard: keyboard::KeyboardShared) -> SoundGeneratorShared {
         let psg = SoundGenerator {
+            keyboard,
             buffer: 0,
             selected_register: 0,
         };
@@ -21,7 +25,14 @@ impl SoundGenerator {
     pub fn perform_function(&mut self, function: u8) {
         match function {
             0 => (), // inactive
-            1 => unimplemented!(),
+            1 => {
+                match self.selected_register {
+                    0x0e => {
+                        self.buffer = self.keyboard.borrow().scan_active_line();
+                    }
+                    _ => unimplemented!(),
+                }
+            },
             2 => {
                 // println!("PSG {:#04x}: {:#04x}", self.selected_register, self.buffer); // TODO: process data
             },
@@ -33,7 +44,7 @@ impl SoundGenerator {
     }
 
     pub fn read_byte(&self) -> u8 {
-        unimplemented!()
+        self.buffer
     }
 
     pub fn write_byte(&mut self, value: u8) {

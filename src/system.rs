@@ -92,7 +92,7 @@ impl CPC464 {
         let memory = memory::Memory::new_shared();
         let crtc = crtc::CRTController::new_shared();
         let keyboard = keyboard::Keyboard::new_shared();
-        let psg = psg::SoundGenerator::new_shared();
+        let psg = psg::SoundGenerator::new_shared(keyboard.clone());
         let screen = screen::Screen::new_shared();
         let tape = tape::TapeController::new_shared();
         let bus = bus::StandardBus::new_shared(
