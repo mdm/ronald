@@ -14,7 +14,8 @@ impl FloppyDiskController {
 
     pub fn read_byte(&self, port: u16) -> u8 {
         match port {
-            0xfb7e => 0, // TODO: read main status register
+            // 0xfb7e => 0x80, // TODO: read main status register
+            0xfb7e => 0x00,
             _ => {
                 println!("FDC read {:#06x}", port);
                 unimplemented!()

@@ -3,8 +3,8 @@ use nom::{
     IResult,
     branch::alt,
     bytes::complete::{tag, take_while, take_while1, take_while_m_n},
-    combinator::map_res,
-    sequence::{delimited, separated_pair}
+    combinator::{map_res, opt},
+    sequence::{delimited, pair, separated_pair}
 };
 
 use crate::bus;
@@ -89,9 +89,20 @@ fn parse_show_cpu_registers(input: &str) -> IResult<&str, Command> {
 }
 
 fn parse_step(input: &str) -> IResult<&str, Command> {
+    let (input, _) = take_while(is_whitespace)(input)?;
     let (input, _) = alt((tag("step"), tag("s")))(input)?;
 
-    Ok((input, Command::Step(0)))
+    let (input, argument) = opt(pair(
+        take_while1(is_whitespace),
+        alt((parse_hex, parse_decimal))
+    ))(input)?;
+
+    let (input, _) = take_while(is_whitespace)(input)?;
+
+    match argument {
+        Some((_, count)) => Ok((input, Command::Step(count))),
+        None => Ok((input, Command::Step(0))),
+    }
 }
 
 fn parse_continue(input: &str) -> IResult<&str, Command> {

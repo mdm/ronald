@@ -1,6 +1,5 @@
 use crate::crtc;
 use crate::memory;
-use crate::memory::Read;
 use crate::screen;
 
 use std::cell::RefCell;
@@ -155,7 +154,7 @@ impl GateArray {
 
         for offset in 0..2 {
             let address = self.crtc.borrow().read_address() + offset;
-            let packed = self.memory.borrow().read_byte(address);
+            let packed = self.memory.borrow().read_byte_from_ram(address);
             match self.current_screen_mode {
                 0 => {
                     let pixels = [
