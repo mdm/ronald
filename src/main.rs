@@ -4,6 +4,7 @@ mod bus;
 mod cpu;
 mod crtc;
 mod debugger;
+mod dsk_file;
 mod fdc;
 mod gate_array;
 mod gui;
@@ -48,6 +49,11 @@ fn main() {
 
     match system {
         "cpc464" => {
+            match dsk_file::Disk::load("data/Fruity_Frank_1984_Kuma_Computers.dsk") {
+                Ok(_) => println!("LOAD OK"),
+                Err(error) => println!("LOAD ERROR: {}", error),
+            }
+
             let debug = matches.is_present("debug");
             let mut cpc = Box::new(system::CPC464::new());
             if debug {

@@ -103,7 +103,7 @@ impl Memory {
         // TODO: receive rom paths as parameters
         let mut upper_roms = HashMap::new();
         upper_roms.insert(0, ROM::from_file("rom/basic_1.0.rom"));
-        // upper_roms.insert(7, ROM::from_file("rom/amsdos_0.5.rom"));
+        upper_roms.insert(7, ROM::from_file("rom/amsdos_0.5.rom"));
 
         let memory = Memory {
             ram: RAM::new(0x10000),
@@ -147,8 +147,7 @@ impl Read for Memory {
                     return upper_rom.read_byte(address - 0xc000);
                 }
                 None => {
-                    return 0;
-                    // panic!("No upper ROM loaded in slot {}", self.selected_upper_rom);
+                    return self.ram.read_byte(address);
                 }
             }
         }
