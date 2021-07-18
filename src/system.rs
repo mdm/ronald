@@ -76,6 +76,7 @@ pub trait System {
     fn get_screen(&self) -> screen::ScreenShared;
     fn get_keyboard(&self) -> keyboard::KeyboardShared;
     fn activate_debugger(&mut self);
+    fn load_disk(&mut self, filename: &str);
 }
 
 pub struct CPC464 {
@@ -83,6 +84,7 @@ pub struct CPC464 {
     bus: bus::StandardBusShared,
     screen: screen::ScreenShared,
     keyboard: keyboard::KeyboardShared,
+    fdc: fdc::FloppyDiskControllerShared,
     debugger: debugger::Debugger<memory::Memory, bus::StandardBus>,
 }
 
@@ -94,10 +96,11 @@ impl CPC464 {
         let keyboard = keyboard::Keyboard::new_shared();
         let psg = psg::SoundGenerator::new_shared(keyboard.clone());
         let screen = screen::Screen::new_shared();
+        let fdc = fdc::FloppyDiskController::new_shared();
         let tape = tape::TapeController::new_shared();
         let bus = bus::StandardBus::new_shared(
             crtc.clone(),
-            fdc::FloppyDiskController::new_shared(),
+            fdc.clone(),
             gate_array::GateArray::new_shared(memory.clone(), crtc.clone(), screen.clone()),
             memory.clone(),
             ppi::PeripheralInterface::new_shared(crtc, keyboard.clone(), psg, tape),
@@ -110,6 +113,7 @@ impl CPC464 {
             bus,
             screen,
             keyboard,
+            fdc,
             debugger,
         }
     }
@@ -150,5 +154,9 @@ impl System for CPC464 {
 
     fn activate_debugger(&mut self) {
         self.debugger.activate();
+    }
+
+    fn load_disk(&mut self, filename: &str) {
+        self.fdc.borrow_mut().load_disk(filename);
     }
 }

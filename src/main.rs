@@ -49,16 +49,13 @@ fn main() {
 
     match system {
         "cpc464" => {
-            match dsk_file::Disk::load("data/Fruity_Frank_1984_Kuma_Computers.dsk") {
-                Ok(_) => println!("LOAD OK"),
-                Err(error) => println!("LOAD ERROR: {}", error),
-            }
-
             let debug = matches.is_present("debug");
             let mut cpc = Box::new(system::CPC464::new());
             if debug {
                 cpc.activate_debugger();
             }
+
+            cpc.load_disk("data/Fruity_Frank_1984_Kuma_Computers.dsk");
 
             let mut gui = gui::GUI::new(cpc);
             gui.run();

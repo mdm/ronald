@@ -40,3 +40,16 @@ Next Steps
 * Check number of interrupts per frame (why 5 instead of 6?)
 * Implement debugger
   * State inspection commands
+
+
+Bisection feature
+-----------------
+
+* Debugger command "bisect start" remembers instruction count and takes a snapshot of the system
+* Debugger command "bisect end" remembers instruction count and starts the bisection process
+  * Restart system using snapshot
+  * Set bisection checkpoint to ("start count" + "end count") / 2
+  * Run until instruction count reaches checkpoint
+  * Ask if critical section is before, after or at checkpoint
+  * Adjust "start count" or "end count" accordingly
+  * Repeat unless stopped
