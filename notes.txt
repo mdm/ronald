@@ -32,14 +32,11 @@ TODO
 Next Steps
 ----------
 
-* Check ROM walk (0x033e)
-  * Why is the loop 0xc95e repeated forever?
-* Check if gate array always bypasses ROMs
-* Find keyboard scan routine (0x00d9)
 * Allow instruction tracing / logging
 * Check number of interrupts per frame (why 5 instead of 6?)
 * Implement debugger
   * State inspection commands
+* Run emulation in separate thread to allow double buffering for screen
 
 
 Bisection feature

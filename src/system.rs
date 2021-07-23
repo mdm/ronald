@@ -76,7 +76,7 @@ pub trait System {
     fn get_screen(&self) -> screen::ScreenShared;
     fn get_keyboard(&self) -> keyboard::KeyboardShared;
     fn activate_debugger(&mut self);
-    fn load_disk(&mut self, filename: &str);
+    fn load_disk(&mut self, drive: usize, filename: &str);
 }
 
 pub struct CPC464 {
@@ -156,7 +156,7 @@ impl System for CPC464 {
         self.debugger.activate();
     }
 
-    fn load_disk(&mut self, filename: &str) {
-        self.fdc.borrow_mut().load_disk(filename);
+    fn load_disk(&mut self, drive: usize, filename: &str) {
+        self.fdc.borrow_mut().load_disk(drive, filename);
     }
 }

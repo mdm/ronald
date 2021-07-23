@@ -55,7 +55,7 @@ fn main() {
                 cpc.activate_debugger();
             }
 
-            cpc.load_disk("data/Fruity_Frank_1984_Kuma_Computers.dsk");
+            cpc.load_disk(0, "data/Fruity_Frank_1984_Kuma_Computers.dsk");
 
             let mut gui = gui::GUI::new(cpc);
             gui.run();
