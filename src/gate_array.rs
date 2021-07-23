@@ -133,21 +133,23 @@ impl GateArray {
     }
 
     fn write_to_screen(&self) {
+        let mut screen = self.screen.borrow_mut();
+        
         if !self.vsync_active && self.crtc.borrow().read_vertical_sync() {
-            self.screen.borrow_mut().trigger_vsync();
+            screen.trigger_vsync();
         }
 
         if self.crtc.borrow().read_horizontal_sync() || self.crtc.borrow().read_vertical_sync() {
             // TODO: use modified hsync/vsync durations (see http://www.cpcwiki.eu/index.php?title=CRTC#HSYNC_and_VSYNC)
             for _ in 0..16 {
-                self.screen.borrow_mut().write(20); // black
+                screen.write(20); // black
             }
             return;
         }
 
         if !self.crtc.borrow().read_display_enabled() {
             for _ in 0..16 {
-                self.screen.borrow_mut().write(12); // bright red
+                screen.write(12); // bright red
             }
             return;
         }
@@ -164,7 +166,7 @@ impl GateArray {
 
                     for pixel in pixels {
                         for _ in 0..4 {
-                            self.screen.borrow_mut().write(self.pen_colors[pixel as usize] as usize);
+                            screen.write(self.pen_colors[pixel as usize] as usize);
                         }
                     }
                 }
@@ -178,14 +180,14 @@ impl GateArray {
 
                     for pixel in pixels {
                         for _ in 0..2 {
-                            self.screen.borrow_mut().write(self.pen_colors[pixel as usize] as usize);
+                            screen.write(self.pen_colors[pixel as usize] as usize);
                         }
                     }
                 }
                 2 => {
                     for bit in 0..8 {
                         let pixel = (packed >> (7 - bit)) & 1;
-                        self.screen.borrow_mut().write(self.pen_colors[pixel as usize] as usize);
+                        screen.write(self.pen_colors[pixel as usize] as usize);
                     }                    
                 }
                 _ => unimplemented!(),

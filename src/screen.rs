@@ -75,6 +75,7 @@ pub type ScreenShared = Rc<RefCell<Screen>>;
 pub struct Screen {
     buffer: Vec<u32>,
     gun_position: usize,
+    width_counter: usize,
     waiting_for_vsync: bool,
 }
 
@@ -83,6 +84,7 @@ impl Screen {
         let screen = Screen {
             buffer: vec![FIRMWARE_COLORS[0]; BUFFER_WIDTH * BUFFER_HEIGHT],
             gun_position: 0,
+            width_counter: 0,
             waiting_for_vsync: true,
         };
 
@@ -102,9 +104,11 @@ impl Screen {
         self.buffer[self.gun_position + BUFFER_WIDTH] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
 
         self.gun_position += 1;
+        self.width_counter += 1;
 
-        if self.gun_position % BUFFER_WIDTH == 0 {
+        if self.width_counter == BUFFER_WIDTH {
             self.gun_position += BUFFER_WIDTH;
+            self.width_counter = 0;
         }
 
         if self.gun_position == self.buffer.len() {
