@@ -265,6 +265,30 @@ impl FloppyDiskController {
 
         value
     }
+
+    fn report_status_register_0(&self) -> u8 {
+        let mut value = 0;
+
+        value
+    }
+
+    fn report_status_register_1(&self) -> u8 {
+        let mut value = 0;
+
+        value
+    }
+
+    fn report_status_register_2(&self) -> u8 {
+        let mut value = 0;
+
+        value
+    }
+
+    fn report_status_register_3(&self) -> u8 {
+        let mut value = 0;
+
+        value
+    }
 }
 
 enum Phase {
