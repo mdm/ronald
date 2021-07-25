@@ -232,6 +232,8 @@ impl FloppyDiskController {
                 Command::ScanHighOrEqual => {},
             }
         }
+
+        self.parameters_buffer.clear();
     }
 
     fn report_main_status_register(&self) -> u8 {
