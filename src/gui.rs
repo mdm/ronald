@@ -37,7 +37,7 @@ impl GUI {
                 self.update_keys();
                 elapsed_microseconds += self.system.emulate() as u32;
             }
-            println!("Frame took {} microseconds", start.elapsed().as_micros());
+            // println!("Frame took {} microseconds", start.elapsed().as_micros());
             
             let start= std::time::Instant::now();
             self.window
@@ -47,7 +47,7 @@ impl GUI {
                     screen::BUFFER_HEIGHT,
                 )
                 .unwrap(); // TODO: handle errors properly
-            println!("Window updated in {} microseconds", start.elapsed().as_micros());
+            // println!("Window updated in {} microseconds", start.elapsed().as_micros());
         }
     }
 

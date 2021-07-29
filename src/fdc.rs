@@ -6,10 +6,12 @@ use crate::dsk_file::{self, Disk};
 pub type FloppyDiskControllerShared = Rc<RefCell<FloppyDiskController>>;
 
 struct Drive {
-    track: u8,
+    track: usize,
+    sector: usize,
     disk: Option<Disk>,
 }
 
+#[derive(Debug)]
 enum Command {
     ReadTrack,
     Specify,
@@ -80,10 +82,14 @@ pub struct FloppyDiskController {
     result_buffer: VecDeque<u8>,
     motors_on: bool,
     request_for_master: bool,
-    data_input_output: bool,
+    data_input_output: bool, // false: CPU -> FDC, true: FDC -> CPU
     execution_mode: bool,
     floppy_controller_busy: bool,
-    floppy_drive_busy: [bool; 2],
+    floppy_drive_busy: [bool; 2], // TODO: do we need this? commands finish immediately in our implementation
+    seek_end: bool,
+    drive_not_ready: bool,
+    selected_drive: usize,
+    end_of_track: bool,
 }
 
 impl FloppyDiskController {
@@ -92,10 +98,12 @@ impl FloppyDiskController {
             drives: [
                 Drive {
                     track: 0,
+                    sector: 0,
                     disk: None,
                 },
                 Drive {
                     track: 0,
+                    sector: 0,
                     disk: None,
                 },
             ],
@@ -110,6 +118,10 @@ impl FloppyDiskController {
             execution_mode: false,
             floppy_controller_busy: false,
             floppy_drive_busy: [false; 2],
+            seek_end: false,
+            drive_not_ready: false,
+            selected_drive: 0,
+            end_of_track: false,
         };
 
         Rc::new(RefCell::new(fdc))
@@ -119,6 +131,9 @@ impl FloppyDiskController {
         match port {
             0xfb7e => self.report_main_status_register(),
             0xfb7f => {
+                dbg!(
+                    &self.result_buffer
+                );
                 match self.phase {
                     Phase::Result => {
                         let result = if let Some(result) = self.result_buffer.pop_front() {
@@ -128,7 +143,9 @@ impl FloppyDiskController {
                         };
 
                         if self.result_buffer.is_empty() {
+                            self.data_input_output = false;
                             self.floppy_controller_busy = false;
+                            self.phase = Phase::Command;
                         }
 
                         result
@@ -203,33 +220,86 @@ impl FloppyDiskController {
     }
 
     fn execute_command(&mut self) {
+        dbg!(&self.command);
         dbg!(&self.parameters_buffer);
         self.phase = Phase::Execution;
 
-        if let Some(command) = &self.command {
+        if let Some(command) = &self.command.take() {
             match command {
-                Command::ReadTrack => {},
-                Command::Specify => {},
-                Command::SenseDriveState => {},
-                Command::WriteSector => {},
-                Command::ReadSector => {},
-                Command::Recalibrate => {
-                    let drive = self.parameters_buffer[0] as usize;
-                    self.drives[drive].track = if self.drives[drive].track > 77 {
-                        self.drives[drive].track - 77
-                    } else {
-                        0
-                    }
+                Command::ReadTrack => {
+                    unimplemented!();
                 },
-                Command::SenseInterruptState => {},
-                Command::WriteDeletedSector => {},
-                Command::ReadSectorId => {},
-                Command::ReadDeletedSector => {},
-                Command::FormatTrack => {},
-                Command::Seek => {},
-                Command::ScanEqual => {},
-                Command::ScanLowOrEqual => {},
-                Command::ScanHighOrEqual => {},
+                Command::Specify => {
+                    // assume CPC defaults
+                    // TODO: handle other settings?
+                    self.phase = Phase::Command;
+                },
+                Command::SenseDriveState => {
+                    unimplemented!();
+                },
+                Command::WriteSector => {
+                    unimplemented!();
+                },
+                Command::ReadSector => {
+                    unimplemented!();
+                },
+                Command::Recalibrate => {
+                    self.selected_drive = self.parameters_buffer[0] as usize;
+                    match &self.drives[self.selected_drive].disk {
+                        Some(_) => {
+                            self.drives[self.selected_drive].track = if self.drives[self.selected_drive].track > 77 {
+                                self.drives[self.selected_drive].track - 77
+                            } else {
+                                0
+                            };
+                            self.seek_end = true;
+                        }
+                        None => {
+                            self.drive_not_ready = true;
+                        }
+                    }
+                    self.phase = Phase::Command;
+                },
+                Command::SenseInterruptState => {
+                    self.result_buffer.push_back(self.report_status_register_0());
+                    self.result_buffer.push_back(self.drives[self.selected_drive].track as u8);
+                    self.data_input_output = true;
+                    self.phase = Phase::Result;
+                },
+                Command::WriteDeletedSector => {
+                    unimplemented!();
+                },
+                Command::ReadSectorId => {
+                    self.selected_drive = self.parameters_buffer[0] as usize;
+                    match &self.drives[self.selected_drive].disk {
+                        Some(_) => {
+                            self.write_standard_result();
+                        }
+                        None => {
+                            self.drive_not_ready = true;
+                        }
+                    }
+                    self.data_input_output = true;
+                    self.phase = Phase::Result;
+                },
+                Command::ReadDeletedSector => {
+                    unimplemented!();
+                },
+                Command::FormatTrack => {
+                    unimplemented!();
+                },
+                Command::Seek => {
+                    unimplemented!();
+                },
+                Command::ScanEqual => {
+                    unimplemented!();
+                },
+                Command::ScanLowOrEqual => {
+                    unimplemented!();
+                },
+                Command::ScanHighOrEqual => {
+                    unimplemented!();
+                },
             }
         }
 
@@ -263,11 +333,31 @@ impl FloppyDiskController {
             value |= 1 << 0;
         }
 
+        println!("FDC MAIN = {:#010b}", value);
+
         value
     }
 
     fn report_status_register_0(&self) -> u8 {
         let mut value = 0;
+
+        if self.end_of_track { // assume no other errors occur
+            value |= 1 << 6;
+        }
+
+        if self.seek_end {
+            value |= 1 << 5;
+        }
+
+        if self.drive_not_ready {
+            value |= 1 << 3;
+        }
+
+        value |= (self.selected_drive as u8) << 0;
+
+        // TODO: reset status field here?
+        // no - better in separate reset method
+        // some flags are shared between status registers
 
         value
     }
@@ -275,19 +365,50 @@ impl FloppyDiskController {
     fn report_status_register_1(&self) -> u8 {
         let mut value = 0;
 
+        if self.end_of_track {
+            value |= 1 << 7;
+        }
+
         value
     }
 
     fn report_status_register_2(&self) -> u8 {
         let mut value = 0;
 
+        // TODO: handle bits 4, 3 and 2
+
         value
     }
 
     fn report_status_register_3(&self) -> u8 {
         let mut value = 0;
+        
+        if self.drives[self.selected_drive].track == 0 {
+            value |= 1 << 4;
+        }
+
+        value |= (self.selected_drive as u8) << 0;
 
         value
+    }
+
+    fn write_standard_result(&mut self) {
+        self.result_buffer.push_back(self.report_status_register_0());
+        self.result_buffer.push_back(self.report_status_register_1());
+        self.result_buffer.push_back(self.report_status_register_2());
+
+        match &self.drives[self.selected_drive].disk {
+            Some(disk) => {
+                let track = self.drives[self.selected_drive].track;
+                let sector = self.drives[self.selected_drive].sector;
+                let sector_info = &disk.tracks[track].sector_infos[sector];
+                self.result_buffer.push_back(sector_info.track);
+                self.result_buffer.push_back(sector_info.side);
+                self.result_buffer.push_back(sector_info.sector_id);
+                self.result_buffer.push_back(sector_info.sector_size);
+            }
+            None => unreachable!(),
+        }
     }
 }
 

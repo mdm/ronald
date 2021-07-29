@@ -3,12 +3,12 @@ use std::io::Read;
 
 
 pub struct Disk {
-    extended: bool,
-    creator: String,
-    num_tracks: u8,
-    num_sides: u8,
-    track_size: u16,
-    tracks: Vec<Track>,
+    pub extended: bool,
+    pub creator: String,
+    pub num_tracks: u8,
+    pub num_sides: u8,
+    pub track_size: u16,
+    pub tracks: Vec<Track>,
 }
 
 impl Disk {
@@ -93,22 +93,22 @@ impl Disk {
     }
 }
 
-struct Track {
-    track: u8,
-    side: u8,
-    sector_size: u8,
-    num_sectors: u8,
-    gap3_length: u8,
-    filler_byte: u8,
-    sector_infos: Vec<SectorInfo>,
-    sectors: Vec<Vec<u8>>,
+pub struct Track {
+    pub track: u8,
+    pub side: u8,
+    pub sector_size: u8,
+    pub num_sectors: u8,
+    pub gap3_length: u8,
+    pub filler_byte: u8,
+    pub sector_infos: Vec<SectorInfo>,
+    pub sectors: Vec<Vec<u8>>,
 }
 
-struct SectorInfo {
-    track: u8,
-    side: u8,
-    sector_id: u8,
-    sector_size: u8,
-    fdc_status1: u8,
-    fdc_status2: u8,
+pub struct SectorInfo {
+    pub track: u8,
+    pub side: u8,
+    pub sector_id: u8,
+    pub sector_size: u8,
+    pub fdc_status1: u8, // TODO: do we actually use this?
+    pub fdc_status2: u8, // TODO: do we actually use this?
 }
