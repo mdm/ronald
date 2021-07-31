@@ -210,6 +210,8 @@ impl FloppyDiskController {
         self.drives[drive].disk = match dsk_file::Disk::load(filename) {
             Ok(disk) => {
                 println!("LOAD OK"); // TODO: use logger
+                println!("{} sectors in track 0", disk.tracks[0].num_sectors);
+                println!("sectors have {} bytes", disk.tracks[0].sector_size);
                 Some(disk)
             }
             Err(error) => {

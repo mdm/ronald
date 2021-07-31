@@ -52,6 +52,8 @@ impl Disk {
                             let sector_info_start = 8 * sector as usize + track_start + 0x18;
                             let sector_data_start = sector_size as usize * sector as usize + track_start + 0x100;
 
+                            println!("track {}, sector {} (id = {})", contents[sector_info_start + 0x00], sector, contents[sector_info_start + 0x02]);
+
                             sector_infos.push(SectorInfo {
                                 track: contents[sector_info_start + 0x00], // TODO: verify this is the same as above?
                                 side: contents[sector_info_start + 0x01], // TODO: verify this is the same as above?
