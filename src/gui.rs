@@ -26,28 +26,28 @@ impl GUI {
 
         while self.window.is_open() && !self.should_quit() {
             // println!("new frame");
+            let start= std::time::Instant::now();
 
             if self.window.is_key_down(minifb::Key::F12) {
                 self.system.activate_debugger();
             }
 
+            self.update_keys();
+
             let mut elapsed_microseconds: u32 = 0;
-            let start= std::time::Instant::now();
             while elapsed_microseconds < 20_000 { // TODO: tie this to vsync instead of fixed value
-                self.update_keys();
                 elapsed_microseconds += self.system.emulate() as u32;
             }
-            // println!("Frame took {} microseconds", start.elapsed().as_micros());
             
             let start= std::time::Instant::now();
             self.window
-                .update_with_buffer(
-                    self.system.get_screen().borrow().get_frame_buffer(),
-                    screen::BUFFER_WIDTH,
-                    screen::BUFFER_HEIGHT,
-                )
-                .unwrap(); // TODO: handle errors properly
-            // println!("Window updated in {} microseconds", start.elapsed().as_micros());
+            .update_with_buffer(
+                self.system.get_screen().borrow().get_frame_buffer(),
+                screen::BUFFER_WIDTH,
+                screen::BUFFER_HEIGHT,
+            )
+            .unwrap(); // TODO: handle errors properly
+            println!("Frame took {} microseconds", start.elapsed().as_micros());
         }
     }
 
