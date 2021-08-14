@@ -200,6 +200,9 @@ impl FloppyDiskController {
                     }
                     None => {
                         self.command = Some(Command::from_byte(value));
+                        self.end_of_track = false;
+                        self.seek_end = false;
+                        self.drive_not_ready = false;
                         self.floppy_controller_busy = true;
 
                         if self.parameters_buffer.len()
