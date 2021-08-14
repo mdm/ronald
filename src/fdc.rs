@@ -203,6 +203,7 @@ impl FloppyDiskController {
                         self.end_of_track = false;
                         self.seek_end = false;
                         self.drive_not_ready = false;
+                        // TODO: do we need to reset anything else?
                         self.floppy_controller_busy = true;
 
                         if self.parameters_buffer.len()
@@ -356,7 +357,18 @@ impl FloppyDiskController {
                     unimplemented!();
                 }
                 Command::Seek => {
-                    unimplemented!();
+                    self.selected_drive = self.parameters_buffer[0] as usize;
+                    let track = self.parameters_buffer[1] as usize;
+                    match &self.drives[self.selected_drive].disk {
+                        Some(_) => {
+                            self.drives[self.selected_drive].track = track;
+                            self.seek_end = true;
+                        }
+                        None => {
+                            self.drive_not_ready = true;
+                        }
+                    }
+                    self.phase = Phase::Command;
                 }
                 Command::ScanEqual => {
                     unimplemented!();
