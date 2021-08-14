@@ -656,6 +656,8 @@ where
                 let value = self.bus.borrow().read_byte(port);
                 self.registers.write_byte(&Register8::A, value);
 
+                // TODO: do we need to set flags?
+
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
@@ -665,6 +667,12 @@ where
 
                 let value = self.bus.borrow().read_byte(port);
                 self.registers.write_byte(destination, value);
+
+                self.set_flag(Flag::Sign, (value as i8) < 0);
+                self.set_flag(Flag::Zero, value == 0);
+                self.set_flag(Flag::HalfCarry, false);
+                self.set_flag(Flag::ParityOverflow, (value.count_ones() & 1) == 0);
+                self.set_flag(Flag::AddSubtract, false);
 
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);

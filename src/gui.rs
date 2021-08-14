@@ -47,7 +47,7 @@ impl GUI {
                 screen::BUFFER_HEIGHT,
             )
             .unwrap(); // TODO: handle errors properly
-            println!("Frame took {} microseconds", start.elapsed().as_micros());
+            // println!("Frame took {} microseconds", start.elapsed().as_micros());
         }
     }
 

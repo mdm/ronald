@@ -24,6 +24,8 @@ Architecture
 TODO
 ----
 
+* Return Self in constructors where possible
+* Check flag affection
 * Add timing for instructions targeting IXH, IXL, IYH, and IYL
 * Implement missing instructions in CPU
 * Implement HALT (re-executed until next interrupt)
@@ -37,6 +39,7 @@ Next Steps
 * Implement debugger
   * State inspection commands
 * Run emulation in separate thread to allow double buffering for screen
+* Allow converting between tokenized BASIC and ASCII
 
 
 Bisection feature
