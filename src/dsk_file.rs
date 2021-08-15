@@ -16,15 +16,17 @@ impl Disk {
         let mut contents = Vec::new();
         file.read_to_end(&mut contents)?;
 
-        let header = b"MV - CPCEMU Disk-File\r\nDisk-Info\r\n";
-        let extended = match contents[0..0x22].cmp(header) {
-            std::cmp::Ordering::Equal => false,
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Could not find the expected file header.",
-                ))
-            }
+        let standard_header = b"MV - CPCEMU Disk-File\r\nDisk-Info\r\n";
+        let extended_header = b"EXTENDED CPC DSK File\r\nDisk-Info\r\n";
+        let extended = if contents[0..0x0b] == standard_header[0..0xb] {
+            false
+        } else if contents[0..0x22] == extended_header[0..0x22] {
+            true
+        } else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Could not find the expected file header.",
+            ));
         };
 
         let creator = match String::from_utf8(contents[0x22..0x30].to_vec()) {
@@ -40,9 +42,17 @@ impl Disk {
         let mut tracks = Vec::new();
         for track in 0..num_tracks {
             for side in 0..num_sides {
-                let track_start = track_size as usize
+                let track_start = if extended {
+                    let mut offset_sum = 0x100 as usize;
+                    for i in 0..(num_sides as usize * track as usize + side as usize) {
+                        offset_sum += (contents[0x34 + i] as usize) << 8;
+                    }
+                    offset_sum
+                } else {
+                    track_size as usize
                     * (num_sides as usize * track as usize + side as usize)
-                    + 0x100;
+                    + 0x100
+                };
                 match contents[track_start..(track_start + 0x0c)].cmp(header) {
                     std::cmp::Ordering::Equal => {
                         let track = contents[track_start + 0x10]; // TODO: verify this is the same as the shadowed value?
@@ -68,6 +78,12 @@ impl Disk {
                                 contents[sector_info_start + 0x02]
                             );
 
+                            let actual_length = if extended {
+                                Some(u16::from_le_bytes(contents[0x32..0x34].try_into().unwrap()))
+                            } else {
+                                None
+                            };
+
                             sector_infos.push(SectorInfo {
                                 track: contents[sector_info_start + 0x00], // TODO: verify this is the same as above?
                                 side: contents[sector_info_start + 0x01], // TODO: verify this is the same as above?
@@ -75,6 +91,7 @@ impl Disk {
                                 sector_size: contents[sector_info_start + 0x03], // TODO: verify this is the same as above?
                                 fdc_status1: contents[sector_info_start + 0x04],
                                 fdc_status2: contents[sector_info_start + 0x05],
+                                actual_length
                             });
 
                             sectors.push(
@@ -149,4 +166,5 @@ pub struct SectorInfo {
     pub sector_size: u8,
     pub fdc_status1: u8, // TODO: do we actually use this?
     pub fdc_status2: u8, // TODO: do we actually use this?
+    pub actual_length: Option<u16>,
 }
