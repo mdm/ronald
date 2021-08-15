@@ -22,32 +22,44 @@ impl GUI {
     }
 
     pub fn run(&mut self) {
-        self.window.limit_update_rate(Some(std::time::Duration::from_micros(20_000)));
+        self.window
+            .limit_update_rate(Some(std::time::Duration::from_micros(20_000)));
 
         while self.window.is_open() && !self.should_quit() {
             // println!("new frame");
-            let start= std::time::Instant::now();
+            let start = std::time::Instant::now();
 
             if self.window.is_key_down(minifb::Key::F12) {
                 self.system.activate_debugger();
             }
 
+            if self.window.is_key_down(minifb::Key::F5) {
+                if let Ok(Some(pathbuf)) = native_dialog::FileDialog::new()
+                    .add_filter("DSK file", &["dsk"])
+                    .show_open_single_file() {
+                    if let Some(dsk_filename) = pathbuf.as_os_str().to_str() {
+                        self.system.load_disk(0, dsk_filename);
+                    }
+                }
+            }
+
             self.update_keys();
 
             let mut elapsed_microseconds: u32 = 0;
-            while elapsed_microseconds < 20_000 { // TODO: tie this to vsync instead of fixed value
+            while elapsed_microseconds < 20_000 {
+                // TODO: tie this to vsync instead of fixed value
                 elapsed_microseconds += self.system.emulate() as u32;
             }
-            
-            let start= std::time::Instant::now();
+
+            let start = std::time::Instant::now();
             self.window
-            .update_with_buffer(
-                self.system.get_screen().borrow().get_frame_buffer(),
-                screen::BUFFER_WIDTH,
-                screen::BUFFER_HEIGHT,
-            )
-            .unwrap(); // TODO: handle errors properly
-            // println!("Frame took {} microseconds", start.elapsed().as_micros());
+                .update_with_buffer(
+                    self.system.get_screen().borrow().get_frame_buffer(),
+                    screen::BUFFER_WIDTH,
+                    screen::BUFFER_HEIGHT,
+                )
+                .unwrap(); // TODO: handle errors properly
+                           // println!("Frame took {} microseconds", start.elapsed().as_micros());
         }
     }
 
