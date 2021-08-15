@@ -43,6 +43,14 @@ fn main() {
                 .help("Selects the system to run")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("floppy")
+                .short("f")
+                .long("floppy")
+                .value_name("DSK_FILE")
+                .help("Loads a DSK file")
+                .takes_value(true),
+        )
         .get_matches();
 
     let system = matches.value_of("system").unwrap_or("cpc464");
@@ -55,7 +63,9 @@ fn main() {
                 cpc.activate_debugger();
             }
 
-            cpc.load_disk(0, "data/Fruity_Frank_1984_Kuma_Computers.dsk");
+            if let Some(dsk_filename) = matches.value_of("floppy") {
+                cpc.load_disk(0, dsk_filename);
+            }
 
             let mut gui = gui::GUI::new(cpc);
             gui.run();
