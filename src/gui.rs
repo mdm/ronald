@@ -3,6 +3,7 @@ use crate::{screen, system};
 pub struct GUI {
     system: Box<dyn system::System>,
     window: minifb::Window,
+    joystick_enabled: bool,
 }
 
 impl GUI {
@@ -18,7 +19,7 @@ impl GUI {
         window.limit_update_rate(Some(std::time::Duration::from_micros(20_000))); // 50 fps
                                                                                   // TODO: measure actual fps
 
-        GUI { system, window }
+        GUI { system, window, joystick_enabled: false }
     }
 
     pub fn run(&mut self) {
@@ -72,6 +73,8 @@ impl GUI {
         let keyboard = self.system.get_keyboard();
         keyboard.borrow_mut().reset_all();
 
+        dbg!(self.window.is_key_down(minifb::Key::NumLock));
+
         if let Some(keys) = self.window.get_keys() {
             for key in keys {
                 match key {
@@ -79,23 +82,47 @@ impl GUI {
                     minifb::Key::Right => keyboard.borrow_mut().set_key(0, 1),
                     minifb::Key::Down => keyboard.borrow_mut().set_key(0, 2),
                     minifb::Key::NumPad9 => keyboard.borrow_mut().set_key(0, 3),
-                    minifb::Key::NumPad6 => keyboard.borrow_mut().set_key(0, 4),
+                    minifb::Key::NumPad6 => if self.joystick_enabled {
+                        keyboard.borrow_mut().set_key(9, 3)
+                    } else {
+                        keyboard.borrow_mut().set_key(0, 4)
+                    },
                     minifb::Key::NumPad3 => keyboard.borrow_mut().set_key(0, 5),
                     minifb::Key::NumPadEnter => keyboard.borrow_mut().set_key(0, 6),
                     minifb::Key::NumPadDot => keyboard.borrow_mut().set_key(0, 7),
                     minifb::Key::Left => keyboard.borrow_mut().set_key(1, 0),
                     minifb::Key::Insert => keyboard.borrow_mut().set_key(1, 1),
                     minifb::Key::NumPad7 => keyboard.borrow_mut().set_key(1, 2),
-                    minifb::Key::NumPad8 => keyboard.borrow_mut().set_key(1, 3),
-                    minifb::Key::NumPad5 => keyboard.borrow_mut().set_key(1, 4),
+                    minifb::Key::NumPad8 => if self.joystick_enabled {
+                        keyboard.borrow_mut().set_key(9, 0)
+                    } else {
+                        keyboard.borrow_mut().set_key(1, 3)
+                    },
+                    minifb::Key::NumPad5 => if self.joystick_enabled {
+                        keyboard.borrow_mut().set_key(9, 4)
+                    } else {
+                        keyboard.borrow_mut().set_key(1, 4)
+                    },
                     minifb::Key::NumPad1 => keyboard.borrow_mut().set_key(1, 5),
-                    minifb::Key::NumPad2 => keyboard.borrow_mut().set_key(1, 6),
-                    minifb::Key::NumPad0 => keyboard.borrow_mut().set_key(1, 7),
+                    minifb::Key::NumPad2 => if self.joystick_enabled {
+                        keyboard.borrow_mut().set_key(9, 1)
+                    } else {
+                        keyboard.borrow_mut().set_key(1, 6)
+                    },
+                    minifb::Key::NumPad0 => if self.joystick_enabled {
+                        keyboard.borrow_mut().set_key(9, 5)
+                    } else {
+                        keyboard.borrow_mut().set_key(1, 7)
+                    },
                     minifb::Key::Delete => keyboard.borrow_mut().set_key(2, 0),
                     minifb::Key::LeftBracket => keyboard.borrow_mut().set_key(2, 1),
                     minifb::Key::Enter => keyboard.borrow_mut().set_key(2, 2),
                     minifb::Key::RightBracket => keyboard.borrow_mut().set_key(2, 3),
-                    minifb::Key::NumPad4 => keyboard.borrow_mut().set_key(2, 4),
+                    minifb::Key::NumPad4 => if self.joystick_enabled {
+                        keyboard.borrow_mut().set_key(9, 2)
+                    } else {
+                        keyboard.borrow_mut().set_key(2, 4)
+                    },
                     minifb::Key::LeftShift => keyboard.borrow_mut().set_key(2, 5),
                     minifb::Key::RightShift => keyboard.borrow_mut().set_key(2, 5),
                     minifb::Key::Backslash => keyboard.borrow_mut().set_key(2, 6),
@@ -148,14 +175,10 @@ impl GUI {
                     minifb::Key::A => keyboard.borrow_mut().set_key(8, 5),
                     minifb::Key::CapsLock => keyboard.borrow_mut().set_key(8, 6),
                     minifb::Key::Z => keyboard.borrow_mut().set_key(8, 7),
-                    // minifb::Key::NumPad8 => keyboard.borrow_mut().set_key(9, 0), // TODO: map joystick 1
-                    // minifb::Key::NumPad2 => keyboard.borrow_mut().set_key(9, 1),
-                    // minifb::Key::NumPad4 => keyboard.borrow_mut().set_key(9, 2),
-                    // minifb::Key::NumPad6 => keyboard.borrow_mut().set_key(9, 3),
-                    // minifb::Key::NumPad5 => keyboard.borrow_mut().set_key(9, 4),
-                    // minifb::Key::NumPad0 => keyboard.borrow_mut().set_key(9, 5),
-                    // minifb::Key::NumPadDot => keyboard.borrow_mut().set_key(9, 6),
                     minifb::Key::Backspace => keyboard.borrow_mut().set_key(9, 7),
+                    minifb::Key::NumLock => {
+                        self.joystick_enabled = !self.joystick_enabled;
+                    }
                     _ => {}
                 }
             }
