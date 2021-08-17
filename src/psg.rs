@@ -34,7 +34,7 @@ impl SoundGenerator {
                 }
             },
             2 => {
-                // println!("PSG {:#04x}: {:#04x}", self.selected_register, self.buffer); // TODO: process data
+                log::trace!("Writing to PSG register {:#04x}: {:#04x}", self.selected_register, self.buffer); // TODO: process data
             },
             3 => {
                 self.selected_register = self.buffer;

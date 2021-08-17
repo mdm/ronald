@@ -209,7 +209,7 @@ where
                     }
                 }
                 Err(error) => {
-                    println!("Error reading from stdin: {}", error);
+                    log::error!("Error reading from stdin: {}", error);
                     break;
                 }
             }

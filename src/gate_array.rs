@@ -51,13 +51,13 @@ impl GateArray {
         match function {
             0 => {
                 if value & 0x10 == 0 {
-                    self.selected_pen = value as usize & 0x0f; // TODO: what if pen number exceeds max. number of pens for mode?
+                    self.selected_pen = (value & 0x0f) as usize; // TODO: what if pen number exceeds max. number of pens for mode?
                 } else {
                     self.selected_pen = 0x10; // select border
                 }
             }
             1 => {
-                // println!("color select (pen {}): {:#04x} ({:#04x})", self.selected_pen, value, value & 0x1f);
+                log::trace!("Gate Array color select (pen {}): {:#04x} ({:#04x})", self.selected_pen, value, value & 0x1f);
                 self.pen_colors[self.selected_pen] = value & 0x1f;
             }
             2 => {
@@ -72,7 +72,7 @@ impl GateArray {
             }
             3 => {
                 // ROM banking (only available in CPC 6128)
-                println!("GA {:#06x} {:#010b}", port, value);
+                log::error!("Gate Array ROM banking not supported: {:#010b}", value);
                 unimplemented!();
             }
             _ => {
@@ -128,7 +128,7 @@ impl GateArray {
     fn update_screen_mode(&mut self) {
         if !self.hsync_active && self.crtc.borrow().read_horizontal_sync() {
             self.current_screen_mode = self.requested_screen_mode;
-            // println!("screen mode {}", self.current_screen_mode);
+            log::trace!("New screen mode: {}", self.current_screen_mode);
         }
     }
 

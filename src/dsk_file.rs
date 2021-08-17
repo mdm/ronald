@@ -12,6 +12,8 @@ pub struct Disk {
 
 impl Disk {
     pub fn load(filename: &str) -> std::io::Result<Disk> {
+        log::debug!("Loading DSK file from \"{}\"", filename);
+
         let mut file = std::fs::File::open(filename)?;
         let mut contents = Vec::new();
         file.read_to_end(&mut contents)?;
@@ -71,7 +73,7 @@ impl Disk {
                                 + track_start
                                 + 0x100;
 
-                            println!(
+                            log::trace!(
                                 "track {}, sector {} (id = {})",
                                 contents[sector_info_start + 0x00],
                                 sector,

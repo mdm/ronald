@@ -2,8 +2,6 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-use log;
-
 use crate::bus;
 use crate::instruction::{Decoder, Instruction, JumpTest, Operand, InterruptMode};
 use crate::memory;
@@ -1269,10 +1267,10 @@ where
             _ => {
                 // TODO: don't forget to adjust timing for:
                 // Indr, Inir, Jr, Otdr, Otir
-                println!(
-                    "{:#06x}: {}",
-                    self.registers.read_word(&Register16::PC),
-                    &instruction
+                log::error!(
+                    "The instruction \"{}\" at {:#06x} is not implemented",
+                    &instruction,
+                    self.registers.read_word(&Register16::PC)
                 );
                 unimplemented!();
             }
@@ -1284,7 +1282,7 @@ where
 
             match self.interrupt_mode {
                 InterruptMode::Mode1 => {
-                    // println!("handle interrupt");
+                    log::debug!("Handling interrupt");
                     let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);

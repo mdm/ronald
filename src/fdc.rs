@@ -135,10 +135,10 @@ impl FloppyDiskController {
         match port {
             0xfb7e => self.report_main_status_register(),
             0xfb7f => {
-                dbg!(&self.result_buffer);
                 match self.phase {
                     Phase::Execution => {
                         let data = if let Some(data) = self.data_buffer.pop_front() {
+                            log::trace!("Reading data from FDC: {:#04x}", data);
                             data
                         } else {
                             unreachable!()
@@ -153,6 +153,7 @@ impl FloppyDiskController {
                     }
                     Phase::Result => {
                         let result = if let Some(result) = self.result_buffer.pop_front() {
+                            log::debug!("Reading result from FDC: {:#04x}", result);
                             result
                         } else {
                             unreachable!()
@@ -167,8 +168,8 @@ impl FloppyDiskController {
                         result
                     }
                     Phase::Command => {
-                        println!("Unexpected FDC read in command phase");
-                        unimplemented!()
+                        log::error!("Unexpected FDC read in command phase");
+                        unreachable!() // TODO: return dummy value instead?
                     }
                 }
             }
@@ -213,11 +214,22 @@ impl FloppyDiskController {
                         }
                     }
                 },
-                _ => unimplemented!(),
+                _ => {
+                    log::error!(
+                        "FDC write outside command phase using port {:#06x}: {:#010b}",
+                        port,
+                        value
+                    );
+                    unimplemented!();
+                }
             },
             _ => {
-                println!("FDC write {:#06x} {:#010b}", port, value);
-                unimplemented!()
+                log::error!(
+                    "Unexpected FDC write using port {:#06x}: {:#010b}",
+                    port,
+                    value
+                );
+                unreachable!();
             }
         }
     }
@@ -225,27 +237,25 @@ impl FloppyDiskController {
     pub fn load_disk(&mut self, drive: usize, filename: &str) {
         self.drives[drive].disk = match dsk_file::Disk::load(filename) {
             Ok(disk) => {
-                println!("LOAD OK"); // TODO: use logger
-                println!("tracks have {} bytes", disk.track_size);
-                println!("{} sectors in track 0", disk.tracks[0].num_sectors);
-                for (i, track) in disk.tracks.iter().enumerate() {
-                    println!("sector {} has {} bytes", i, 0x80 << track.sector_size);
-                }
+                log::info!("Disk loaded successfully");
                 Some(disk)
             }
             Err(error) => {
-                println!("LOAD ERROR: {}", error); // TODO: use logger
+                log::warn!("Disk could not be loaded: {}", error);
                 None
             }
         }
     }
 
     fn execute_command(&mut self) {
-        dbg!(&self.command);
-        dbg!(&self.parameters_buffer);
         self.phase = Phase::Execution;
 
         if let Some(command) = self.command.take() {
+            log::debug!(
+                "Executing FDC command \"{:?}\" with parameters {:?}",
+                &command,
+                &self.parameters_buffer
+            );
             match command {
                 Command::ReadTrack => {
                     unimplemented!();
@@ -291,8 +301,8 @@ impl FloppyDiskController {
 
                             // TODO: verify actual sector length matches input parameters
                             self.data_buffer.extend(sector_data);
-                            println!("FDC STATUS 1: {:#010b}", sector_info.fdc_status1);
-                            println!("FDC STATUS 2: {:#010b}", sector_info.fdc_status2);
+                            log::debug!("FDC STATUS 1: {:#010b}", sector_info.fdc_status1);
+                            log::debug!("FDC STATUS 2: {:#010b}", sector_info.fdc_status2);
                             self.status1 = sector_info.fdc_status1;
                             self.status2 = sector_info.fdc_status2;
                             self.end_of_track = true;
@@ -412,7 +422,7 @@ impl FloppyDiskController {
             value |= 1 << 0;
         }
 
-        println!("FDC MAIN = {:#010b}", value);
+        log::trace!("Reporting FDC main status register: {:#010b}", value);
 
         value
     }

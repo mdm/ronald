@@ -27,7 +27,7 @@ impl GUI {
             .limit_update_rate(Some(std::time::Duration::from_micros(20_000)));
 
         while self.window.is_open() && !self.should_quit() {
-            // println!("new frame");
+            log::trace!("Starting new frame");
             let start = std::time::Instant::now();
 
             if self.window.is_key_down(minifb::Key::F12) {
@@ -60,7 +60,8 @@ impl GUI {
                     screen::BUFFER_HEIGHT,
                 )
                 .unwrap(); // TODO: handle errors properly
-                           // println!("Frame took {} microseconds", start.elapsed().as_micros());
+            
+            log::trace!("Frame took {} microseconds", start.elapsed().as_micros());
         }
     }
 
@@ -72,8 +73,6 @@ impl GUI {
     fn update_keys(&mut self) {
         let keyboard = self.system.get_keyboard();
         keyboard.borrow_mut().reset_all();
-
-        dbg!(self.window.is_key_down(minifb::Key::NumLock));
 
         if let Some(keys) = self.window.get_keys() {
             for key in keys {

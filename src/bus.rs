@@ -75,7 +75,10 @@ impl Bus for StandardBus {
             _ if port & 0x4000 == 0 => self.crtc.borrow().read_byte(port),
             _ if port & 0x0800 == 0 => self.ppi.borrow().read_byte(port),
             0xfb7e | 0xfb7f => self.fdc.borrow_mut().read_byte(port),
-            _ => unimplemented!(),
+            _ => {
+                log::error!("Unhandled read from port {:#06x}", port);
+                unimplemented!();
+            }
         }
     }
 
@@ -92,7 +95,7 @@ impl Bus for StandardBus {
             0xfa7e | 0xfb7f => self.fdc.borrow_mut().write_byte(port, value),
             0xf8ff => (), // peripheral soft reset (ignored)
             _ => {
-                println!("BUS {:#06x} {:#010b}", port, value);
+                log::error!("Unhandled write to port {:#06x}: {:#010b}", port, value);
                 unimplemented!();
             }
         }

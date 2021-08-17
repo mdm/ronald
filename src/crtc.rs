@@ -50,7 +50,8 @@ impl CRTController {
     }
 
     pub fn read_byte(&self, port: u16) -> u8 {
-        dbg!(port);
+        // TODO: get rid of port parameter?
+        log::error!("Unexpected read from CRT controller");
         unimplemented!()
     }
 
