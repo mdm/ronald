@@ -22,7 +22,7 @@ use clap::{App, Arg};
 use crate::system::System;
 
 fn main() {
-    env_logger::Builder::new()
+    env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
         .init();
 
