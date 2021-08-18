@@ -142,14 +142,15 @@ impl GateArray {
         if self.crtc.borrow().read_horizontal_sync() || self.crtc.borrow().read_vertical_sync() {
             // TODO: use modified hsync/vsync durations (see http://www.cpcwiki.eu/index.php?title=CRTC#HSYNC_and_VSYNC)
             for _ in 0..16 {
-                screen.write(20); // black
+                // screen.write(20); // black
+                screen.write(self.pen_colors[0x10] as usize); // border // TODO: remove this workaround for the lengthened vsync problem
             }
             return;
         }
 
         if !self.crtc.borrow().read_display_enabled() {
             for _ in 0..16 {
-                screen.write(12); // bright red
+                screen.write(self.pen_colors[0x10] as usize); // border
             }
             return;
         }

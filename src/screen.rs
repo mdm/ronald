@@ -1,8 +1,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub const BUFFER_WIDTH: usize = 64 * 16;
-pub const BUFFER_HEIGHT: usize = 39 * 16;
+pub const BUFFER_WIDTH: usize = 48 * 16;
+pub const BUFFER_HEIGHT: usize = 35 * 16;
+
+const VIRTUAL_BUFFER_WIDTH: usize = 64 * 16;
+const VIRTUAL_BUFFER_HEIGHT: usize = 39 * 16;
+const BORDER_WIDTH: usize = 4 * 16;
 
 #[allow(clippy::identity_op, clippy::eq_op)]
 const FIRMWARE_COLORS: [u32; 27] = [
@@ -100,18 +104,25 @@ impl Screen {
             return;
         }
 
-        self.buffer[self.gun_position] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
-        self.buffer[self.gun_position + BUFFER_WIDTH] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
+        let buffer_len = self.buffer.len();
+        let x = (self.gun_position + BORDER_WIDTH) % VIRTUAL_BUFFER_WIDTH;
+        let y = (self.gun_position + BORDER_WIDTH) / VIRTUAL_BUFFER_WIDTH;
+
+        if y >= 4 * 16 && x < 48 * 16 {
+            let y = y - (4 * 16);
+            self.buffer[(y * BUFFER_WIDTH + x) % buffer_len] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
+            self.buffer[(y * BUFFER_WIDTH + x + BUFFER_WIDTH) % buffer_len] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
+        }
 
         self.gun_position += 1;
         self.width_counter += 1;
 
-        if self.width_counter == BUFFER_WIDTH {
-            self.gun_position += BUFFER_WIDTH;
+        if self.width_counter == VIRTUAL_BUFFER_WIDTH {
+            self.gun_position += VIRTUAL_BUFFER_WIDTH;
             self.width_counter = 0;
         }
 
-        if self.gun_position == self.buffer.len() {
+        if self.gun_position == VIRTUAL_BUFFER_WIDTH * VIRTUAL_BUFFER_HEIGHT {
             self.gun_position = 0;
             self.waiting_for_vsync = true;
         }

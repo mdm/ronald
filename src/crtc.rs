@@ -106,9 +106,12 @@ impl CRTController {
 
     pub fn read_vertical_sync(&self) -> bool {
         // TODO: what happens before registers are initialized?
-        let sync_start = self.registers[Register::VerticalSyncPosition as usize];
-        let sync_end = self.registers[Register::VerticalSyncPosition as usize] + 16; // this can be switched between 0 and 16 on type 0
-        self.character_row_counter >= sync_start && self.character_row_counter < sync_end
+        let sync_start = self.registers[Register::VerticalSyncPosition as usize] as i32;
+        let character_rows_since_start = self.character_row_counter as i32 - sync_start;
+        let scan_lines_since_start =
+            (self.registers[Register::MaximumRasterAddress as usize] as i32 + 1)
+                * character_rows_since_start + self.scan_line_counter as i32;
+        scan_lines_since_start >= 0 && scan_lines_since_start < 16 * 8 // should be 16 - TODO: find out why shortening this messes with Fruity Frank colors
     }
 
     pub fn step(&mut self) {
