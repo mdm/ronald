@@ -185,8 +185,10 @@ impl SoundGenerator {
 
         let inverse_sqrt_2 = 1f32 / 2f32.sqrt();
 
-        // Produce a sinusoid of maximum amplitude.
         let mut sample_clock = 0f32;
+
+        let mut start = std::time::Instant::now();
+        let mut frames = 0;
 
         let err_fn = |err| log::error!("An error occurred on audio output stream: {}", err);
 
@@ -244,6 +246,13 @@ impl SoundGenerator {
                     for sample in frame.iter_mut() {
                         *sample = value;
                     }
+
+                    frames += 1;
+                    if start.elapsed().as_micros() >= 1_000_000 {
+                        log::trace!("Rendered {} audio sample per second", frames);
+                        frames = 0;
+                        start = std::time::Instant::now();
+                    }    
                 }
             },
             err_fn,
