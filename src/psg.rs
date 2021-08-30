@@ -11,7 +11,8 @@ pub type SoundGeneratorShared = Rc<RefCell<SoundGenerator>>;
 pub struct SoundGenerator {
     keyboard: keyboard::KeyboardShared,
     buffer: u8,
-    selected_register: u8,
+    registers: [u8; 14],
+    selected_register: usize,
     message_channel: mpsc::Sender<SoundMessage>,
     audio_stream: Option<cpal::Stream>,
 }
@@ -22,6 +23,7 @@ impl SoundGenerator {
         let mut psg = SoundGenerator {
             keyboard,
             buffer: 0,
+            registers: [0; 14],
             selected_register: 0,
             message_channel: tx,
             audio_stream: None,
@@ -46,10 +48,74 @@ impl SoundGenerator {
                     "Writing to PSG register {:#04x}: {:#04x}",
                     self.selected_register,
                     self.buffer
-                ); // TODO: process data
+                );
+
+                self.registers[self.selected_register] = self.buffer;
+
+                let message = match self.selected_register {
+                    0x00 | 0x01 => {
+                        let period = ((self.registers[0x01] as u16) & 0x0f) << 8 + self.registers[0x00];
+                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
+                        SoundMessage::ToneFrequency(0, frequency)
+                    }
+                    0x02 | 0x03 => {
+                        let period = ((self.registers[0x03] as u16) & 0x0f) << 8 + self.registers[0x02];
+                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
+                        SoundMessage::ToneFrequency(1, frequency)
+                    }
+                    0x04 | 0x05 => {
+                        let period = ((self.registers[0x05] as u16) & 0x0f) << 8 + self.registers[0x04];
+                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
+                        SoundMessage::ToneFrequency(2, frequency)
+                    }
+                    0x06 => {
+                        let period = self.registers[0x06] & 0x1f;
+                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
+                        SoundMessage::NoiseFrequency(frequency)
+                    }
+                    0x07 => {
+                        SoundMessage::MixerControl(self.registers[0x07])
+                    }
+                    0x08 => {
+                        if (self.registers[0x08] & 0x1f) < 0x10 {
+                            SoundMessage::ChannelVolume(0, Some((self.registers[0x08] & 0x1f) as i32))
+                        } else {
+                            SoundMessage::ChannelVolume(0, None)
+                        }                        
+                    }
+                    0x09 => {
+                        if (self.registers[0x09] & 0x1f) < 0x10 {
+                            SoundMessage::ChannelVolume(0, Some((self.registers[0x09] & 0x1f) as i32))
+                        } else {
+                            SoundMessage::ChannelVolume(0, None)
+                        }                        
+                    }
+                    0x0a => {
+                        if (self.registers[0x0a] & 0x1f) < 0x10 {
+                            SoundMessage::ChannelVolume(0, Some((self.registers[0x0a] & 0x1f) as i32))
+                        } else {
+                            SoundMessage::ChannelVolume(0, None)
+                        }                        
+                    }
+                    0x0b | 0x0c => {
+                        let period = (self.registers[0x0c] as u16) << 8 + self.registers[0x0b];
+                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
+                        SoundMessage::EnvelopeFrequency(frequency)
+                    }
+                    0x0d => {
+                        SoundMessage::EnvelopeShape(self.registers[0x0d] & 0x0f)
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                if let Err(err) = self.message_channel.send(message) {
+                    log::debug!("Error sending message to audio thread: {}", err);
+                }
             }
             3 => {
-                self.selected_register = self.buffer;
+                self.selected_register = self.buffer as usize; // TODO: check bounds
             }
             _ => unimplemented!(),
         }
@@ -104,12 +170,14 @@ impl SoundGenerator {
         let mut noise_frequency = 0f32;
         let mut tone_active = [false; 3];
         let mut noise_active = [false; 3];
-        let mut channel_volume = [Some(0f32); 3];
+        let mut channel_volume = [Some(0i32); 3];
         let mut envelope_frequency = 0f32;
         let mut envelope_shape_hold = false;
         let mut envelope_shape_alternate = false;
         let mut envelope_shape_attack = false;
         let mut envelope_shape_continue = false;
+
+        let inverse_sqrt_2 = 1f32 / 2f32.sqrt();
 
         // Produce a sinusoid of maximum amplitude.
         let mut sample_clock = 0f32;
@@ -120,7 +188,8 @@ impl SoundGenerator {
             for channel in 0..3 {
                 if tone_active[channel] {
                     match channel_volume[channel] {
-                        Some(volume) => {
+                        Some(volume_level) => {
+                            let volume = inverse_sqrt_2.powi(15 - volume_level);
                             sample += volume * (sample_clock * tone_frequency[channel] * 2.0 * std::f32::consts::PI / sample_rate).sin();
                         }
                         None => {
@@ -198,7 +267,7 @@ enum SoundMessage {
     ToneFrequency(usize, f32),
     NoiseFrequency(f32),
     MixerControl(u8),
-    ChannelVolume(usize, Option<f32>),
+    ChannelVolume(usize, Option<i32>),
     EnvelopeFrequency(f32),
     EnvelopeShape(u8),
 }
