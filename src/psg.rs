@@ -249,19 +249,21 @@ impl SoundGenerator {
                             match channel_volume[channel] {
                                 Some(volume_level) => {
                                     let volume = inverse_sqrt_2.powi(15 - volume_level);
-                                    let square_wave = (0..10)
-                                        .into_iter()
-                                        .map(|k| {
-                                            (sample_clock
-                                                * tone_frequency[channel]
-                                                * (2.0 * k as f32 + 1.0)
-                                                * 2.0
-                                                * std::f32::consts::PI
-                                                / sample_rate)
-                                                .sin()
-                                                / (2.0 * k as f32 + 1.0)
-                                        })
-                                        .sum::<f32>();
+                                    let square_wave = 0.5
+                                        + (2.0 / std::f32::consts::PI)
+                                            * (0..10)
+                                                .into_iter()
+                                                .map(|k| {
+                                                    (sample_clock
+                                                        * tone_frequency[channel]
+                                                        * (2.0 * k as f32 + 1.0)
+                                                        * 2.0
+                                                        * std::f32::consts::PI
+                                                        / sample_rate)
+                                                        .sin()
+                                                        / (2.0 * k as f32 + 1.0)
+                                                })
+                                                .sum::<f32>();
                                     next_sample += volume * square_wave;
                                 }
                                 None => {
