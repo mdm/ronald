@@ -114,7 +114,6 @@ impl SoundGenerator {
                             self.tone_active[channel] = (self.registers[0x07] & (1 << channel)) == 0;
                             self.noise_active[channel] = (self.registers[0x07] & (8 << channel)) == 0;
                         }
-                        dbg!(&self.tone_active);
                     }
                     0x08 => {
                         if (self.registers[0x08] & 0x1f) < 0x10 {
