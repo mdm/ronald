@@ -15,8 +15,7 @@ pub struct SoundGenerator {
     buffer: u8,
     registers: [u8; 14],
     selected_register: usize,
-    sample_batch: Vec<f32>,
-    sample_queue: mpsc::Sender<Vec<f32>>,
+    sample_queue: mpsc::Sender<f32>,
     audio_stream: Option<cpal::Stream>,
     sample_rate: Option<f32>,
     chip_clock: u32,
@@ -43,7 +42,6 @@ impl SoundGenerator {
             buffer: 0,
             registers: [0; 14],
             selected_register: 0,
-            sample_batch: Vec::new(),
             sample_queue: tx,
             audio_stream: None,
             sample_rate: None,
@@ -200,7 +198,6 @@ impl SoundGenerator {
                                             })
                                             .sum::<f32>();
                                 sample += volume * square_wave;
-                                sample = (self.sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin();
                             }
                             None => {
                                 // TODO: Use volume envelope
@@ -209,13 +206,8 @@ impl SoundGenerator {
                     }
                 }
 
-                self.sample_batch.push(sample);
-                // self.sample_batch.push((self.sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin());
-
-                if self.sample_batch.len() as f32 > sample_rate / 10.0 {
-                    if let Err(err) = self.sample_queue.send(std::mem::take(&mut self.sample_batch)) {
-                        log::debug!("Error sending sample to audio thread: {}", err);
-                    }
+                if let Err(err) = self.sample_queue.send(sample) {
+                    log::debug!("Error sending sample to audio thread: {}", err);
                 }
 
                 self.frames += 1;
@@ -230,7 +222,7 @@ impl SoundGenerator {
         }
     }
 
-    fn init_audio_stream(&mut self, sample_queue: mpsc::Receiver<Vec<f32>>) {
+    fn init_audio_stream(&mut self, sample_queue: mpsc::Receiver<f32>) {
         let host = cpal::default_host();
 
         match host.default_output_device() {
@@ -264,63 +256,40 @@ impl SoundGenerator {
         &mut self,
         device: &cpal::Device,
         config: &cpal::StreamConfig,
-        sample_queue: mpsc::Receiver<Vec<f32>>,
+        sample_queue: mpsc::Receiver<f32>,
     ) where
         T: cpal::Sample,
     {
         let sample_rate = config.sample_rate.0 as f32;
         let channels = config.channels as usize;
 
-        let mut sample_batch = Vec::new();
-        let mut sample_index = 0;
-
-        let mut count = 10;
         let mut start = std::time::Instant::now();
         let mut frames = 0;
-
-        let mut sample_clock = 0.0;
 
         let err_fn = |err| log::error!("An error occurred on audio output stream: {}", err);
 
         match device.build_output_stream(
             config,
             move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
-                // for frame in output.chunks_mut(channels) {
-                //     sample_clock = (sample_clock + 1.0) % sample_rate;
-                //     let next_sample = (sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin();
-    
-                //     let value: T = cpal::Sample::from::<f32>(&next_sample);
-                //     for sample in frame.iter_mut() {
-                //         *sample = value;
-                //     }
-                // }
-
-                
                 for frame in output.chunks_mut(channels) {
-                    if sample_index >= sample_batch.len() {
-                        match sample_queue.recv() {
-                            Ok(next_batch) => {
-                                sample_batch = next_batch;
-                                sample_index = 0;
-                                log::trace!("New batch with {} items", sample_batch.len());
-                            }
-                            Err(err) => {
-                                log::trace!("Error fetching next audio sample batch: {}", err);
-                            }
+                    let next_sample = match sample_queue.recv() {
+                        Ok(sample) => {
+                            sample
                         }
-                    }
+                        Err(err) => {
+                            log::trace!("Error fetching next audio sample batch: {}", err);
+                            0.0
+                        }
+                    };
 
-                    let value: T = cpal::Sample::from::<f32>(&sample_batch[sample_index]);
+                    let value: T = cpal::Sample::from::<f32>(&next_sample);
                     for sample in frame.iter_mut() {
                         *sample = value;
                     }
 
-                    sample_index += 1;
-
                     frames += 1;
                     if start.elapsed().as_micros() >= 1_000_000 {
                         log::trace!("Rendered {} audio samples per second", frames);
-                        log::trace!("Sample rate: {}", sample_rate);
                         frames = 0;
                         start = std::time::Instant::now();
                     }
