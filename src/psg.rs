@@ -3,19 +3,35 @@ use std::rc::Rc;
 use std::sync::mpsc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use nom::number::complete::f32;
 
 use crate::keyboard;
 
 pub type SoundGeneratorShared = Rc<RefCell<SoundGenerator>>;
+
+const INVERSE_SQRT_2: f32 = 1.0 / std::f32::consts::SQRT_2;
 
 pub struct SoundGenerator {
     keyboard: keyboard::KeyboardShared,
     buffer: u8,
     registers: [u8; 14],
     selected_register: usize,
-    message_channel: mpsc::Sender<SoundMessage>,
+    sample_queue: mpsc::Sender<f32>,
     audio_stream: Option<cpal::Stream>,
+    sample_rate: Option<f32>,
+    chip_clock: u32,
+    sample_clock: f32,
+    tone_frequency: [f32; 3],
+    noise_frequency: f32,
+    tone_active: [bool; 3],
+    noise_active: [bool; 3],
+    channel_volume: [Option<i32>; 3],
+    envelope_frequency: f32,
+    envelope_shape_hold: bool,
+    envelope_shape_alternate: bool,
+    envelope_shape_attack: bool,
+    envelope_shape_continue: bool,
+    frames: u32,
+    start: std::time::Instant,
 }
 
 impl SoundGenerator {
@@ -26,8 +42,23 @@ impl SoundGenerator {
             buffer: 0,
             registers: [0; 14],
             selected_register: 0,
-            message_channel: tx,
+            sample_queue: tx,
             audio_stream: None,
+            sample_rate: None,
+            chip_clock: 0,
+            sample_clock: 0f32,
+            tone_frequency: [0f32; 3],
+            noise_frequency: 0f32,
+            tone_active: [false; 3],
+            noise_active: [false; 3],
+            channel_volume: [Some(0i32); 3],
+            envelope_frequency: 0f32,
+            envelope_shape_hold: false,
+            envelope_shape_alternate: false,
+            envelope_shape_attack: false,
+            envelope_shape_continue: false,
+            frames: 0,
+            start: std::time::Instant::now(),
         };
 
         psg.init_audio_stream(rx);
@@ -53,83 +84,74 @@ impl SoundGenerator {
 
                 self.registers[self.selected_register] = self.buffer;
 
-                let message = match self.selected_register {
+                match self.selected_register {
                     0x00 | 0x01 => {
                         let period = (((self.registers[0x01] as u16) & 0x0f) << 8)
                             + self.registers[0x00] as u16;
                         // TODO: adjust period if 0
-                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
-                        SoundMessage::ToneFrequency(0, frequency)
+                        self.tone_frequency[0] = 1_000_000.0 * 0.0625 / (period as f32);
                     }
                     0x02 | 0x03 => {
                         let period = (((self.registers[0x03] as u16) & 0x0f) << 8)
                             + self.registers[0x02] as u16;
                         // TODO: adjust period if 0
-                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
-                        SoundMessage::ToneFrequency(1, frequency)
+                        self.tone_frequency[1] = 1_000_000.0 * 0.0625 / (period as f32);
                     }
                     0x04 | 0x05 => {
                         let period = (((self.registers[0x05] as u16) & 0x0f) << 8)
                             + self.registers[0x04] as u16;
                         // TODO: adjust period if 0
-                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
-                        SoundMessage::ToneFrequency(2, frequency)
+                        self.tone_frequency[2] = 1_000_000.0 * 0.0625 / (period as f32);
                     }
                     0x06 => {
                         let period = self.registers[0x06] & 0x1f;
                         // TODO: adjust period if 0
-                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
-                        SoundMessage::NoiseFrequency(frequency)
+                        self.noise_frequency = 1_000_000.0 * 0.0625 / (period as f32);
                     }
                     0x07 => {
                         // TODO: pause/resume audio stream as appropriate
-                        SoundMessage::MixerControl(self.registers[0x07])
+                        for channel in 0..3 {
+                            self.tone_active[channel] = (self.registers[0x07] & (1 << channel)) == 0;
+                            self.noise_active[channel] = (self.registers[0x07] & (8 << channel)) == 0;
+                        }
+                        dbg!(&self.tone_active);
                     }
                     0x08 => {
                         if (self.registers[0x08] & 0x1f) < 0x10 {
-                            SoundMessage::ChannelVolume(
-                                0,
-                                Some((self.registers[0x08] & 0x1f) as i32),
-                            )
+                            self.channel_volume[0] = Some((self.registers[0x08] & 0x1f) as i32);
                         } else {
-                            SoundMessage::ChannelVolume(0, None)
+                            self.channel_volume[0] = None;
                         }
                     }
                     0x09 => {
                         if (self.registers[0x09] & 0x1f) < 0x10 {
-                            SoundMessage::ChannelVolume(
-                                1,
-                                Some((self.registers[0x09] & 0x1f) as i32),
-                            )
+                            self.channel_volume[1] = Some((self.registers[0x08] & 0x1f) as i32);
                         } else {
-                            SoundMessage::ChannelVolume(1, None)
+                            self.channel_volume[1] = None;
                         }
                     }
                     0x0a => {
                         if (self.registers[0x0a] & 0x1f) < 0x10 {
-                            SoundMessage::ChannelVolume(
-                                2,
-                                Some((self.registers[0x0a] & 0x1f) as i32),
-                            )
+                            self.channel_volume[2] = Some((self.registers[0x08] & 0x1f) as i32);
                         } else {
-                            SoundMessage::ChannelVolume(2, None)
+                            self.channel_volume[2] = None;
                         }
                     }
                     0x0b | 0x0c => {
                         let period =
                             ((self.registers[0x0c] as u16) << 8) + self.registers[0x0b] as u16;
                         // TODO: adjust period if 0
-                        let frequency = 1_000_000.0 * 0.0625 / (period as f32);
-                        SoundMessage::EnvelopeFrequency(frequency)
+                        self.envelope_frequency = 1_000_000.0 * 0.0625 / (period as f32);
                     }
-                    0x0d => SoundMessage::EnvelopeShape(self.registers[0x0d] & 0x0f),
+                    0x0d => {
+                        self.envelope_shape_hold = (self.registers[0x0d] & 1) != 0;
+                        self.envelope_shape_alternate = (self.registers[0x0d] & 2) != 0;
+                        self.envelope_shape_attack = (self.registers[0x0d] & 4) != 0;
+                        self.envelope_shape_continue = (self.registers[0x0d] & 8) != 0;
+                    }
                     _ => {
                         unreachable!()
                     }
-                };
-
-                if let Err(err) = self.message_channel.send(message) {
-                    log::debug!("Error sending message to audio thread: {}", err);
                 }
             }
             3 => {
@@ -147,7 +169,60 @@ impl SoundGenerator {
         self.buffer = value;
     }
 
-    fn init_audio_stream(&mut self, message_channel: mpsc::Receiver<SoundMessage>) {
+    pub fn step(&mut self) {
+        self.chip_clock += 1;
+
+        if let Some(sample_rate) = self.sample_rate {
+            if self.chip_clock as f32 >= (1_000_000.0 / sample_rate).floor() {
+                self.sample_clock = (self.sample_clock + 1.0) % sample_rate;
+                let mut sample = 0f32;
+
+                for channel in 0..3 {
+                    if self.tone_active[channel] {
+                        match self.channel_volume[channel] {
+                            Some(volume_level) => {
+                                let volume = INVERSE_SQRT_2.powi(15 - volume_level);
+                                let square_wave = 0.5
+                                    + (2.0 / std::f32::consts::PI)
+                                        * (0..10)
+                                            .into_iter()
+                                            .map(|k| {
+                                                (self.sample_clock
+                                                    * self.tone_frequency[channel]
+                                                    * (2.0 * k as f32 + 1.0)
+                                                    * 2.0
+                                                    * std::f32::consts::PI
+                                                    / sample_rate)
+                                                    .sin()
+                                                    / (2.0 * k as f32 + 1.0)
+                                            })
+                                            .sum::<f32>();
+                                sample += volume * square_wave;
+                            }
+                            None => {
+                                // TODO: Use volume envelope
+                            }
+                        }
+                    }
+                }
+
+                if let Err(err) = self.sample_queue.send(sample) {
+                    log::debug!("Error sending sample to audio thread: {}", err);
+                }
+
+                self.frames += 1;
+                if self.start.elapsed().as_micros() >= 1_000_000 {
+                    log::trace!("Generated {} audio samples per second", self.frames);
+                    self.frames = 0;
+                    self.start = std::time::Instant::now();
+                }
+
+                self.chip_clock = 0;
+            }
+        }
+    }
+
+    fn init_audio_stream(&mut self, sample_queue: mpsc::Receiver<f32>) {
         let host = cpal::default_host();
 
         match host.default_output_device() {
@@ -157,13 +232,13 @@ impl SoundGenerator {
 
                     match config.sample_format() {
                         cpal::SampleFormat::F32 => {
-                            self.run_audio_stream::<f32>(&device, &config.into(), message_channel)
+                            self.run_audio_stream::<f32>(&device, &config.into(), sample_queue)
                         }
                         cpal::SampleFormat::I16 => {
-                            self.run_audio_stream::<i16>(&device, &config.into(), message_channel)
+                            self.run_audio_stream::<i16>(&device, &config.into(), sample_queue)
                         }
                         cpal::SampleFormat::U16 => {
-                            self.run_audio_stream::<u16>(&device, &config.into(), message_channel)
+                            self.run_audio_stream::<u16>(&device, &config.into(), sample_queue)
                         }
                     }
                 }
@@ -181,27 +256,12 @@ impl SoundGenerator {
         &mut self,
         device: &cpal::Device,
         config: &cpal::StreamConfig,
-        message_channel: mpsc::Receiver<SoundMessage>,
+        sample_queue: mpsc::Receiver<f32>,
     ) where
         T: cpal::Sample,
     {
         let sample_rate = config.sample_rate.0 as f32;
         let channels = config.channels as usize;
-
-        let mut tone_frequency = [0f32; 3];
-        let mut noise_frequency = 0f32;
-        let mut tone_active = [false; 3];
-        let mut noise_active = [false; 3];
-        let mut channel_volume = [Some(0i32); 3];
-        let mut envelope_frequency = 0f32;
-        let mut envelope_shape_hold = false;
-        let mut envelope_shape_alternate = false;
-        let mut envelope_shape_attack = false;
-        let mut envelope_shape_continue = false;
-
-        let inverse_sqrt_2 = 1f32 / 2f32.sqrt();
-
-        let mut sample_clock = 0f32;
 
         let mut start = std::time::Instant::now();
         let mut frames = 0;
@@ -211,67 +271,16 @@ impl SoundGenerator {
         match device.build_output_stream(
             config,
             move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
-                if let Ok(message) = message_channel.try_recv() {
-                    match message {
-                        SoundMessage::ToneFrequency(channel, frequency) => {
-                            tone_frequency[channel] = frequency;
-                        }
-                        SoundMessage::NoiseFrequency(frequency) => {
-                            noise_frequency = frequency;
-                        }
-                        SoundMessage::MixerControl(bits) => {
-                            for channel in 0..3 {
-                                tone_active[channel] = (bits & (1 << channel)) == 0;
-                                noise_active[channel] = (bits & (8 << channel)) == 0;
-                            }
-                        }
-                        SoundMessage::ChannelVolume(channel, volume) => {
-                            channel_volume[channel] = volume;
-                        }
-                        SoundMessage::EnvelopeFrequency(frequency) => {
-                            envelope_frequency = frequency;
-                        }
-                        SoundMessage::EnvelopeShape(bits) => {
-                            envelope_shape_hold = (bits & 1) != 0;
-                            envelope_shape_alternate = (bits & 2) != 0;
-                            envelope_shape_attack = (bits & 4) != 0;
-                            envelope_shape_continue = (bits & 8) != 0;
-                        }
-                    }
-                }
-
                 for frame in output.chunks_mut(channels) {
-                    sample_clock = (sample_clock + 1.0) % sample_rate;
-                    let mut next_sample = 0f32;
-
-                    for channel in 0..3 {
-                        if tone_active[channel] {
-                            match channel_volume[channel] {
-                                Some(volume_level) => {
-                                    let volume = inverse_sqrt_2.powi(15 - volume_level);
-                                    let square_wave = 0.5
-                                        + (2.0 / std::f32::consts::PI)
-                                            * (0..10)
-                                                .into_iter()
-                                                .map(|k| {
-                                                    (sample_clock
-                                                        * tone_frequency[channel]
-                                                        * (2.0 * k as f32 + 1.0)
-                                                        * 2.0
-                                                        * std::f32::consts::PI
-                                                        / sample_rate)
-                                                        .sin()
-                                                        / (2.0 * k as f32 + 1.0)
-                                                })
-                                                .sum::<f32>();
-                                    next_sample += volume * square_wave;
-                                }
-                                None => {
-                                    // TODO: Use volume envelope
-                                }
-                            }
+                    let next_sample = match sample_queue.recv() {
+                        Ok(sample) => {
+                            sample
                         }
-                    }
+                        Err(err) => {
+                            log::trace!("Error fetching next audio sample batch: {}", err);
+                            0.0
+                        }
+                    };
 
                     let value: T = cpal::Sample::from::<f32>(&next_sample);
                     for sample in frame.iter_mut() {
@@ -280,7 +289,7 @@ impl SoundGenerator {
 
                     frames += 1;
                     if start.elapsed().as_micros() >= 1_000_000 {
-                        log::trace!("Rendered {} audio sample per second", frames);
+                        log::trace!("Rendered {} audio samples per second", frames);
                         frames = 0;
                         start = std::time::Instant::now();
                     }
@@ -290,6 +299,7 @@ impl SoundGenerator {
         ) {
             Ok(audio_stream) => {
                 self.audio_stream = Some(audio_stream);
+                self.sample_rate = Some(sample_rate);
             }
             Err(err) => {
                 log::error!("Error initializing audio stream: {}", err);
@@ -330,13 +340,4 @@ impl SoundGenerator {
             }
         }
     }
-}
-
-enum SoundMessage {
-    ToneFrequency(usize, f32),
-    NoiseFrequency(f32),
-    MixerControl(u8),
-    ChannelVolume(usize, Option<i32>),
-    EnvelopeFrequency(f32),
-    EnvelopeShape(u8),
 }

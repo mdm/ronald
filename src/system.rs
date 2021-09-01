@@ -103,7 +103,8 @@ impl CPC464 {
             fdc.clone(),
             gate_array::GateArray::new_shared(memory.clone(), crtc.clone(), screen.clone()),
             memory.clone(),
-            ppi::PeripheralInterface::new_shared(crtc, keyboard.clone(), psg, tape),
+            ppi::PeripheralInterface::new_shared(crtc, keyboard.clone(), psg.clone(), tape),
+            psg,
         );
         let cpu = cpu::CPU::new_shared(memory, bus.clone(), 0);
         let debugger = debugger::Debugger::new_shared(cpu.clone());

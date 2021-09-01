@@ -3,6 +3,7 @@ use crate::fdc;
 use crate::gate_array;
 use crate::memory;
 use crate::ppi;
+use crate::psg;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -38,6 +39,7 @@ pub struct StandardBus {
     gate_array: gate_array::GateArrayShared,
     memory: memory::MemoryShared,
     ppi: ppi::PeripheralInterfaceShared,
+    psg: psg::SoundGeneratorShared,
 }
 
 impl StandardBus {
@@ -47,6 +49,7 @@ impl StandardBus {
         gate_array: gate_array::GateArrayShared,
         memory: memory::MemoryShared,
         ppi: ppi::PeripheralInterfaceShared,
+        psg: psg::SoundGeneratorShared,
     ) -> StandardBusShared {
         let bus = StandardBus {
             crtc,
@@ -54,12 +57,14 @@ impl StandardBus {
             gate_array,
             memory,
             ppi,
+            psg,
         };
 
         Rc::new(RefCell::new(bus))
     }
 
     pub fn step(&mut self) -> bool {
+        self.psg.borrow_mut().step();
         self.crtc.borrow_mut().step();
         self.gate_array.borrow_mut().step()
     }
