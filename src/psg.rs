@@ -220,7 +220,7 @@ impl SoundGenerator {
 
                 self.frames += 1;
                 if self.start.elapsed().as_micros() >= 1_000_000 {
-                    log::trace!("Sent {} audio sample per second", self.frames);
+                    log::trace!("Generated {} audio samples per second", self.frames);
                     self.frames = 0;
                     self.start = std::time::Instant::now();
                 }
@@ -318,7 +318,7 @@ impl SoundGenerator {
 
                 frames += 1;
                 if start.elapsed().as_micros() >= 1_000_000 {
-                    log::trace!("Received {} audio sample per second", frames);
+                    log::trace!("Rendered {} audio samples per second", frames);
                     log::trace!("Sample rate: {}", sample_rate);
                     frames = 0;
                     start = std::time::Instant::now();
