@@ -209,13 +209,13 @@ impl SoundGenerator {
                     }
                 }
 
-                // self.sample_batch.push(sample);
-                self.sample_batch.push((self.sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin());
+                self.sample_batch.push(sample);
+                // self.sample_batch.push((self.sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin());
 
                 if self.sample_batch.len() as f32 > sample_rate / 10.0 {
-                    // if let Err(err) = self.sample_queue.send(std::mem::take(&mut self.sample_batch)) {
-                    //     log::debug!("Error sending sample to audio thread: {}", err);
-                    // }
+                    if let Err(err) = self.sample_queue.send(std::mem::take(&mut self.sample_batch)) {
+                        log::debug!("Error sending sample to audio thread: {}", err);
+                    }
                 }
 
                 self.frames += 1;
@@ -271,7 +271,7 @@ impl SoundGenerator {
         let sample_rate = config.sample_rate.0 as f32;
         let channels = config.channels as usize;
 
-        // let mut sample_batch = Vec::new();
+        let mut sample_batch = Vec::new();
         let mut sample_index = 0;
 
         let mut count = 10;
@@ -285,43 +285,45 @@ impl SoundGenerator {
         match device.build_output_stream(
             config,
             move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
-                sample_clock = (sample_clock + 1.0) % sample_rate;
-                let next_sample = (sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin();
+                // for frame in output.chunks_mut(channels) {
+                //     sample_clock = (sample_clock + 1.0) % sample_rate;
+                //     let next_sample = (sample_clock * 440.0 * 2.0 * std::f32::consts::PI / sample_rate).sin();
+    
+                //     let value: T = cpal::Sample::from::<f32>(&next_sample);
+                //     for sample in frame.iter_mut() {
+                //         *sample = value;
+                //     }
+                // }
+
+                
                 for frame in output.chunks_mut(channels) {
-                    let value: T = cpal::Sample::from::<f32>(&next_sample);
+                    if sample_index >= sample_batch.len() {
+                        match sample_queue.recv() {
+                            Ok(next_batch) => {
+                                sample_batch = next_batch;
+                                sample_index = 0;
+                                log::trace!("New batch with {} items", sample_batch.len());
+                            }
+                            Err(err) => {
+                                log::trace!("Error fetching next audio sample batch: {}", err);
+                            }
+                        }
+                    }
+
+                    let value: T = cpal::Sample::from::<f32>(&sample_batch[sample_index]);
                     for sample in frame.iter_mut() {
                         *sample = value;
                     }
-                }
 
-                // if sample_index < sample_batch.len() {
-                //     for frame in output.chunks_mut(channels) {
-                //         let value: T = cpal::Sample::from::<f32>(&sample_batch[sample_index]);
-                //         for sample in frame.iter_mut() {
-                //             *sample = value;
-                //         }
-                //     }
+                    sample_index += 1;
 
-                //     sample_index += 1;
-                // } else {
-                //     match sample_queue.recv() {
-                //         Ok(next_batch) => {
-                //             sample_batch = next_batch;
-                //             sample_index = 0;
-                //             log::trace!("New batch with {} items", sample_batch.len());
-                //         }
-                //         Err(err) => {
-                //             log::trace!("Error fetching next audio sample batch: {}", err);
-                //         }
-                //     };
-                // }
-
-                frames += 1;
-                if start.elapsed().as_micros() >= 1_000_000 {
-                    log::trace!("Rendered {} audio samples per second", frames);
-                    log::trace!("Sample rate: {}", sample_rate);
-                    frames = 0;
-                    start = std::time::Instant::now();
+                    frames += 1;
+                    if start.elapsed().as_micros() >= 1_000_000 {
+                        log::trace!("Rendered {} audio samples per second", frames);
+                        log::trace!("Sample rate: {}", sample_rate);
+                        frames = 0;
+                        start = std::time::Instant::now();
+                    }
                 }
             },
             err_fn,
