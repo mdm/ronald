@@ -10,6 +10,25 @@ pub type SoundGeneratorShared = Rc<RefCell<SoundGenerator>>;
 
 const INVERSE_SQRT_2: f32 = 1.0 / std::f32::consts::SQRT_2;
 
+const VOLUMES: [f32; 16] = [
+    0.0,
+    0.00999465934234,
+    0.0144502937362,
+    0.0210574502174,
+    0.0307011520562,
+    0.0455481803616,
+    0.0644998855573,
+    0.107362478065,
+    0.126588845655,
+    0.20498970016,
+    0.292210269322,
+    0.372838941024,
+    0.492530708782,
+    0.635324635691,
+    0.805584802014,
+    1.0,
+];
+
 pub struct SoundGenerator {
     keyboard: keyboard::KeyboardShared,
     buffer: u8,
@@ -189,6 +208,8 @@ impl SoundGenerator {
                         match self.channel_volume[channel] {
                             Some(volume_level) => {
                                 let volume = INVERSE_SQRT_2.powi(15 - volume_level);
+                                let volume = VOLUMES[volume_level as usize];
+                                let volume = 0.33; // TODO: fix volume calculation
                                 let square_wave = 0.5
                                     + (2.0 / std::f32::consts::PI)
                                         * (0..10)
@@ -204,7 +225,7 @@ impl SoundGenerator {
                                                     / (2.0 * k as f32 + 1.0)
                                             })
                                             .sum::<f32>();
-                                sample += 1.0 * square_wave;
+                                sample += volume * square_wave;
                             }
                             None => {
                                 // TODO: Use volume envelope
