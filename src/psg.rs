@@ -18,7 +18,8 @@ pub struct SoundGenerator {
     sample_queue: mpsc::Sender<f32>,
     audio_stream: Option<cpal::Stream>,
     sample_rate: Option<f32>,
-    chip_clock: u32,
+    chip_clock_now: u32,
+    chip_clock_next_sample: f32,
     sample_clock: f32,
     tone_frequency: [f32; 3],
     noise_frequency: f32,
@@ -45,14 +46,15 @@ impl SoundGenerator {
             sample_queue: tx,
             audio_stream: None,
             sample_rate: None,
-            chip_clock: 0,
-            sample_clock: 0f32,
-            tone_frequency: [0f32; 3],
-            noise_frequency: 0f32,
+            chip_clock_now: 0,
+            chip_clock_next_sample: 0.0,
+            sample_clock: 0.0,
+            tone_frequency: [0.0; 3],
+            noise_frequency: 0.0,
             tone_active: [false; 3],
             noise_active: [false; 3],
-            channel_volume: [Some(0i32); 3],
-            envelope_frequency: 0f32,
+            channel_volume: [Some(0); 3],
+            envelope_frequency: 0.0,
             envelope_shape_hold: false,
             envelope_shape_alternate: false,
             envelope_shape_attack: false,
@@ -169,10 +171,16 @@ impl SoundGenerator {
     }
 
     pub fn step(&mut self) {
-        self.chip_clock += 1;
+        self.chip_clock_now += 1;
 
         if let Some(sample_rate) = self.sample_rate {
-            if self.chip_clock as f32 >= (1_000_000.0 / sample_rate).floor() {
+            if self.chip_clock_now as f32 >= sample_rate {
+                self.chip_clock_now = 0;
+                self.chip_clock_next_sample = 0.0;
+            }
+
+            if self.chip_clock_now as f32 >= self.chip_clock_next_sample.floor() {
+                self.chip_clock_next_sample += 1_000_000.0 / sample_rate;
                 self.sample_clock = (self.sample_clock + 1.0) % sample_rate;
                 let mut sample = 0f32;
 
@@ -196,7 +204,7 @@ impl SoundGenerator {
                                                     / (2.0 * k as f32 + 1.0)
                                             })
                                             .sum::<f32>();
-                                sample += volume * square_wave;
+                                sample += 1.0 * square_wave;
                             }
                             None => {
                                 // TODO: Use volume envelope
@@ -215,8 +223,6 @@ impl SoundGenerator {
                     self.frames = 0;
                     self.start = std::time::Instant::now();
                 }
-
-                self.chip_clock = 0;
             }
         }
     }
@@ -262,6 +268,8 @@ impl SoundGenerator {
         let sample_rate = config.sample_rate.0 as f32;
         let channels = config.channels as usize;
 
+        let mut last_sample = 0.0;
+
         let mut start = std::time::Instant::now();
         let mut frames = 0;
 
@@ -271,13 +279,13 @@ impl SoundGenerator {
             config,
             move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
                 for frame in output.chunks_mut(channels) {
-                    let next_sample = match sample_queue.recv() {
+                    let next_sample = match sample_queue.try_recv() {
                         Ok(sample) => {
                             sample
                         }
                         Err(err) => {
                             log::trace!("Error fetching next audio sample batch: {}", err);
-                            0.0
+                            last_sample
                         }
                     };
 
@@ -285,6 +293,8 @@ impl SoundGenerator {
                     for sample in frame.iter_mut() {
                         *sample = value;
                     }
+
+                    last_sample = next_sample;
 
                     frames += 1;
                     if start.elapsed().as_micros() >= 1_000_000 {
