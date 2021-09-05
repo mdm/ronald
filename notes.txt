@@ -30,6 +30,7 @@ TODO
 * Implement missing instructions in CPU
 * Implement HALT (re-executed until next interrupt)
 * Update I and R registers as necessary
+* Use arrays insted of vecs for registers, etc. (measure performance difference)
 
 Next Steps
 ----------
