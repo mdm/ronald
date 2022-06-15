@@ -31,7 +31,7 @@ fn main() {
         .about("an Amstrad CPC emulator")
         .arg(
             Arg::with_name("debug")
-                .short("d")
+                .short('d')
                 .long("debug")
                 .value_name("DEBUG")
                 .help("Runs the emulator in debug mode (not available for zexdoc)")
@@ -39,7 +39,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("system")
-                .short("s")
+                .short('s')
                 .long("system")
                 .value_name("SYSTEM")
                 .help("Selects the system to run")
@@ -47,7 +47,7 @@ fn main() {
         )
         .arg(
             Arg::with_name("floppy")
-                .short("f")
+                .short('f')
                 .long("floppy")
                 .value_name("DSK_FILE")
                 .help("Loads a DSK file")
