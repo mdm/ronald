@@ -10,6 +10,7 @@ mod gate_array;
 mod gui;
 mod instruction;
 mod keyboard;
+mod keyboard_configurator;
 mod memory;
 mod ppi;
 mod psg;
@@ -34,7 +35,7 @@ fn main() {
                 .short('d')
                 .long("debug")
                 .value_name("DEBUG")
-                .help("Runs the emulator in debug mode (not available for zexdoc)")
+                .help("Runs the emulator in debug mode (not available for zexdoc and keyconfig)")
                 .takes_value(false),
         )
         .arg(
@@ -76,9 +77,13 @@ fn main() {
             let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
             zex_harness.emulate();
         }
+        "keyconfig" => {
+            let mut keyboard_configurator = keyboard_configurator::KeyboardConfigurator::new();
+            keyboard_configurator.run();
+        }
         unknown_system => {
             println!(
-                "Unknown system \"{}\". Valid systems are:\n\n\tcpc464\n\tzexdoc\n",
+                "Unknown system \"{}\". Valid systems are:\n\n\tcpc464\n\tzexdoc\n\tkeyconfig\n",
                 unknown_system
             );
         }
