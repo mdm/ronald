@@ -20,8 +20,8 @@ pub struct KeyboardConfigurator {
     current_shifted: bool,
     current_modifiers: winit::event::ModifiersState,
     last_pressed_key: winit::event::ScanCode,
-    recorded_key_normal: Option<keyboard::ScancodeAndModifiers>,
-    recorded_key_shifted: Option<keyboard::ScancodeAndModifiers>,
+    recorded_key_normal: Option<keyboard::HostKey>,
+    recorded_key_shifted: Option<keyboard::HostKey>,
     recorded_modifiers: Vec<winit::event::ScanCode>,
     recorded_keys: HashMap<&'static str, keyboard::KeyConfig>,
 }
@@ -118,12 +118,12 @@ impl KeyboardConfigurator {
                             self.last_pressed_key = input.scancode;
                             if !self.recorded_modifiers.contains(&input.scancode) {
                                 if self.current_shifted {
-                                    self.recorded_key_shifted = Some(keyboard::ScancodeAndModifiers { scancode: input.scancode, modifiers: self.current_modifiers.bits() });
+                                    self.recorded_key_shifted = Some(keyboard::HostKey { scancode: input.scancode, modifiers: self.current_modifiers.bits() });
                                 } else {
-                                    self.recorded_key_normal = Some(keyboard::ScancodeAndModifiers { scancode: input.scancode, modifiers: self.current_modifiers.bits() });
+                                    self.recorded_key_normal = Some(keyboard::HostKey { scancode: input.scancode, modifiers: self.current_modifiers.bits() });
                                 }
 
-                                if keyboard::KEYS[self.current_key].1 && !self.current_shifted {
+                                if keyboard::KEYS[self.current_key].1.0 && !self.current_shifted {
                                     self.current_shifted = true;
                                 } else {
                                     self.recorded_keys.insert(keyboard::KEYS[self.current_key].0, keyboard::KeyConfig { normal: self.recorded_key_normal.take().unwrap(), shifted: self.recorded_key_shifted.take() });
@@ -137,7 +137,7 @@ impl KeyboardConfigurator {
                         }
                         winit::event::ElementState::Released => {
                             if self.recorded_modifiers.contains(&input.scancode) && self.last_pressed_key == input.scancode {
-                                self.recorded_key_normal = Some(keyboard::ScancodeAndModifiers { scancode: input.scancode, modifiers: self.current_modifiers.bits() });
+                                self.recorded_key_normal = Some(keyboard::HostKey { scancode: input.scancode, modifiers: self.current_modifiers.bits() });
 
                                 self.recorded_keys.insert(keyboard::KEYS[self.current_key].0, keyboard::KeyConfig { normal: self.recorded_key_normal.take().unwrap(), shifted: None });
                                 self.recorded_key_shifted = None;                                    

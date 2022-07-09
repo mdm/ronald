@@ -1,13 +1,19 @@
-use crate::{screen, system};
+use std::collections::HashMap;
+
+use crate::{keyboard::{self, HostKey, KeyDefinition}, screen, system};
 
 pub struct GUI {
     system: Box<dyn system::System>,
+    key_map: HashMap<HostKey, Vec<KeyDefinition>>,
     joystick_enabled: bool,
 }
 
 impl GUI {
     pub fn new(system: Box<dyn system::System>) -> GUI {
-        GUI { system, joystick_enabled: false }
+        let keys = HashMap::from(keyboard::KEYS);
+        let mut key_map = HashMap::new();
+
+        GUI { system, key_map, joystick_enabled: false }
     }
 
     pub fn run(mut self) {
