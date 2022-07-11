@@ -24,7 +24,7 @@ use crate::system::System;
 
 fn main() {
     env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Info)
+        // .filter_level(log::LevelFilter::Info)
         .init();
 
     let matches = App::new(env!("CARGO_PKG_NAME"))

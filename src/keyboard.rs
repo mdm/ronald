@@ -3,12 +3,13 @@ use std::rc::Rc;
 
 use serde::{Serialize, Deserialize};
 
+#[derive(Debug, Clone)]
 pub struct KeyDefinition {
     pub line: usize,
     pub bit: u8,
 }
 
-pub const KEYS: [(&str, (bool, KeyDefinition)); 82] = [
+pub const KEYS: [(&str, (bool, KeyDefinition)); 74] = [
     ("Escape", (false, KeyDefinition { line: 8, bit: 2 })),
     ("Key1", (true, KeyDefinition { line: 8, bit: 0 })),
     ("Key2", (true, KeyDefinition { line: 8, bit: 1 })),
@@ -83,17 +84,17 @@ pub const KEYS: [(&str, (bool, KeyDefinition)); 82] = [
     ("Numpad0", (false, KeyDefinition { line: 1, bit: 7 })),
     ("NumpadPeriod", (false, KeyDefinition { line: 0, bit: 7 })),
     ("NumpadEnter", (false, KeyDefinition { line: 0, bit: 6 })),
-    ("ToggleJoystick", (false, KeyDefinition { line: 10, bit: 0 })), // TODO: handle specially
-    ("JoystickUp", (false, KeyDefinition { line: 9, bit: 0 })),
-    ("JoystickLeft", (false, KeyDefinition { line: 9, bit: 2 })),
-    ("JoystickRight", (false, KeyDefinition { line: 9, bit: 3 })),
-    ("JoystickDown", (false, KeyDefinition { line: 9, bit: 1 })),
-    ("JoystickFire1", (false, KeyDefinition { line: 9, bit: 4 })),
-    ("JoystickFire2", (false, KeyDefinition { line: 9, bit: 5 })),
-    ("JoystickFire3", (false, KeyDefinition { line: 9, bit: 6 })),
+    // ("ToggleJoystick", (false, KeyDefinition { line: 10, bit: 0 })), // TODO: handle specially
+    // ("JoystickUp", (false, KeyDefinition { line: 9, bit: 0 })),
+    // ("JoystickLeft", (false, KeyDefinition { line: 9, bit: 2 })),
+    // ("JoystickRight", (false, KeyDefinition { line: 9, bit: 3 })),
+    // ("JoystickDown", (false, KeyDefinition { line: 9, bit: 1 })),
+    // ("JoystickFire1", (false, KeyDefinition { line: 9, bit: 4 })),
+    // ("JoystickFire2", (false, KeyDefinition { line: 9, bit: 5 })),
+    // ("JoystickFire3", (false, KeyDefinition { line: 9, bit: 6 })),
 ];
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct HostKey {
     pub scancode: u32,
     pub modifiers: u32,
@@ -128,6 +129,10 @@ impl Keyboard {
 
     pub fn set_key(&mut self, line: usize, bit: u8) {
         self.lines[line] &= !(1 << bit);
+    }
+
+    pub fn unset_key(&mut self, line: usize, bit: u8) {
+        self.lines[line] |= 1 << bit;
     }
 
     pub fn set_active_line(&mut self, line: usize) {

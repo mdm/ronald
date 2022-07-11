@@ -54,18 +54,32 @@ impl KeyboardConfigurator {
                 .unwrap()
         };
 
-        event_loop.run(move |event, _, control_flow| {
-            if self.modifiers_recorded {
-                self.record_keys(event);
-            } else {
-                self.record_modifiers(event);
-            }
-            
-            if self.modifiers_recorded && self.current_key == keyboard::KEYS.len() {
-                let mut file = File::create("keyconfig.yml").unwrap();
-                file.write_all(serde_yaml::to_string(&self.recorded_keys).unwrap().as_bytes()).unwrap();
+        let mut pixels = {
+            let window_size = window.inner_size();
+            let surface_texture = pixels::SurfaceTexture::new(window_size.width, window_size.height, &window);
+            pixels::Pixels::new(200, 200, surface_texture).unwrap()
+        };
 
-                *control_flow = winit::event_loop::ControlFlow::Exit;
+        event_loop.run(move |event, _, control_flow| {
+            match event {
+                winit::event::Event::RedrawRequested(_) => {
+                    self.draw_frame(&mut pixels);
+                    pixels.render();
+                }
+                 _=> {
+                    if self.modifiers_recorded && self.current_key == keyboard::KEYS.len() {
+                        let mut file = File::create("keyconfig.yml").unwrap();
+                        file.write_all(serde_yaml::to_string(&self.recorded_keys).unwrap().as_bytes()).unwrap();
+        
+                        *control_flow = winit::event_loop::ControlFlow::Exit;
+                    } else {
+                        if self.modifiers_recorded {
+                            self.record_keys(event);
+                        } else {
+                            self.record_modifiers(event);
+                        }    
+                    }
+                }
             }
         });
     }
@@ -153,5 +167,13 @@ impl KeyboardConfigurator {
                 _ => {}
             }
         }
+    }
+
+    fn draw_frame(&self, pixels: &mut pixels::Pixels) {
+        for (i, pixel) in pixels.get_frame().chunks_exact_mut(4).enumerate() {
+            let rgba = [0, 0, 0, 255];
+
+            pixel.copy_from_slice(&rgba);
+        }        
     }
 }
