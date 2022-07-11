@@ -1,3 +1,12 @@
+TODO (Winit/Pixels)
+-------------------
+* Handle AltGr correctly
+* Handle F-keys
+* Fix joystick handling
+* Optimize frame drawing
+* Fix framerate
+* Fix audio thread lag
+
 CRTC
 ----
 
