@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 use std::fs::File;
 
 use crate::{keyboard::{self, HostKey, KeyDefinition}, screen, system};
@@ -57,6 +57,8 @@ impl GUI {
             pixels::Pixels::new(screen::BUFFER_WIDTH as u32, screen::BUFFER_HEIGHT as u32, surface_texture).unwrap()
         };
 
+        let mut frame_start = std::time::Instant::now();
+
         event_loop.run(move |event, _, control_flow| {
             match event {
                 winit::event::Event::RedrawRequested(_) => {
@@ -64,11 +66,18 @@ impl GUI {
                     let start = std::time::Instant::now();
 
                     self.draw_frame(&mut pixels);
-                    pixels.render();
+                    pixels.render().unwrap();
 
                     log::trace!("Frame drawn in {} microseconds", start.elapsed().as_micros());
+
+                    if frame_start.elapsed().as_micros() < 20_000 {
+                        let delay = 20_000 - frame_start.elapsed().as_micros() as u64;
+                        std::thread::sleep(Duration::from_micros(delay));
+                    }
                 }
                 winit::event::Event::RedrawEventsCleared => {
+                    frame_start = std::time::Instant::now();
+
                     log::trace!("Starting new frame");
                     let start = std::time::Instant::now();
         
