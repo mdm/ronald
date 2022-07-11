@@ -4,8 +4,8 @@ TODO (Winit/Pixels)
 * Handle F-keys
 * Fix joystick handling
 * Optimize frame drawing
-* Fix framerate
-* Fix audio thread lag
+* Fix framerate (done)
+* Fix audio thread lag (done
 
 CRTC
 ----
