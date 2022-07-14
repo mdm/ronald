@@ -7,6 +7,7 @@ pub struct GUI {
     system: Box<dyn system::System>,
     key_map: HashMap<HostKey, Vec<KeyDefinition>>,
     current_modifiers: u32,
+    alt_gr_modifier: u32,
     pressed_keys: HashMap<u32, HostKey>,
     joystick_enabled: bool,
 }
@@ -30,6 +31,7 @@ impl GUI {
             system,
             key_map,
             current_modifiers: winit::event::ModifiersState::empty().bits(),
+            alt_gr_modifier: 0,
             pressed_keys: HashMap::new(),
             joystick_enabled: false,
         }
@@ -97,7 +99,25 @@ impl GUI {
                     }
                     winit::event::WindowEvent::KeyboardInput { input, .. } => match input.state {
                         winit::event::ElementState::Pressed => {
-                            let host_key = HostKey { scancode: input.scancode, modifiers: self.current_modifiers };
+                            if let Some(winit::event::VirtualKeyCode::F12) = input.virtual_keycode {
+                                self.system.activate_debugger();
+                            }
+
+                            if let Some(winit::event::VirtualKeyCode::F5) = input.virtual_keycode {
+                                if let Ok(Some(pathbuf)) = native_dialog::FileDialog::new()
+                                    .add_filter("DSK file", &["dsk"])
+                                    .show_open_single_file() {
+                                    if let Some(dsk_filename) = pathbuf.as_os_str().to_str() {
+                                        self.system.load_disk(0, dsk_filename);
+                                    }
+                                }
+                            }
+
+                            if input.scancode == 100 { // TODO: make this more portable
+                                self.alt_gr_modifier = 1 << 12;
+                            }
+
+                            let host_key = HostKey { scancode: input.scancode, modifiers: self.current_modifiers | self.alt_gr_modifier };
                             if let Some(keys) = self.key_map.get(&host_key) {
                                 self.pressed_keys.insert(input.scancode, host_key);
                                 for key in keys {
@@ -106,6 +126,10 @@ impl GUI {
                             }
                         }
                         winit::event::ElementState::Released => {
+                            if input.scancode == 100 { // TODO: make this more portable
+                                self.alt_gr_modifier = 0;
+                            }
+
                             if let Some(host_key) = self.pressed_keys.get(&input.scancode) {
                                 if let Some(keys) = self.key_map.get(&host_key) {
                                     for key in keys {
@@ -122,20 +146,6 @@ impl GUI {
                 }
                 _ => {}
             }
-
-            // if self.window.is_key_down(minifb::Key::F12) {
-            //     self.system.activate_debugger();
-            // }
-
-            // if self.window.is_key_down(minifb::Key::F5) {
-            //     if let Ok(Some(pathbuf)) = native_dialog::FileDialog::new()
-            //         .add_filter("DSK file", &["dsk"])
-            //         .show_open_single_file() {
-            //         if let Some(dsk_filename) = pathbuf.as_os_str().to_str() {
-            //             self.system.load_disk(0, dsk_filename);
-            //         }
-            //     }
-            // }
         });
     }
 
