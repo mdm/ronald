@@ -443,7 +443,7 @@ impl FloppyDiskController {
             value |= 1 << 3;
         }
 
-        value |= (self.selected_drive as u8) << 0;
+        value |= self.selected_drive as u8;
 
         // TODO: reset status field here?
         // no - better in separate reset method
@@ -463,11 +463,12 @@ impl FloppyDiskController {
     }
 
     fn report_status_register_2(&self) -> u8 {
-        let mut value = self.status2;
+        // let value = self.status2;
 
-        // TODO: handle bits 4, 3 and 2
+        // // TODO: handle bits 4, 3 and 2
 
-        value
+        // value
+        self.status2
     }
 
     fn report_status_register_3(&self) -> u8 {
@@ -477,7 +478,7 @@ impl FloppyDiskController {
             value |= 1 << 4;
         }
 
-        value |= (self.selected_drive as u8) << 0;
+        value |= self.selected_drive as u8;
 
         value
     }

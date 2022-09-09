@@ -70,7 +70,7 @@ fn main() {
                 cpc.load_disk(0, dsk_filename);
             }
 
-            let mut gui = gui::GUI::new(cpc);
+            let gui = gui::Gui::new(cpc);
             gui.run();
         }
         "zexdoc" => {
@@ -78,7 +78,7 @@ fn main() {
             zex_harness.emulate();
         }
         "keyconfig" => {
-            let mut keyboard_configurator = keyboard_configurator::KeyboardConfigurator::new();
+            let keyboard_configurator = keyboard_configurator::KeyboardConfigurator::new();
             keyboard_configurator.run();
         }
         unknown_system => {
