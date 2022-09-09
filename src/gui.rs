@@ -3,7 +3,7 @@ use std::fs::File;
 
 use crate::{keyboard::{self, HostKey, KeyDefinition}, screen, system};
 
-pub struct GUI {
+pub struct Gui {
     system: Box<dyn system::System>,
     key_map: HashMap<HostKey, Vec<KeyDefinition>>,
     current_modifiers: u32,
@@ -12,8 +12,8 @@ pub struct GUI {
     joystick_enabled: bool,
 }
 
-impl GUI {
-    pub fn new(system: Box<dyn system::System>) -> GUI {
+impl Gui {
+    pub fn new(system: Box<dyn system::System>) -> Gui {
         let keys = HashMap::from(keyboard::KEYS);
         let file = File::open("keyconfig.yml").unwrap();
         let key_configs: HashMap<String, keyboard::KeyConfig> = serde_yaml::from_reader(file).unwrap();
@@ -27,7 +27,7 @@ impl GUI {
             }
         }
 
-        GUI { 
+        Gui { 
             system,
             key_map,
             current_modifiers: winit::event::ModifiersState::empty().bits(),
@@ -131,7 +131,7 @@ impl GUI {
                             }
 
                             if let Some(host_key) = self.pressed_keys.get(&input.scancode) {
-                                if let Some(keys) = self.key_map.get(&host_key) {
+                                if let Some(keys) = self.key_map.get(host_key) {
                                     for key in keys {
                                         self.system.get_keyboard().borrow_mut().unset_key(key.line, key.bit)                                    
                                     }
@@ -155,7 +155,7 @@ impl GUI {
             let rgba = [
                 ((frame_buffer_color >> 16) & 0xff) as u8,
                 ((frame_buffer_color >> 8) & 0xff) as u8,
-                ((frame_buffer_color >> 0) & 0xff) as u8,
+                (frame_buffer_color & 0xff) as u8,
                 255,
             ];
 

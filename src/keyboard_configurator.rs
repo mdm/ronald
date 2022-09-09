@@ -64,7 +64,7 @@ impl KeyboardConfigurator {
             match event {
                 winit::event::Event::RedrawRequested(_) => {
                     self.draw_frame(&mut pixels);
-                    pixels.render();
+                    pixels.render().unwrap();
                 }
                  _=> {
                     if self.modifiers_recorded && self.current_key == keyboard::KEYS.len() {
@@ -72,13 +72,11 @@ impl KeyboardConfigurator {
                         file.write_all(serde_yaml::to_string(&self.recorded_keys).unwrap().as_bytes()).unwrap();
         
                         *control_flow = winit::event_loop::ControlFlow::Exit;
+                    } else if self.modifiers_recorded {
+                        self.record_keys(event);
                     } else {
-                        if self.modifiers_recorded {
-                            self.record_keys(event);
-                        } else {
-                            self.record_modifiers(event);
-                        }    
-                    }
+                        self.record_modifiers(event);
+                    }    
                 }
             }
         });
@@ -90,22 +88,17 @@ impl KeyboardConfigurator {
             self.print_key = false;
         }
 
-        if let winit::event::Event::WindowEvent { event, .. } = event {
-            match event {
-                winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                    if let winit::event::ElementState::Pressed = input.state {
-                        self.recorded_modifiers.push(input.scancode);
+        if let winit::event::Event::WindowEvent { event: winit::event::WindowEvent::KeyboardInput { input, .. }, .. } = event {
+            if let winit::event::ElementState::Pressed = input.state {
+                self.recorded_modifiers.push(input.scancode);
 
-                        self.current_key += 1;
-                        self.print_key = true;
+                self.current_key += 1;
+                self.print_key = true;
 
-                        if self.current_key == MODIFIERS.len() {
-                            self.current_key = 0;
-                            self.modifiers_recorded = true;
-                        }
-                    }
+                if self.current_key == MODIFIERS.len() {
+                    self.current_key = 0;
+                    self.modifiers_recorded = true;
                 }
-                _ => {}
             }
         }
     }

@@ -16,13 +16,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct ZexHarness {
-    cpu: cpu::CPUShared<memory::RAM, bus::DummyBus>,
-    memory: Rc<RefCell<memory::RAM>>,
+    cpu: cpu::CpuShared<memory::Ram, bus::DummyBus>,
+    memory: Rc<RefCell<memory::Ram>>,
 }
 
 impl ZexHarness {
     pub fn new(rom_path: &str) -> ZexHarness {
-        let mut memory = memory::RAM::from_file(0x10000, rom_path, 0x100);
+        let mut memory = memory::Ram::from_file(0x10000, rom_path, 0x100);
         memory.write_byte(0x0005, 0xc9); // patch with RET instruction
         memory.write_word(0x0006, 0xe400); // patch with initial SP
 
@@ -30,7 +30,7 @@ impl ZexHarness {
         let bus_shared = Rc::new(RefCell::new(bus::DummyBus::new()));
 
         ZexHarness {
-            cpu: cpu::CPU::new_shared(memory_shared.clone(), bus_shared, 0x100),
+            cpu: cpu::Cpu::new_shared(memory_shared.clone(), bus_shared, 0x100),
             memory: memory_shared,
         }
     }
@@ -80,7 +80,7 @@ pub trait System {
 }
 
 pub struct CPC464 {
-    cpu: cpu::CPUShared<memory::Memory, bus::StandardBus>,
+    cpu: cpu::CpuShared<memory::Memory, bus::StandardBus>,
     bus: bus::StandardBusShared,
     screen: screen::ScreenShared,
     keyboard: keyboard::KeyboardShared,
@@ -106,7 +106,7 @@ impl CPC464 {
             ppi::PeripheralInterface::new_shared(crtc, keyboard.clone(), psg.clone(), tape),
             psg,
         );
-        let cpu = cpu::CPU::new_shared(memory, bus.clone(), 0);
+        let cpu = cpu::Cpu::new_shared(memory, bus.clone(), 0);
         let debugger = debugger::Debugger::new_shared(cpu.clone());
 
         CPC464 {

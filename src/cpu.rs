@@ -6,6 +6,7 @@ use crate::bus;
 use crate::instruction::{Decoder, Instruction, JumpTest, Operand, InterruptMode};
 use crate::memory;
 
+#[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
 pub enum Register8 {
     A,
     F,
@@ -208,9 +209,9 @@ impl Flag {
     }
 }
 
-pub type CPUShared<M, B> = Rc<RefCell<CPU<M, B>>>;
+pub type CpuShared<M, B> = Rc<RefCell<Cpu<M, B>>>;
 
-pub struct CPU<M, B> {
+pub struct Cpu<M, B> {
     pub registers: RegisterFile,
     pub memory: Rc<RefCell<M>>,
     pub bus: Rc<RefCell<B>>,
@@ -223,16 +224,16 @@ pub struct CPU<M, B> {
     irq_received: bool,
 }
 
-impl<M, B> CPU<M, B>
+impl<M, B> Cpu<M, B>
 where
     M: memory::Read + memory::Write,
     B: bus::Bus,
 {
-    pub fn new_shared(memory: Rc<RefCell<M>>, bus: Rc<RefCell<B>>, initial_pc: u16) -> CPUShared<M, B> {
+    pub fn new_shared(memory: Rc<RefCell<M>>, bus: Rc<RefCell<B>>, initial_pc: u16) -> CpuShared<M, B> {
         let mut registers = RegisterFile::new();
         registers.write_word(&Register16::PC, initial_pc);
 
-        let mut cpu = CPU {
+        let mut cpu = Cpu {
             registers,
             iff1: false,
             iff2: false,
@@ -679,7 +680,7 @@ where
                 match destination {
                     Operand::Register16(register) => {
                         let value = self.registers.read_word(register);
-                        self.registers.write_word(&register, value.wrapping_add(1));
+                        self.registers.write_word(register, value.wrapping_add(1));
                     }
                     _ => {
                         let old_value = self.load_byte(destination);
