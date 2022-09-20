@@ -27,41 +27,41 @@ pub trait Write {
     }
 }
 
-pub struct ROM {
+pub struct Rom {
     data: Vec<u8>,
 }
 
-impl ROM {
-    pub fn from_file(path: &str) -> ROM {
+impl Rom {
+    pub fn from_file(path: &str) -> Rom {
         // TODO: better error handling
         // TODO: check ROM size (should be 16k)
-        ROM {
+        Rom {
             data: std::fs::read(path).unwrap_or_else(|_| panic!("ROM file \"{}\" could not be read.", path)),
         }
     }
 }
 
-impl Read for ROM {
+impl Read for Rom {
     fn read_byte(&self, address: usize) -> u8 {
         self.data[address]
     }
 }
 
-pub struct RAM {
+pub struct Ram {
     data: Vec<u8>,
 }
 
-impl RAM {
-    pub fn new(size: usize) -> RAM {
-        RAM {
+impl Ram {
+    pub fn new(size: usize) -> Ram {
+        Ram {
             data: vec![0; size],
         }
     }
 
-    pub fn from_file(size: usize, path: &str, offset: usize) -> RAM {
+    pub fn from_file(size: usize, path: &str, offset: usize) -> Ram {
         // TODO: better error handling
         // TODO: check if ROM fits
-        let mut ram = RAM::new(size);
+        let mut ram = Ram::new(size);
         let rom = read(path).unwrap_or_else(|_| panic!("ROM file \"{}\" could not be read.", path));
 
         for (i, byte) in rom.into_iter().enumerate() {
@@ -77,23 +77,23 @@ impl RAM {
     }
 }
 
-impl Read for RAM {
+impl Read for Ram {
     fn read_byte(&self, address: usize) -> u8 {
         self.data[address]
     }
 }
 
-impl Write for RAM {
+impl Write for Ram {
     fn write_byte(&mut self, address: usize, value: u8) {
         self.data[address] = value;
     }
 }
 
 pub struct Memory {
-    ram: RAM,
-    lower_rom: ROM,
+    ram: Ram,
+    lower_rom: Rom,
     lower_rom_enabled: bool,
-    upper_roms: HashMap<u8, ROM>,
+    upper_roms: HashMap<u8, Rom>,
     selected_upper_rom: u8,
     upper_rom_enabled: bool,
 }
@@ -102,12 +102,12 @@ impl Memory {
     pub fn new_shared() -> MemoryShared {
         // TODO: receive rom paths as parameters
         let mut upper_roms = HashMap::new();
-        upper_roms.insert(0, ROM::from_file("rom/basic_1.0.rom"));
-        upper_roms.insert(7, ROM::from_file("rom/amsdos_0.5.rom"));
+        upper_roms.insert(0, Rom::from_file("rom/basic_1.0.rom"));
+        upper_roms.insert(7, Rom::from_file("rom/amsdos_0.5.rom"));
 
         let memory = Memory {
-            ram: RAM::new(0x10000),
-            lower_rom: ROM::from_file("rom/os_464.rom"),
+            ram: Ram::new(0x10000),
+            lower_rom: Rom::from_file("rom/os_464.rom"),
             lower_rom_enabled: true,
             upper_roms,
             selected_upper_rom: 0,

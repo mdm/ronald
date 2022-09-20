@@ -45,7 +45,7 @@ impl Disk {
         for track in 0..num_tracks {
             for side in 0..num_sides {
                 let track_start = if extended {
-                    let mut offset_sum = 0x100 as usize;
+                    let mut offset_sum = 0x100usize;
                     for i in 0..(num_sides as usize * track as usize + side as usize) {
                         offset_sum += (contents[0x34 + i] as usize) << 8;
                     }
@@ -75,7 +75,7 @@ impl Disk {
 
                             log::trace!(
                                 "track {}, sector {} (id = {})",
-                                contents[sector_info_start + 0x00],
+                                contents[sector_info_start],
                                 sector,
                                 contents[sector_info_start + 0x02]
                             );
@@ -87,7 +87,7 @@ impl Disk {
                             };
 
                             sector_infos.push(SectorInfo {
-                                track: contents[sector_info_start + 0x00], // TODO: verify this is the same as above?
+                                track: contents[sector_info_start], // TODO: verify this is the same as above?
                                 side: contents[sector_info_start + 0x01], // TODO: verify this is the same as above?
                                 sector_id: contents[sector_info_start + 0x02],
                                 sector_size: contents[sector_info_start + 0x03], // TODO: verify this is the same as above?

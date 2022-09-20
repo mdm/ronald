@@ -34,11 +34,11 @@ impl Command {
 }
 
 fn is_decimal_digit(c: char) -> bool {
-    c.is_digit(10)
+    c.is_ascii_digit()
 }
 
 fn from_decimal_str(input: &str) -> Result<u16, std::num::ParseIntError> {
-    u16::from_str_radix(input, 10)
+    input.parse::<u16>()
 }
 
 fn parse_decimal(input: &str) -> IResult<&str, u16> {
@@ -49,7 +49,7 @@ fn parse_decimal(input: &str) -> IResult<&str, u16> {
 }
 
 fn is_hex_digit(c: char) -> bool {
-    c.is_digit(16)
+    c.is_ascii_hexdigit()
 }
 
 fn from_hex_str(input: &str) -> Result<u16, std::num::ParseIntError> {
@@ -119,7 +119,7 @@ fn parse_disassemble(input: &str) -> IResult<&str, Command> {
 
 
 pub struct Debugger<M, B> {
-    cpu: cpu::CPUShared<M, B>,
+    cpu: cpu::CpuShared<M, B>,
     breakpoints: Vec<u16>,
     countdown: Option<u16>,
 }
@@ -129,7 +129,7 @@ where
     M: memory::Read + memory::Write,
     B: bus::Bus,
 {
-    pub fn new_shared(cpu: cpu::CPUShared<M, B>) -> Debugger<M, B> {
+    pub fn new_shared(cpu: cpu::CpuShared<M, B>) -> Debugger<M, B> {
         Debugger {
             cpu,
             breakpoints: Vec::new(),

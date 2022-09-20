@@ -175,7 +175,7 @@ impl GateArray {
                     let pixels = [
                         ((packed & 0x80) >> 7) | ((packed & 0x08) >> 2),
                         ((packed & 0x40) >> 6) | ((packed & 0x04) >> 1),
-                        ((packed & 0x20) >> 5) | ((packed & 0x02) >> 0),
+                        ((packed & 0x20) >> 5) | (packed & 0x02),
                         ((packed & 0x10) >> 4) | ((packed & 0x01) << 1),
                     ];
 
