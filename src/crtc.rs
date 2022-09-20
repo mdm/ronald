@@ -111,7 +111,7 @@ impl CRTController {
         let scan_lines_since_start =
             (self.registers[Register::MaximumRasterAddress as usize] as i32 + 1)
                 * character_rows_since_start + self.scan_line_counter as i32;
-        scan_lines_since_start >= 0 && scan_lines_since_start < 16 * 8 // should be 16 - TODO: find out why shortening this messes with Fruity Frank colors
+        (0.. 16 * 8).contains(&scan_lines_since_start) // should be 16, not 16 * 8 - TODO: find out why shortening this messes with Fruity Frank colors
     }
 
     pub fn step(&mut self) {

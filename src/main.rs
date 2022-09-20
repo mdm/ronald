@@ -10,6 +10,7 @@ mod gate_array;
 mod gui;
 mod instruction;
 mod keyboard;
+mod keyboard_configurator;
 mod memory;
 mod ppi;
 mod psg;
@@ -23,7 +24,7 @@ use crate::system::System;
 
 fn main() {
     env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Info)
+        // .filter_level(log::LevelFilter::Info)
         .init();
 
     let matches = App::new(env!("CARGO_PKG_NAME"))
@@ -34,7 +35,7 @@ fn main() {
                 .short('d')
                 .long("debug")
                 .value_name("DEBUG")
-                .help("Runs the emulator in debug mode (not available for zexdoc)")
+                .help("Runs the emulator in debug mode (not available for zexdoc and keyconfig)")
                 .takes_value(false),
         )
         .arg(
@@ -69,16 +70,20 @@ fn main() {
                 cpc.load_disk(0, dsk_filename);
             }
 
-            let mut gui = gui::GUI::new(cpc);
+            let gui = gui::Gui::new(cpc);
             gui.run();
         }
         "zexdoc" => {
             let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
             zex_harness.emulate();
         }
+        "keyconfig" => {
+            let keyboard_configurator = keyboard_configurator::KeyboardConfigurator::new();
+            keyboard_configurator.run();
+        }
         unknown_system => {
             println!(
-                "Unknown system \"{}\". Valid systems are:\n\n\tcpc464\n\tzexdoc\n",
+                "Unknown system \"{}\". Valid systems are:\n\n\tcpc464\n\tzexdoc\n\tkeyconfig\n",
                 unknown_system
             );
         }
