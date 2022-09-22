@@ -1,12 +1,8 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::mpsc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
-use crate::keyboard;
-
-pub type SoundGeneratorShared = Rc<RefCell<SoundGenerator>>;
+use crate::keyboard::Keyboard;
 
 const INVERSE_SQRT_2: f32 = 1.0 / std::f32::consts::SQRT_2;
 
@@ -30,7 +26,6 @@ const VOLUMES: [f32; 16] = [
 ];
 
 pub struct SoundGenerator {
-    keyboard: keyboard::KeyboardShared,
     buffer: u8,
     registers: [u8; 14],
     selected_register: usize,
@@ -55,10 +50,9 @@ pub struct SoundGenerator {
 }
 
 impl SoundGenerator {
-    pub fn new_shared(keyboard: keyboard::KeyboardShared) -> SoundGeneratorShared {
+    pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
         let mut psg = SoundGenerator {
-            keyboard,
             buffer: 0,
             registers: [0; 14],
             selected_register: 0,
@@ -84,15 +78,15 @@ impl SoundGenerator {
 
         psg.init_audio_stream(rx);
 
-        Rc::new(RefCell::new(psg))
+        psg
     }
 
-    pub fn perform_function(&mut self, function: u8) {
+    pub fn perform_function(&mut self, keyboard: &Keyboard, function: u8) {
         match function {
             0 => (), // inactive
             1 => match self.selected_register {
                 0x0e => {
-                    self.buffer = self.keyboard.borrow().scan_active_line();
+                    self.buffer = keyboard.scan_active_line();
                 }
                 _ => unimplemented!(),
             },

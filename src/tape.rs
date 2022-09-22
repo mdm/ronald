@@ -1,15 +1,8 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
-pub type TapeControllerShared = Rc<RefCell<TapeController>>;
-
 pub struct TapeController {}
 
 impl TapeController {
-    pub fn new_shared() -> TapeControllerShared {
-        let tape = TapeController {};
-
-        Rc::new(RefCell::new(tape))
+    pub fn new() -> Self {
+        TapeController {}
     }
 
     pub fn switch_motor(&mut self, on: bool) {

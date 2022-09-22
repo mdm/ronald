@@ -7,10 +7,7 @@ use nom::{
     sequence::{delimited, pair, separated_pair}
 };
 
-use crate::bus;
-use crate::cpu;
-use crate::memory;
-
+use crate::{cpu::{Cpu, Register16}, memory::Memory};
 
 #[derive(Debug)]
 enum Command {
@@ -118,20 +115,14 @@ fn parse_disassemble(input: &str) -> IResult<&str, Command> {
 }
 
 
-pub struct Debugger<M, B> {
-    cpu: cpu::CpuShared<M, B>,
+pub struct Debugger {
     breakpoints: Vec<u16>,
     countdown: Option<u16>,
 }
 
-impl<M, B> Debugger<M, B>
-where
-    M: memory::Read + memory::Write,
-    B: bus::Bus,
-{
-    pub fn new_shared(cpu: cpu::CpuShared<M, B>) -> Debugger<M, B> {
+impl Debugger {
+    pub fn new() -> Self {
         Debugger {
-            cpu,
             breakpoints: Vec::new(),
             countdown: None,
         }
@@ -141,8 +132,8 @@ where
         self.countdown = Some(0);
     }
 
-    pub fn is_active(&mut self) -> bool {
-        let address = self.cpu.borrow().registers.read_word(&cpu::Register16::PC);
+    pub fn is_active(&mut self, cpu: &Cpu) -> bool {
+        let address = cpu.registers.read_word(&Register16::PC);
         if self.breakpoint_at(address) {
             return true;
         }
@@ -161,9 +152,9 @@ where
         }
     }
 
-    pub fn run_command_shell(&mut self) {
-        let address = self.cpu.borrow().registers.read_word(&cpu::Register16::PC) as usize;
-        let (instruction, _) = self.cpu.borrow_mut().decoder.decode_at(address);
+    pub fn run_command_shell(&mut self, cpu: &mut Cpu, memory: &Memory) {
+        let address = cpu.registers.read_word(&Register16::PC) as usize;
+        let (instruction, _) = cpu.decoder.decode_at(memory, address);
         println!("{:#06x}: {}", address, &instruction);
 
         loop {
@@ -188,7 +179,7 @@ where
                                 }
                             }
                             Command::ShowCpuRegisters => {
-                                self.cpu.borrow().print_state();
+                                cpu.print_state();
                             }
                             Command::Step(skip) => {
                                 self.countdown = Some(skip);
@@ -198,9 +189,9 @@ where
                                 break;
                             }
                             Command::Disassemble(count) => {
-                                let mut address = self.cpu.borrow().registers.read_word(&cpu::Register16::PC) as usize;
+                                let mut address = cpu.registers.read_word(&Register16::PC) as usize;
                                 for _ in 0..count {
-                                    let (instruction, next_adress) = self.cpu.borrow_mut().decoder.decode_at(address);
+                                    let (instruction, next_adress) = cpu.decoder.decode_at(memory, address);
                                     println!("{:#06x}: {}", address, &instruction);
                                     address = next_adress;                    
                                 }

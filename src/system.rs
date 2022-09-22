@@ -1,55 +1,44 @@
-use crate::bus;
-use crate::cpu;
-use crate::crtc;
-use crate::debugger;
-use crate::fdc;
-use crate::gate_array;
-use crate::keyboard;
-use crate::memory;
-use crate::ppi;
-use crate::psg;
-use crate::screen;
-use crate::tape;
-use memory::{Read, Write};
-
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::bus::{DummyBus, StandardBus};
+use crate::cpu::{Cpu, Register8, Register16};
+use crate::debugger::Debugger;
+use crate::keyboard::Keyboard;
+use crate::memory::{Ram, Memory, Read, Write};
+use crate::screen::Screen;
 
 pub struct ZexHarness {
-    cpu: cpu::CpuShared<memory::Ram, bus::DummyBus>,
-    memory: Rc<RefCell<memory::Ram>>,
+    cpu: Cpu,
+    memory: Ram,
+    bus: DummyBus,
 }
 
 impl ZexHarness {
     pub fn new(rom_path: &str) -> ZexHarness {
-        let mut memory = memory::Ram::from_file(0x10000, rom_path, 0x100);
+        let mut memory = Ram::from_file(0x10000, rom_path, 0x100);
         memory.write_byte(0x0005, 0xc9); // patch with RET instruction
         memory.write_word(0x0006, 0xe400); // patch with initial SP
 
-        let memory_shared = Rc::new(RefCell::new(memory));
-        let bus_shared = Rc::new(RefCell::new(bus::DummyBus::new()));
-
         ZexHarness {
-            cpu: cpu::Cpu::new_shared(memory_shared.clone(), bus_shared, 0x100),
-            memory: memory_shared,
+            cpu: Cpu::new(0x100),
+            memory,
+            bus: DummyBus::new(),
         }
     }
 
     pub fn emulate(&mut self) {
         loop {
-            match self.cpu.borrow().registers.read_word(&cpu::Register16::PC) {
+            match self.cpu.registers.read_word(&Register16::PC) {
                 0x0000 => break,
                 0x0005 => {
-                    match self.cpu.borrow().registers.read_byte(&cpu::Register8::C) {
+                    match self.cpu.registers.read_byte(&Register8::C) {
                         2 => print!(
                             "{}",
-                            self.cpu.borrow().registers.read_byte(&cpu::Register8::E) as char
+                            self.cpu.registers.read_byte(&Register8::E) as char
                         ),
                         9 => {
                             let mut address =
-                                self.cpu.borrow().registers.read_word(&cpu::Register16::DE) as usize;
+                                self.cpu.registers.read_word(&Register16::DE) as usize;
                             loop {
-                                let character = self.memory.borrow().read_byte(address) as char;
+                                let character = self.memory.read_byte(address) as char;
                                 if character == '$' {
                                     break;
                                 } else {
@@ -60,10 +49,10 @@ impl ZexHarness {
                         }
                         _ => unreachable!(),
                     }
-                    self.cpu.borrow_mut().fetch_and_execute();
+                    self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
                 }
                 _ => {
-                    self.cpu.borrow_mut().fetch_and_execute();
+                    self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
                 }
             }
         }
@@ -73,48 +62,30 @@ impl ZexHarness {
 
 pub trait System {
     fn emulate(&mut self) -> u8;
-    fn get_screen(&self) -> screen::ScreenShared;
-    fn get_keyboard(&self) -> keyboard::KeyboardShared;
+    fn get_screen(&self) -> &Screen;
+    fn get_keyboard(&mut self) -> &mut Keyboard;
     fn activate_debugger(&mut self);
     fn load_disk(&mut self, drive: usize, filename: &str);
 }
 
 pub struct CPC464 {
-    cpu: cpu::CpuShared<memory::Memory, bus::StandardBus>,
-    bus: bus::StandardBusShared,
-    screen: screen::ScreenShared,
-    keyboard: keyboard::KeyboardShared,
-    fdc: fdc::FloppyDiskControllerShared,
-    debugger: debugger::Debugger<memory::Memory, bus::StandardBus>,
+    cpu: Cpu,
+    memory: Memory,
+    bus: StandardBus,
+    debugger: Debugger,
 }
 
 impl CPC464 {
     pub fn new() -> CPC464 {
-        // TODO: receive shared screen here
-        let memory = memory::Memory::new_shared();
-        let crtc = crtc::CRTController::new_shared();
-        let keyboard = keyboard::Keyboard::new_shared();
-        let psg = psg::SoundGenerator::new_shared(keyboard.clone());
-        let screen = screen::Screen::new_shared();
-        let fdc = fdc::FloppyDiskController::new_shared();
-        let tape = tape::TapeController::new_shared();
-        let bus = bus::StandardBus::new_shared(
-            crtc.clone(),
-            fdc.clone(),
-            gate_array::GateArray::new_shared(memory.clone(), crtc.clone(), screen.clone()),
-            memory.clone(),
-            ppi::PeripheralInterface::new_shared(crtc, keyboard.clone(), psg.clone(), tape),
-            psg,
-        );
-        let cpu = cpu::Cpu::new_shared(memory, bus.clone(), 0);
-        let debugger = debugger::Debugger::new_shared(cpu.clone());
+        let cpu = Cpu::new(0);
+        let memory = Memory::new();
+        let bus = StandardBus::new();
+        let debugger = Debugger::new();
 
         CPC464 {
             cpu,
+            memory,
             bus,
-            screen,
-            keyboard,
-            fdc,
             debugger,
         }
     }
@@ -122,35 +93,35 @@ impl CPC464 {
 
 impl System for CPC464 {
     fn emulate(&mut self) -> u8 {
-        if self.debugger.is_active() {
-            self.debugger.run_command_shell();
+        if self.debugger.is_active(&self.cpu) {
+            self.debugger.run_command_shell(&mut self.cpu, &self.memory);
         }
 
-        let (cycles, interrupt_acknowledged) = self.cpu.borrow_mut().fetch_and_execute();
+        let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
         for _ in 0..cycles {
-            let interrupt = self.bus.borrow_mut().step();
+            let interrupt = self.bus.step(&mut self.memory);
             if interrupt {
-                self.cpu.borrow_mut().request_interrupt();
+                self.cpu.request_interrupt();
             }
         }
 
         if interrupt_acknowledged {
             // TODO: communicate with gate array directly?
             // What about external hardware triggering (non-maskable) interrupts?
-            self.bus.borrow_mut().acknowledge_interrupt();
+            self.bus.acknowledge_interrupt();
         }
 
         cycles
     }
 
-    fn get_screen(&self) -> screen::ScreenShared {
+    fn get_screen(&self) -> &Screen {
         // TODO: should the GUI own the frame buffer?
-        self.screen.clone()
+        self.bus.get_screen()
     }
 
-    fn get_keyboard(&self) -> keyboard::KeyboardShared {
-        self.keyboard.clone()
+    fn get_keyboard(&mut self) -> &mut Keyboard {
+        self.bus.get_keyboard()
     }
 
     fn activate_debugger(&mut self) {
@@ -158,6 +129,6 @@ impl System for CPC464 {
     }
 
     fn load_disk(&mut self, drive: usize, filename: &str) {
-        self.fdc.borrow_mut().load_disk(drive, filename);
+        self.bus.load_disk(drive, filename);
     }
 }
