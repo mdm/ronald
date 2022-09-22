@@ -2,11 +2,6 @@ use std::collections::HashMap;
 use std::fs::*;
 use std::io;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-pub type MemoryShared = Rc<RefCell<Memory>>;
-
 pub trait Read {
     fn read_byte(&self, address: usize) -> u8;
 
@@ -25,6 +20,14 @@ pub trait Write {
         self.write_byte(address, bytes[0]);
         self.write_byte(address + 1, bytes[1]);
     }
+}
+
+pub trait Mmu {
+    fn enable_lower_rom(&mut self, enable: bool);
+
+    fn enable_upper_rom(&mut self, enable: bool);
+
+    fn select_upper_rom(&mut self, upper_rom_nr: u8);
 }
 
 pub struct Rom {
@@ -89,6 +92,14 @@ impl Write for Ram {
     }
 }
 
+impl Mmu for Ram {
+    fn enable_lower_rom(&mut self, enable: bool) {}
+
+    fn enable_upper_rom(&mut self, enable: bool) {}
+
+    fn select_upper_rom(&mut self, upper_rom_nr: u8) {}
+}
+
 pub struct Memory {
     ram: Ram,
     lower_rom: Rom,
@@ -99,34 +110,20 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new_shared() -> MemoryShared {
+    pub fn new() -> Self {
         // TODO: receive rom paths as parameters
         let mut upper_roms = HashMap::new();
         upper_roms.insert(0, Rom::from_file("rom/basic_1.0.rom"));
         upper_roms.insert(7, Rom::from_file("rom/amsdos_0.5.rom"));
 
-        let memory = Memory {
+        Memory {
             ram: Ram::new(0x10000),
             lower_rom: Rom::from_file("rom/os_464.rom"),
             lower_rom_enabled: true,
             upper_roms,
             selected_upper_rom: 0,
             upper_rom_enabled: true,
-        };
-
-        Rc::new(RefCell::new(memory))
-    }
-
-    pub fn enable_lower_rom(&mut self, enable: bool) {
-        self.lower_rom_enabled = enable;
-    }
-
-    pub fn enable_upper_rom(&mut self, enable: bool) {
-        self.upper_rom_enabled = enable;
-    }
-
-    pub fn select_upper_rom(&mut self, upper_rom_nr: u8) {
-        self.selected_upper_rom = upper_rom_nr;
+        }
     }
 
     pub fn read_byte_from_ram(&self, address: usize) -> u8 {
@@ -159,5 +156,19 @@ impl Read for Memory {
 impl Write for Memory {
     fn write_byte(&mut self, address: usize, value: u8) {
         self.ram.write_byte(address, value);
+    }
+}
+
+impl Mmu for Memory {
+    fn enable_lower_rom(&mut self, enable: bool) {
+        self.lower_rom_enabled = enable;
+    }
+
+    fn enable_upper_rom(&mut self, enable: bool) {
+        self.upper_rom_enabled = enable;
+    }
+
+    fn select_upper_rom(&mut self, upper_rom_nr: u8) {
+        self.selected_upper_rom = upper_rom_nr;
     }
 }

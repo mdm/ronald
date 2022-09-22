@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone)]
@@ -106,21 +103,17 @@ pub struct KeyConfig {
     pub shifted: Option<HostKey>,
 }
 
-pub type KeyboardShared = Rc<RefCell<Keyboard>>;
-
 pub struct Keyboard {
     lines: [u8; 10],
     active_line: usize,
 }
 
 impl Keyboard {
-    pub fn new_shared() -> KeyboardShared {
-        let keyboard = Keyboard {
+    pub fn new() -> Self {
+        Keyboard {
             lines: [0xff; 10],
             active_line: 0,
-        };
-
-        Rc::new(RefCell::new(keyboard))
+        }
     }
 
     pub fn reset_all(&mut self) {

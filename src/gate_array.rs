@@ -1,16 +1,9 @@
 use crate::crtc;
 use crate::memory;
+use crate::memory::Mmu;
 use crate::screen;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-pub type GateArrayShared = Rc<RefCell<GateArray>>;
-
 pub struct GateArray {
-    memory: memory::MemoryShared,
-    crtc: crtc::CRTControllerShared,
-    screen: screen::ScreenShared,
     current_screen_mode: u8,
     requested_screen_mode: u8,
     hsync_active: bool,
@@ -22,15 +15,8 @@ pub struct GateArray {
 }
 
 impl GateArray {
-    pub fn new_shared(
-        memory: memory::MemoryShared,
-        crtc: crtc::CRTControllerShared,
-        screen: screen::ScreenShared,
-    ) -> GateArrayShared {
-        let gate_array = GateArray {
-            memory,
-            crtc,
-            screen,
+    pub fn new() -> Self {
+        GateArray {
             current_screen_mode: 0,
             requested_screen_mode: 0,
             hsync_active: false,
@@ -39,12 +25,10 @@ impl GateArray {
             interrupt_counter: 0,
             selected_pen: 0,
             pen_colors: vec![0; 17],
-        };
-
-        Rc::new(RefCell::new(gate_array))
+        }
     }
 
-    pub fn write_byte(&mut self, port: u16, value: u8) {
+    pub fn write_byte(&mut self, memory: &mut impl Mmu, port: u16, value: u8) {
         // TODO: remove port parameter?
         let function = (value >> 6) & 0x03;
 
@@ -63,8 +47,8 @@ impl GateArray {
             2 => {
                 self.requested_screen_mode = value & 0x03;
 
-                self.memory.borrow_mut().enable_lower_rom(value & 0x04 == 0);
-                self.memory.borrow_mut().enable_upper_rom(value & 0x08 == 0);
+                memory.enable_lower_rom(value & 0x04 == 0);
+                memory.enable_upper_rom(value & 0x08 == 0);
 
                 if value & 0x10 != 0 {
                     self.interrupt_counter = 0;
@@ -85,20 +69,20 @@ impl GateArray {
         self.interrupt_counter &= 0x1f;
     }
 
-    pub fn step(&mut self) -> bool {
-        let generate_interrupt = self.update_interrupt_counter();
-        self.update_screen_mode();
-        self.write_to_screen();
+    pub fn step(&mut self, crtc: &crtc::CRTController, memory: &memory::Memory, screen: &mut screen::Screen) -> bool {
+        let generate_interrupt = self.update_interrupt_counter(crtc);
+        self.update_screen_mode(crtc);
+        self.write_to_screen(crtc, memory, screen);
 
-        self.hsync_active = self.crtc.borrow().read_horizontal_sync();
-        self.vsync_active = self.crtc.borrow().read_vertical_sync();
+        self.hsync_active = crtc.read_horizontal_sync();
+        self.vsync_active = crtc.read_vertical_sync();
 
         generate_interrupt
     }
 
-    fn update_interrupt_counter(&mut self) -> bool {
+    fn update_interrupt_counter(&mut self, crtc: &crtc::CRTController) -> bool {
         let mut generate_interrupt = false;
-        if self.hsync_active && !self.crtc.borrow().read_horizontal_sync() {
+        if self.hsync_active && !crtc.read_horizontal_sync() {
             self.interrupt_counter += 1;
             self.hsyncs_since_last_vsync += 1;
 
@@ -113,7 +97,7 @@ impl GateArray {
             }
         }
 
-        if !self.vsync_active && self.crtc.borrow().read_vertical_sync() {
+        if !self.vsync_active && crtc.read_vertical_sync() {
             self.hsyncs_since_last_vsync = 0;
         }
 
@@ -125,21 +109,19 @@ impl GateArray {
         generate_interrupt
     }
 
-    fn update_screen_mode(&mut self) {
-        if !self.hsync_active && self.crtc.borrow().read_horizontal_sync() {
+    fn update_screen_mode(&mut self, crtc: &crtc::CRTController) {
+        if !self.hsync_active && crtc.read_horizontal_sync() {
             self.current_screen_mode = self.requested_screen_mode;
             log::trace!("New screen mode: {}", self.current_screen_mode);
         }
     }
 
-    fn write_to_screen(&self) {
-        let mut screen = self.screen.borrow_mut();
-        
-        if !self.vsync_active && self.crtc.borrow().read_vertical_sync() {
+    fn write_to_screen(&self, crtc: &crtc::CRTController, memory: &memory::Memory, screen: &mut screen::Screen) {
+        if !self.vsync_active && crtc.read_vertical_sync() {
             screen.trigger_vsync();
         }
 
-        if self.crtc.borrow().read_horizontal_sync() || self.crtc.borrow().read_vertical_sync() {
+        if crtc.read_horizontal_sync() || crtc.read_vertical_sync() {
             // TODO: use modified hsync/vsync durations (see http://www.cpcwiki.eu/index.php?title=CRTC#HSYNC_and_VSYNC)
             for _ in 0..16 {
                 // screen.write(20); // black
@@ -148,7 +130,7 @@ impl GateArray {
             return;
         }
 
-        if !self.crtc.borrow().read_display_enabled() {
+        if !crtc.read_display_enabled() {
             for _ in 0..16 {
                 screen.write(self.pen_colors[0x10] as usize); // border
             }
@@ -156,8 +138,8 @@ impl GateArray {
         }
 
         for offset in 0..2 {
-            let address = self.crtc.borrow().read_address() + offset;
-            let packed = self.memory.borrow().read_byte_from_ram(address);
+            let address = crtc.read_address() + offset;
+            let packed = memory.read_byte_from_ram(address);
             match self.current_screen_mode {
                 0 => {
                     let pixels = [

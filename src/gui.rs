@@ -121,7 +121,7 @@ impl Gui {
                             if let Some(keys) = self.key_map.get(&host_key) {
                                 self.pressed_keys.insert(input.scancode, host_key);
                                 for key in keys {
-                                    self.system.get_keyboard().borrow_mut().set_key(key.line, key.bit)                                    
+                                    self.system.get_keyboard().set_key(key.line, key.bit)                                    
                                 }
                             }
                         }
@@ -133,7 +133,7 @@ impl Gui {
                             if let Some(host_key) = self.pressed_keys.get(&input.scancode) {
                                 if let Some(keys) = self.key_map.get(host_key) {
                                     for key in keys {
-                                        self.system.get_keyboard().borrow_mut().unset_key(key.line, key.bit)                                    
+                                        self.system.get_keyboard().unset_key(key.line, key.bit)                                    
                                     }
                                 }
                             }
@@ -151,7 +151,7 @@ impl Gui {
 
     fn draw_frame(&self, pixels: &mut pixels::Pixels) {
         for (i, pixel) in pixels.get_frame().chunks_exact_mut(4).enumerate() {
-            let frame_buffer_color = self.system.get_screen().borrow().get_frame_buffer()[i]; // TODO: optimize frame buffer access
+            let frame_buffer_color = self.system.get_screen().get_frame_buffer()[i]; // TODO: optimize frame buffer access
             let rgba = [
                 ((frame_buffer_color >> 16) & 0xff) as u8,
                 ((frame_buffer_color >> 8) & 0xff) as u8,
