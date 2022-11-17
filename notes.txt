@@ -24,12 +24,6 @@ Debugger
 * Break on bus communication
 
 
-Architecture
-------------
-
-* Use Rc<RefCell>s and interior mutability
-
-
 TODO
 ----
 

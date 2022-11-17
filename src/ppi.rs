@@ -1,12 +1,7 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use crate::crtc;
-use crate::keyboard;
-use crate::psg;
-use crate::tape;
-
-pub type PeripheralInterfaceShared = Rc<RefCell<PeripheralInterface>>;
+use crate::crtc::CRTController;
+use crate::keyboard::Keyboard;
+use crate::psg::SoundGenerator;
+use crate::tape::TapeController;
 
 #[derive(PartialEq)]
 enum Direction {
@@ -28,42 +23,27 @@ pub struct PeripheralInterface {
     direction_c_upper: Direction,
     mode_a_and_c_upper: Mode,
     mode_b_and_c_lower: Mode,
-    crtc: crtc::CRTControllerShared,
-    keyboard: keyboard::KeyboardShared,
-    psg: psg::SoundGeneratorShared,
-    tape: tape::TapeControllerShared,
 }
 
 impl PeripheralInterface {
-    pub fn new_shared(
-        crtc: crtc::CRTControllerShared,
-        keyboard: keyboard::KeyboardShared,
-        psg: psg::SoundGeneratorShared,
-        tape: tape::TapeControllerShared,
-    ) -> PeripheralInterfaceShared {
-        let ppi = PeripheralInterface {
+    pub fn new() -> Self {
+        PeripheralInterface {
             direction_a: Direction::Input,
             direction_b: Direction::Input,
             direction_c_lower: Direction::Input,
             direction_c_upper: Direction::Input,
             mode_a_and_c_upper: Mode::Basic,
             mode_b_and_c_lower: Mode::Basic,
-            crtc,
-            keyboard,
-            psg,
-            tape,
-        };
-
-        Rc::new(RefCell::new(ppi))
+        }
     }
 
-    pub fn read_byte(&self, port: u16) -> u8 {
+    pub fn read_byte(&self, crtc: &CRTController, psg: &SoundGenerator, tape: &TapeController, port: u16) -> u8 {
         let function = (port >> 8) & 0x03;
 
         match function {
             0 => {
                 if self.direction_a == Direction::Input {
-                    self.psg.borrow().read_byte()
+                    psg.read_byte()
                 } else {
                     0
                 }
@@ -72,11 +52,11 @@ impl PeripheralInterface {
                 if self.direction_b == Direction::Input {
                     let mut value = 0x07 << 1 | 0x01 << 4; // distributor ID: Amstrad, 50 Hz monitor
 
-                    if self.crtc.borrow().read_vertical_sync() {
+                    if crtc.read_vertical_sync() {
                         value |= 0x01;
                     }
 
-                    if self.tape.borrow().read_sample() {
+                    if tape.read_sample() {
                         value |= 0x01 << 7;
                     }
 
@@ -91,29 +71,25 @@ impl PeripheralInterface {
         }
     }
 
-    pub fn write_byte(&mut self, port: u16, value: u8) {
+    pub fn write_byte(&mut self, keyboard: &mut Keyboard, psg: &mut SoundGenerator, tape: &mut TapeController, port: u16, value: u8) {
         let function = (port >> 8) & 0x03;
 
         match function {
             0 => {
                 if self.direction_a == Direction::Output {
-                    self.psg.borrow_mut().write_byte(value);
+                    psg.write_byte(value);
                 }
             }
             1 => (),
             2 => {
                 if self.direction_c_lower == Direction::Output {
-                    self.keyboard
-                        .borrow_mut()
-                        .set_active_line(value as usize & 0x0f);
+                    keyboard.set_active_line(value as usize & 0x0f);
                 }
 
                 if self.direction_c_upper == Direction::Output {
-                    self.psg.borrow_mut().perform_function((value >> 6) & 0x03);
-                    self.tape
-                        .borrow_mut()
-                        .write_sample((value >> 5) & 0x01 != 0);
-                    self.tape.borrow_mut().switch_motor(value & 0x10 != 0);
+                    psg.perform_function(keyboard, (value >> 6) & 0x03);
+                    tape.write_sample((value >> 5) & 0x01 != 0);
+                    tape.switch_motor(value & 0x10 != 0);
                 }
             }
             3 => {

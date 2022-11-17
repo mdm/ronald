@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 pub const BUFFER_WIDTH: usize = 48 * 16;
 pub const BUFFER_HEIGHT: usize = 35 * 16;
 
@@ -74,8 +71,6 @@ const HARDWARE_TO_FIRMWARE_COLORS: [usize; 32] = [
     14, // 31 (0x5f)
 ];
 
-pub type ScreenShared = Rc<RefCell<Screen>>;
-
 pub struct Screen {
     buffer: Vec<u32>,
     gun_position: usize,
@@ -84,15 +79,13 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub fn new_shared() -> ScreenShared {
-        let screen = Screen {
+    pub fn new() -> Self {
+        Screen {
             buffer: vec![FIRMWARE_COLORS[0]; BUFFER_WIDTH * BUFFER_HEIGHT],
             gun_position: 0,
             width_counter: 0,
             waiting_for_vsync: true,
-        };
-
-        Rc::new(RefCell::new(screen))
+        }
     }
 
     pub fn get_frame_buffer(&self) -> &Vec<u32> {
