@@ -8,13 +8,13 @@ edition = "2021"
 
 [dependencies]
 clap = "3.2.5"
-cpal = "0.13.5"
+cpal = "0.14.0"
 env_logger = "0.9.0"
 log = "0.4.17"
 native-dialog = "0.6.3"
 nom = "7.1.1"
 pixels = "0.9.0"
 serde = { version = "1.0.138", features = ["derive"] }
-serde_yaml = "0.8.24"
+serde_yaml = "0.9.10"
 winit = "0.26.1"
-winit_input_helper = "0.12.0"
+winit_input_helper = "0.13.0"

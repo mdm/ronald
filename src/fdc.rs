@@ -1,9 +1,6 @@
-use std::rc::Rc;
-use std::{cell::RefCell, collections::VecDeque};
+use std::collections::VecDeque;
 
 use crate::dsk_file::{self, Disk};
-
-pub type FloppyDiskControllerShared = Rc<RefCell<FloppyDiskController>>;
 
 struct Drive {
     track: usize,
@@ -95,8 +92,8 @@ pub struct FloppyDiskController {
 }
 
 impl FloppyDiskController {
-    pub fn new_shared() -> FloppyDiskControllerShared {
-        let fdc = FloppyDiskController {
+    pub fn new() -> Self {
+        FloppyDiskController {
             drives: [
                 Drive {
                     track: 0,
@@ -126,9 +123,7 @@ impl FloppyDiskController {
             end_of_track: false,
             status1: 0,
             status2: 0,
-        };
-
-        Rc::new(RefCell::new(fdc))
+        }
     }
 
     pub fn read_byte(&mut self, port: u16) -> u8 {
