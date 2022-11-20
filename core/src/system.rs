@@ -25,6 +25,9 @@ impl ZexHarness {
     }
 
     pub fn emulate(&mut self) {
+        let start = std::time::Instant::now();
+        let mut total_cycles = 0;
+
         loop {
             match self.cpu.registers.read_word(&Register16::PC) {
                 0x0000 => break,
@@ -49,14 +52,19 @@ impl ZexHarness {
                         }
                         _ => unreachable!(),
                     }
-                    self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                    let (cycles, _) = self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                    total_cycles += cycles as usize;
                 }
                 _ => {
-                    self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                    let (cycles, _) = self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                    total_cycles += cycles as usize;
                 }
             }
         }
         println!();
+
+        let elapsed_seconds = start.elapsed().as_secs_f64();
+        println!("Executed {total_cycles} in {elapsed_seconds} seconds ({} MHz).", total_cycles as f64 / 1_000_000.0 / elapsed_seconds);
     }
 }
 
