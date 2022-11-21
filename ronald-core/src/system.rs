@@ -4,6 +4,8 @@ mod cpu;
 mod instruction; // TODO: do we need this at this level? for debugger?
 mod memory;
 
+use crate::{AudioSink, VideoSink};
+
 use bus::{DummyBus, StandardBus};
 use cpu::{Cpu, Register8, Register16};
 // use debugger::Debugger;
@@ -76,8 +78,7 @@ impl ZexHarness {
 
 pub trait System {
     fn new() -> Self;
-    fn emulate(&mut self) -> u8;
-    fn get_screen(&self) -> &Screen;
+    fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8;
     fn get_keyboard(&mut self) -> &mut Keyboard;
     fn activate_debugger(&mut self);
     fn load_disk(&mut self, drive: usize, filename: &str);
@@ -105,7 +106,7 @@ impl System for CPC464 {
         }
     }
 
-    fn emulate(&mut self) -> u8 {
+    fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
         // if self.debugger.is_active(&self.cpu) {
         //     self.debugger.run_command_shell(&mut self.cpu, &self.memory);
         // }
@@ -113,7 +114,7 @@ impl System for CPC464 {
         let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
         for _ in 0..cycles {
-            let interrupt = self.bus.step(&mut self.memory);
+            let interrupt = self.bus.step(&mut self.memory, video, audio);
             if interrupt {
                 self.cpu.request_interrupt();
             }
@@ -126,11 +127,6 @@ impl System for CPC464 {
         }
 
         cycles
-    }
-
-    fn get_screen(&self) -> &Screen {
-        // TODO: should the GUI own the frame buffer?
-        self.bus.get_screen()
     }
 
     fn get_keyboard(&mut self) -> &mut Keyboard {

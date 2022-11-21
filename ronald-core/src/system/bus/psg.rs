@@ -3,6 +3,7 @@ use std::sync::mpsc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 use crate::system::bus::keyboard::Keyboard;
+use crate::AudioSink;
 
 const INVERSE_SQRT_2: f32 = 1.0 / std::f32::consts::SQRT_2;
 
@@ -183,7 +184,7 @@ impl SoundGenerator {
         self.buffer = value;
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self, audio: &mut impl AudioSink) {
         self.chip_clock_now += 1;
 
         if let Some(sample_rate) = self.sample_rate {

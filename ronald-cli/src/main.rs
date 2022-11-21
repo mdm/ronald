@@ -63,8 +63,7 @@ fn main() {
                 
             }
 
-            let gui = gui::Gui::new(driver);
-            gui.run();
+            gui::run(driver);
         }
         "zexdoc" => {
             let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
