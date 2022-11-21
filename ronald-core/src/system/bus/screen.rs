@@ -1,5 +1,4 @@
-pub const BUFFER_WIDTH: usize = 48 * 16;
-pub const BUFFER_HEIGHT: usize = 35 * 16;
+use crate::constants::{SCREEN_BUFFER_WIDTH, SCREEN_BUFFER_HEIGHT};
 
 const VIRTUAL_BUFFER_WIDTH: usize = 64 * 16;
 const VIRTUAL_BUFFER_HEIGHT: usize = 39 * 16;
@@ -81,7 +80,7 @@ pub struct Screen {
 impl Screen {
     pub fn new() -> Self {
         Screen {
-            buffer: vec![FIRMWARE_COLORS[0]; BUFFER_WIDTH * BUFFER_HEIGHT],
+            buffer: vec![FIRMWARE_COLORS[0]; SCREEN_BUFFER_WIDTH * SCREEN_BUFFER_HEIGHT],
             gun_position: 0,
             width_counter: 0,
             waiting_for_vsync: true,
@@ -103,8 +102,8 @@ impl Screen {
 
         if y >= 4 * 16 && x < 48 * 16 {
             let y = y - (4 * 16);
-            self.buffer[(y * BUFFER_WIDTH + x) % buffer_len] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
-            self.buffer[(y * BUFFER_WIDTH + x + BUFFER_WIDTH) % buffer_len] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
+            self.buffer[(y * SCREEN_BUFFER_WIDTH + x) % buffer_len] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
+            self.buffer[(y * SCREEN_BUFFER_WIDTH + x + SCREEN_BUFFER_WIDTH) % buffer_len] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
         }
 
         self.gun_position += 1;

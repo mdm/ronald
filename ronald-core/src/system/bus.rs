@@ -1,12 +1,22 @@
-use crate::crtc::CRTController;
-use crate::fdc::FloppyDiskController;
-use crate::gate_array::GateArray;
-use crate::keyboard::Keyboard;
-use crate::memory::{Memory, Mmu};
-use crate::ppi::PeripheralInterface;
-use crate::psg::SoundGenerator;
-use crate::screen::Screen;
-use crate::tape::TapeController;
+use crate::system::memory::{Memory, Mmu};
+
+mod crtc;
+mod fdc;
+mod gate_array;
+pub mod keyboard; // TODO: refactor to not use pub
+mod ppi;
+mod psg;
+pub mod screen; // TODO: refactor to not use pub
+mod tape;
+
+use crtc::CRTController;
+use fdc::FloppyDiskController;
+use gate_array::GateArray;
+use keyboard::Keyboard;
+use ppi::PeripheralInterface;
+use psg::SoundGenerator;
+use screen::Screen;
+use tape::TapeController;
 
 pub trait Bus {
     fn read_byte(&mut self, port: u16) -> u8;

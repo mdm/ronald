@@ -1,7 +1,7 @@
-use crate::crtc::CRTController;
-use crate::keyboard::Keyboard;
-use crate::psg::SoundGenerator;
-use crate::tape::TapeController;
+use crate::system::bus::crtc::CRTController;
+use crate::system::bus::keyboard::Keyboard;
+use crate::system::bus::psg::SoundGenerator;
+use crate::system::bus::tape::TapeController;
 
 #[derive(PartialEq)]
 enum Direction {

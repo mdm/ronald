@@ -2,7 +2,7 @@ use std::sync::mpsc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
-use crate::keyboard::Keyboard;
+use crate::system::bus::keyboard::Keyboard;
 
 const INVERSE_SQRT_2: f32 = 1.0 / std::f32::consts::SQRT_2;
 

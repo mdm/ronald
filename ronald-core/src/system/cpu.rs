@@ -1,8 +1,8 @@
 use std::fmt;
 
-use crate::bus::Bus;
-use crate::instruction::{Decoder, Instruction, JumpTest, Operand, InterruptMode};
-use crate::memory::{Read, Write, Mmu};
+use crate::system::bus::Bus;
+use crate::system::instruction::{Decoder, Instruction, JumpTest, Operand, InterruptMode};
+use crate::system::memory::{Read, Write, Mmu};
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
 pub enum Register8 {

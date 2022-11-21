@@ -1,7 +1,7 @@
-use crate::crtc;
-use crate::memory;
-use crate::memory::Mmu;
-use crate::screen;
+use crate::system::bus::crtc;
+use crate::system::memory;
+use crate::system::memory::Mmu;
+use crate::system::bus::screen;
 
 pub struct GateArray {
     current_screen_mode: u8,
