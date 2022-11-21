@@ -1,3 +1,4 @@
+use crate::VideoSink;
 use crate::system::bus::crtc;
 use crate::system::memory;
 use crate::system::memory::Mmu;
@@ -69,10 +70,10 @@ impl GateArray {
         self.interrupt_counter &= 0x1f;
     }
 
-    pub fn step(&mut self, crtc: &crtc::CRTController, memory: &memory::Memory, screen: &mut screen::Screen) -> bool {
+    pub fn step(&mut self, crtc: &crtc::CRTController, memory: &memory::Memory, screen: &mut screen::Screen, video: &mut impl VideoSink) -> bool {
         let generate_interrupt = self.update_interrupt_counter(crtc);
         self.update_screen_mode(crtc);
-        self.write_to_screen(crtc, memory, screen);
+        self.write_to_screen(crtc, memory, screen, video);
 
         self.hsync_active = crtc.read_horizontal_sync();
         self.vsync_active = crtc.read_vertical_sync();
@@ -116,9 +117,9 @@ impl GateArray {
         }
     }
 
-    fn write_to_screen(&self, crtc: &crtc::CRTController, memory: &memory::Memory, screen: &mut screen::Screen) {
+    fn write_to_screen(&self, crtc: &crtc::CRTController, memory: &memory::Memory, screen: &mut screen::Screen, video: &mut impl VideoSink) {
         if !self.vsync_active && crtc.read_vertical_sync() {
-            screen.trigger_vsync();
+            screen.trigger_vsync(video);
         }
 
         if crtc.read_horizontal_sync() || crtc.read_vertical_sync() {

@@ -1,4 +1,5 @@
 use crate::system::memory::{Memory, Mmu};
+use crate::{AudioSink, VideoSink};
 
 mod crtc;
 mod fdc;
@@ -75,18 +76,14 @@ impl StandardBus {
         }
     }
 
-    pub fn step(&mut self, memory: &mut Memory) -> bool {
-        self.psg.step();
+    pub fn step(&mut self, memory: &mut Memory, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> bool {
+        self.psg.step(audio);
         self.crtc.step();
-        self.gate_array.step(&self.crtc, memory, &mut self.screen)
+        self.gate_array.step(&self.crtc, memory, &mut self.screen, video)
     }
 
     pub fn acknowledge_interrupt(&mut self) {
         self.gate_array.acknowledge_interrupt();
-    }
-
-    pub fn get_screen(&self) -> &Screen {
-        &self.screen
     }
 
     pub fn get_keyboard(&mut self) -> &mut Keyboard {

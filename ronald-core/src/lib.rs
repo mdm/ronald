@@ -2,8 +2,7 @@ pub mod constants;
 pub mod system;
 
 pub trait VideoSink {
-    fn set_pixel(&self, x: usize, y: usize, r: u8, g: u8, b: u8);
-    fn submit_frame(&self);
+    fn draw_frame(&mut self, buffer: &Vec<(u8, u8, u8)>);
 }
 
 pub trait AudioSink {}
@@ -23,16 +22,14 @@ where
         Self { system: S::new() }
     }
 
-    pub fn step(&mut self, usecs: usize, video: &mut impl VideoSink, audio: Option<&mut impl AudioSink>) {
+    pub fn step(&mut self, usecs: usize, video: &mut impl VideoSink, audio: &mut impl AudioSink) {
         let frame_start = std::time::Instant::now();
 
         let mut elapsed_microseconds = 0;
         while elapsed_microseconds < usecs {
             // TODO: tie this to vsync instead of fixed value
-            elapsed_microseconds += self.system.emulate() as usize;
+            elapsed_microseconds += self.system.emulate(video, audio) as usize;
         }
-
-        video.submit_frame();
     }
 
     pub fn activate_debugger(&self) {
