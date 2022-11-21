@@ -1,6 +1,8 @@
 use std::collections::VecDeque;
 
-use crate::dsk_file::{self, Disk};
+mod dsk_file;
+
+use dsk_file::Disk;
 
 struct Drive {
     track: usize,

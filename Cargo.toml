@@ -1,4 +1,4 @@
 [workspace]
 resolver = "2"
-members = ["core", "cli", "web/wasm"]
-default-members = ["core"]
+members = ["ronald-core", "ronald-cli", "ronald-web/ronald-wasm"]
+default-members = ["ronald-cli"]

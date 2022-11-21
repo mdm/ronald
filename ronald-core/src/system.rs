@@ -1,9 +1,15 @@
-use crate::bus::{DummyBus, StandardBus};
-use crate::cpu::{Cpu, Register8, Register16};
-use crate::debugger::Debugger;
-use crate::keyboard::Keyboard;
-use crate::memory::{Ram, Memory, Read, Write};
-use crate::screen::Screen;
+mod bus;
+mod cpu;
+// mod debugger;
+mod instruction; // TODO: do we need this at this level? for debugger?
+mod memory;
+
+use bus::{DummyBus, StandardBus};
+use cpu::{Cpu, Register8, Register16};
+// use debugger::Debugger;
+use bus::keyboard::Keyboard;
+use memory::{Ram, Memory, Read, Write};
+use bus::screen::Screen;
 
 pub struct ZexHarness {
     cpu: Cpu,
@@ -69,6 +75,7 @@ impl ZexHarness {
 }
 
 pub trait System {
+    fn new() -> Self;
     fn emulate(&mut self) -> u8;
     fn get_screen(&self) -> &Screen;
     fn get_keyboard(&mut self) -> &mut Keyboard;
@@ -80,30 +87,28 @@ pub struct CPC464 {
     cpu: Cpu,
     memory: Memory,
     bus: StandardBus,
-    debugger: Debugger,
+    // debugger: Debugger,
 }
 
-impl CPC464 {
-    pub fn new() -> CPC464 {
+impl System for CPC464 {
+    fn new() -> CPC464 {
         let cpu = Cpu::new(0);
         let memory = Memory::new();
         let bus = StandardBus::new();
-        let debugger = Debugger::new();
+        // let debugger = Debugger::new();
 
         CPC464 {
             cpu,
             memory,
             bus,
-            debugger,
+            // debugger,
         }
     }
-}
 
-impl System for CPC464 {
     fn emulate(&mut self) -> u8 {
-        if self.debugger.is_active(&self.cpu) {
-            self.debugger.run_command_shell(&mut self.cpu, &self.memory);
-        }
+        // if self.debugger.is_active(&self.cpu) {
+        //     self.debugger.run_command_shell(&mut self.cpu, &self.memory);
+        // }
 
         let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
@@ -133,7 +138,7 @@ impl System for CPC464 {
     }
 
     fn activate_debugger(&mut self) {
-        self.debugger.activate();
+        // self.debugger.activate();
     }
 
     fn load_disk(&mut self, drive: usize, filename: &str) {

@@ -1,26 +1,12 @@
 #![allow(dead_code, unused_variables)]
 
-mod bus;
-mod cpu;
-mod crtc;
-mod debugger;
-mod dsk_file;
-mod fdc;
-mod gate_array;
-mod gui;
-mod instruction;
-mod keyboard;
-mod keyboard_configurator;
-mod memory;
-mod ppi;
-mod psg;
-mod screen;
-mod system;
-mod tape;
-
 use clap::{App, Arg};
 
-use crate::system::System;
+use ronald_core::{Driver, system};
+
+mod gui;
+mod keybindings;
+mod keyboard_configurator;
 
 fn main() {
     env_logger::Builder::from_default_env()
@@ -61,16 +47,23 @@ fn main() {
     match system {
         "cpc464" => {
             let debug = matches.is_present("debug");
-            let mut cpc = Box::new(system::CPC464::new());
+            let mut driver = Driver::<system::CPC464>::new();
             if debug {
-                cpc.activate_debugger();
+                driver.activate_debugger();
             }
 
             if let Some(dsk_filename) = matches.value_of("floppy") {
-                cpc.load_disk(0, dsk_filename);
+                match std::fs::read(dsk_filename) {
+                    Ok(rom) => driver.load_rom(0, rom),
+                    Err(err) => {
+                        println!("Floppy load error: {err}");
+                        return;
+                    }
+                }
+                
             }
 
-            let gui = gui::Gui::new(cpc);
+            let gui = gui::Gui::new(driver);
             gui.run();
         }
         "zexdoc" => {

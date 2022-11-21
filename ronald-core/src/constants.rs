@@ -1,5 +1,3 @@
-use serde::{Serialize, Deserialize};
-
 #[derive(Debug, Clone)]
 pub struct KeyDefinition {
     pub line: usize,
@@ -91,52 +89,5 @@ pub const KEYS: [(&str, (bool, KeyDefinition)); 74] = [
     // ("JoystickFire3", (false, KeyDefinition { line: 9, bit: 6 })),
 ];
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct HostKey {
-    pub scancode: u32,
-    pub modifiers: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct KeyConfig {
-    pub normal: HostKey,
-    pub shifted: Option<HostKey>,
-}
-
-pub struct Keyboard {
-    lines: [u8; 10],
-    active_line: usize,
-}
-
-impl Keyboard {
-    pub fn new() -> Self {
-        Keyboard {
-            lines: [0xff; 10],
-            active_line: 0,
-        }
-    }
-
-    pub fn reset_all(&mut self) {
-        self.lines = [0xff; 10];
-    }
-
-    pub fn set_key(&mut self, line: usize, bit: u8) {
-        self.lines[line] &= !(1 << bit);
-    }
-
-    pub fn unset_key(&mut self, line: usize, bit: u8) {
-        self.lines[line] |= 1 << bit;
-    }
-
-    pub fn set_active_line(&mut self, line: usize) {
-        self.active_line = line;
-    }
-
-    pub fn scan_active_line(&self) -> u8 {
-        if self.active_line < 10 {
-            self.lines[self.active_line]
-        } else {
-            0xff
-        }
-    }
-}
+pub const SCREEN_BUFFER_WIDTH: usize = 48 * 16;
+pub const SCREEN_BUFFER_HEIGHT: usize = 35 * 16;

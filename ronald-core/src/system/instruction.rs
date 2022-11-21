@@ -1,7 +1,7 @@
 use std::fmt;
 
-use crate::cpu;
-use crate::memory::Read;
+use crate::system::cpu;
+use crate::system::memory::Read;
 
 pub enum Operand {
     Immediate8(u8),
