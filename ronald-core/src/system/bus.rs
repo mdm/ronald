@@ -94,8 +94,8 @@ impl StandardBus {
         self.keyboard.unset_key(line, bit)
     }
 
-    pub fn load_disk(&mut self, drive: usize, filename: &str) {
-        self.fdc.load_disk(drive, filename);
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
+        self.fdc.load_disk(drive, rom);
     }
 }
 

@@ -231,8 +231,8 @@ impl FloppyDiskController {
         }
     }
 
-    pub fn load_disk(&mut self, drive: usize, filename: &str) {
-        self.drives[drive].disk = match dsk_file::Disk::load(filename) {
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
+        self.drives[drive].disk = match dsk_file::Disk::load(rom) {
             Ok(disk) => {
                 log::info!("Disk loaded successfully");
                 Some(disk)

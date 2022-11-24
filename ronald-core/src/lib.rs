@@ -49,9 +49,9 @@ where
         self.system.unset_key(line, bit);
     }
 
-    pub fn load_rom(&self, slot: usize, rom: Vec<u8>) {
+    pub fn load_rom(&mut self, slot: usize, rom: Vec<u8>) {
         // TODO: Return result -> Err if slot unsuitable
-        todo!()
+        self.system.load_rom(slot, rom)
     }
 
     pub fn save_rom(&self) -> Vec<u8> {
