@@ -5,7 +5,12 @@ pub trait VideoSink {
     fn draw_frame(&mut self, buffer: &Vec<(u8, u8, u8)>);
 }
 
-pub trait AudioSink {}
+pub trait AudioSink {
+    fn get_sample_rate(&self) -> Option<f32>;
+    fn play_audio(&self);
+    fn pause_audio(&self);
+    fn add_sample(&self, sample: f32);
+}
 
 pub struct Driver<S>
 where
