@@ -82,7 +82,7 @@ pub trait System {
     fn activate_debugger(&mut self);
     fn set_key(&mut self, line: usize, bit: u8);
     fn unset_key(&mut self, line: usize, bit: u8);
-    fn load_disk(&mut self, drive: usize, filename: &str);
+    fn load_rom(&mut self, slot: usize, rom: Vec<u8>);
 }
 
 pub struct CPC464 {
@@ -142,7 +142,8 @@ impl System for CPC464 {
         self.bus.unset_key(line, bit);
     }
 
-    fn load_disk(&mut self, drive: usize, filename: &str) {
-        self.bus.load_disk(drive, filename);
+    fn load_rom(&mut self, slot: usize, rom: Vec<u8>) {
+        // TODO: allow loading tapes as well
+        self.bus.load_disk(slot, rom);
     }
 }

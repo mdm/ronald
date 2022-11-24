@@ -1,5 +1,4 @@
 use std::convert::TryInto;
-use std::io::Read;
 
 pub struct Disk {
     pub extended: bool,
@@ -11,12 +10,10 @@ pub struct Disk {
 }
 
 impl Disk {
-    pub fn load(filename: &str) -> std::io::Result<Disk> {
-        log::debug!("Loading DSK file from \"{}\"", filename);
+    pub fn load(rom: Vec<u8>) -> std::io::Result<Disk> { // TODO: use custom Result instead of std::io:Result
+        log::debug!("Loading DSK file.");
 
-        let mut file = std::fs::File::open(filename)?;
-        let mut contents = Vec::new();
-        file.read_to_end(&mut contents)?;
+        let contents = rom;
 
         let standard_header = b"MV - CPCEMU Disk-File\r\nDisk-Info\r\n";
         let extended_header = b"EXTENDED CPC DSK File\r\nDisk-Info\r\n";
