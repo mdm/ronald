@@ -90,7 +90,7 @@ where
     let event_loop = winit::event_loop::EventLoop::new();
     let mut pixels_window = PixelsWindow::new(&event_loop);
 
-    let mut audio_thread = audio::CpalAudioThread {};
+    let mut audio = audio::CpalAudio::new();
 
     let mut current_modifiers = winit::event::ModifiersState::empty().bits();
     let mut alt_gr_modifier = 0;
@@ -126,7 +126,7 @@ where
                 driver.step(
                     20_000,
                     &mut pixels_window,
-                    &mut audio_thread,
+                    &mut audio,
                 );
 
                 log::trace!(
