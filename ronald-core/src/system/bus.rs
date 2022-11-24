@@ -86,8 +86,12 @@ impl StandardBus {
         self.gate_array.acknowledge_interrupt();
     }
 
-    pub fn get_keyboard(&mut self) -> &mut Keyboard {
-        &mut self.keyboard
+    pub fn set_key(&mut self, line: usize, bit: u8) {
+        self.keyboard.set_key(line, bit)
+    }
+
+    pub fn unset_key(&mut self, line: usize, bit: u8) {
+        self.keyboard.unset_key(line, bit)
     }
 
     pub fn load_disk(&mut self, drive: usize, filename: &str) {

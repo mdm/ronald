@@ -36,12 +36,12 @@ where
         todo!()
     }
 
-    pub fn press_key(&self, line: usize, bit: u8) { // TODO: use key names here?
-        todo!()
+    pub fn press_key(&mut self, line: usize, bit: u8) { // TODO: use key names here?
+        self.system.set_key(line, bit);
     }
 
-    pub fn release_key(&self, line: usize, bit: u8) { // TODO: use key names here?
-        todo!()
+    pub fn release_key(&mut self, line: usize, bit: u8) { // TODO: use key names here?
+        self.system.unset_key(line, bit);
     }
 
     pub fn load_rom(&self, slot: usize, rom: Vec<u8>) {

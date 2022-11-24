@@ -79,8 +79,9 @@ impl ZexHarness {
 pub trait System {
     fn new() -> Self;
     fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8;
-    fn get_keyboard(&mut self) -> &mut Keyboard;
     fn activate_debugger(&mut self);
+    fn set_key(&mut self, line: usize, bit: u8);
+    fn unset_key(&mut self, line: usize, bit: u8);
     fn load_disk(&mut self, drive: usize, filename: &str);
 }
 
@@ -129,12 +130,16 @@ impl System for CPC464 {
         cycles
     }
 
-    fn get_keyboard(&mut self) -> &mut Keyboard {
-        self.bus.get_keyboard()
-    }
-
     fn activate_debugger(&mut self) {
         // self.debugger.activate();
+    }
+
+    fn set_key(&mut self, line: usize, bit: u8) {
+        self.bus.set_key(line, bit);
+    }
+
+    fn unset_key(&mut self, line: usize, bit: u8) {
+        self.bus.unset_key(line, bit);
     }
 
     fn load_disk(&mut self, drive: usize, filename: &str) {
