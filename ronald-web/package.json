@@ -6,13 +6,15 @@
     "start": "vite",
     "dev": "vite",
     "build": "vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "wasm": "wasm-pack build ./ronald-wasm --target web"
   },
   "license": "MIT",
   "devDependencies": {
     "typescript": "^4.8.2",
     "vite": "^3.0.9",
-    "vite-plugin-solid": "^2.3.0"
+    "vite-plugin-solid": "^2.3.0",
+    "vite-plugin-wasm-pack": "^0.1.12"
   },
   "dependencies": {
     "solid-js": "^1.5.1"
