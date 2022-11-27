@@ -1421,6 +1421,9 @@ dependencies = [
 [[package]]
 name = "ronald-wasm"
 version = "0.1.0"
+dependencies = [
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "rustc-hash"
