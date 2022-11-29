@@ -1,26 +1,20 @@
 import type { Component } from 'solid-js';
+import { onMount } from 'solid-js';
+import init, { run_cpc } from '../ronald-wasm/pkg/ronald_wasm';
 
 import logo from './logo.svg';
 import styles from './App.module.css';
 
+await init();
+
 const App: Component = () => {
+  let canvas: HTMLCanvasElement | undefined;
+  onMount(() => {
+    run_cpc(canvas);
+  });
+
   return (
-    <div class={styles.App}>
-      <header class={styles.header}>
-        <img src={logo} class={styles.logo} alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          class={styles.link}
-          href="https://github.com/solidjs/solid"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn Solid
-        </a>
-      </header>
-    </div>
+    <canvas ref={canvas} width="768" height="560" />
   );
 };
 
