@@ -35,11 +35,11 @@ pub struct Rom {
 }
 
 impl Rom {
-    pub fn from_file(path: &str) -> Rom {
+    pub fn from_bytes(bytes: &[u8]) -> Rom {
         // TODO: better error handling
         // TODO: check ROM size (should be 16k)
         Rom {
-            data: std::fs::read(path).unwrap_or_else(|_| panic!("ROM file \"{}\" could not be read.", path)),
+            data: bytes.to_vec(),
         }
     }
 }
@@ -113,12 +113,12 @@ impl Memory {
     pub fn new() -> Self {
         // TODO: receive rom paths as parameters
         let mut upper_roms = HashMap::new();
-        upper_roms.insert(0, Rom::from_file("rom/basic_1.0.rom"));
-        upper_roms.insert(7, Rom::from_file("rom/amsdos_0.5.rom"));
+        upper_roms.insert(0, Rom::from_bytes(include_bytes!("../../rom/basic_1.0.rom")));
+        upper_roms.insert(7, Rom::from_bytes(include_bytes!("../../rom/amsdos_0.5.rom")));
 
         Memory {
             ram: Ram::new(0x10000),
-            lower_rom: Rom::from_file("rom/os_464.rom"),
+            lower_rom: Rom::from_bytes(include_bytes!("../../rom/os_464.rom")),
             lower_rom_enabled: true,
             upper_roms,
             selected_upper_rom: 0,

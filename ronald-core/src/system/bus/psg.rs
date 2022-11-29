@@ -40,7 +40,7 @@ pub struct SoundGenerator {
     envelope_shape_attack: bool,
     envelope_shape_continue: bool,
     frames: u32,
-    start: std::time::Instant,
+    // start: std::time::Instant,
 }
 
 impl SoundGenerator {
@@ -63,7 +63,7 @@ impl SoundGenerator {
             envelope_shape_attack: false,
             envelope_shape_continue: false,
             frames: 0,
-            start: std::time::Instant::now(),
+            // start: std::time::Instant::now(),
         }
     }
 
@@ -217,11 +217,11 @@ impl SoundGenerator {
                 audio.add_sample(sample);
 
                 self.frames += 1;
-                if self.start.elapsed().as_micros() >= 1_000_000 {
-                    log::trace!("Generated {} audio samples per second", self.frames);
-                    self.frames = 0;
-                    self.start = std::time::Instant::now();
-                }
+                // if self.start.elapsed().as_micros() >= 1_000_000 {
+                //     log::trace!("Generated {} audio samples per second", self.frames);
+                //     self.frames = 0;
+                //     self.start = std::time::Instant::now();
+                // }
             }
         }
     }

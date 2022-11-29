@@ -28,8 +28,6 @@ where
     }
 
     pub fn step(&mut self, usecs: usize, video: &mut impl VideoSink, audio: &mut impl AudioSink) {
-        let frame_start = std::time::Instant::now();
-
         let mut elapsed_microseconds = 0;
         while elapsed_microseconds < usecs {
             // TODO: tie this to vsync instead of fixed value
@@ -49,9 +47,9 @@ where
         self.system.unset_key(line, bit);
     }
 
-    pub fn load_rom(&mut self, slot: usize, rom: Vec<u8>) {
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
         // TODO: Return result -> Err if slot unsuitable
-        self.system.load_rom(slot, rom)
+        self.system.load_disk(drive, rom)
     }
 
     pub fn save_rom(&self) -> Vec<u8> {

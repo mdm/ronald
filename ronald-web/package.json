@@ -13,6 +13,7 @@
   "devDependencies": {
     "typescript": "^4.8.2",
     "vite": "^3.0.9",
+    "vite-plugin-rsw": "^2.0.11",
     "vite-plugin-solid": "^2.3.0",
     "vite-plugin-wasm-pack": "^0.1.12"
   },

@@ -150,7 +150,7 @@ where
                                 .show_open_single_file()
                             {
                                 if let Ok(rom) = std::fs::read(pathbuf) {
-                                    driver.load_rom(0, rom);
+                                    driver.load_disk(0, rom);
                                 }
                             }
                         }

@@ -54,7 +54,7 @@ fn main() {
 
             if let Some(dsk_filename) = matches.value_of("floppy") {
                 match std::fs::read(dsk_filename) {
-                    Ok(rom) => driver.load_rom(0, rom),
+                    Ok(rom) => driver.load_disk(0, rom),
                     Err(err) => {
                         println!("Floppy load error: {err}");
                         return;
