@@ -35,7 +35,9 @@ where
     V: VideoSink + 'static,
     A: AudioSink + 'static,
 {
+    let timer = gloo::console::Timer::new("frame");
     driver.step(20_000, &mut video, &mut audio);
+    drop(timer);
 
     let wait_ms = 1_000 / 20;
     let timeout = Timeout::new(0, move || {

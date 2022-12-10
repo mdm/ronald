@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "description": "",
   "scripts": {
-    "start": "vite",
-    "dev": "vite",
-    "build": "vite build",
-    "serve": "vite preview",
+    "start": "npm run wasm && vite",
+    "dev": "npm run wasm && vite",
+    "build": "npm run wasm && vite build",
+    "serve": "npm run wasm && vite preview",
     "wasm": "wasm-pack build ./ronald-wasm --target web"
   },
   "license": "MIT",
