@@ -70,19 +70,17 @@ pub fn run<S>(mut driver: Driver<S>)
 where
     S: system::System + 'static,
 {
-    let keys = HashMap::from(constants::KEYS);
     let file = File::open("keyconfig.yml").unwrap();
     let key_configs: HashMap<String, keybindings::KeyConfig> =
         serde_yaml::from_reader(file).unwrap();
     let mut key_map = HashMap::new();
 
     for (key, key_config) in key_configs {
-        let (_shiftable, key_definition) = keys.get(&key as &str).unwrap();
-        key_map.insert(key_config.normal, vec![key_definition.clone()]);
+        key_map.insert(key_config.normal, vec![key.clone()]);
         if let Some(key_config_shifted) = key_config.shifted {
             key_map.insert(
                 key_config_shifted,
-                vec![key_definition.clone(), KeyDefinition { line: 2, bit: 5 }],
+                vec![key.clone(), "Shift".into()],
             );
         }
     }
@@ -167,7 +165,7 @@ where
                         if let Some(keys) = key_map.get(&host_key) {
                             pressed_keys.insert(input.scancode, host_key);
                             for key in keys {
-                                driver.press_key(key.line, key.bit)
+                                driver.press_key(key)
                             }
                         }
                     }
@@ -180,7 +178,7 @@ where
                         if let Some(host_key) = pressed_keys.get(&input.scancode) {
                             if let Some(keys) = key_map.get(host_key) {
                                 for key in keys {
-                                    driver.release_key(key.line, key.bit)
+                                    driver.release_key(key)
                                 }
                             }
                         }
