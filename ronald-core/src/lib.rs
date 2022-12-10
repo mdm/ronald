@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use constants::KeyDefinition;
+
 pub mod constants;
 pub mod system;
 
@@ -17,6 +21,7 @@ where
     S: system::System,
 {
     system: S,
+    keys: HashMap<&'static str, (bool, KeyDefinition)>,
 }
 
 impl<S> Driver<S>
@@ -24,7 +29,11 @@ where
     S: system::System,
 {
     pub fn new() -> Self {
-        Self { system: S::new() }
+        let keys = HashMap::from(constants::KEYS);
+        Self {
+            system: S::new(),
+            keys,
+        }
     }
 
     pub fn step(&mut self, usecs: usize, video: &mut impl VideoSink, audio: &mut impl AudioSink) {
@@ -39,12 +48,16 @@ where
         todo!()
     }
 
-    pub fn press_key(&mut self, line: usize, bit: u8) { // TODO: use key names here?
-        self.system.set_key(line, bit);
+    pub fn press_key(&mut self, key: &str) {
+        if let Some((_shiftable, key_definition)) = self.keys.get(key) {
+            self.system.set_key(key_definition.line, key_definition.bit);
+        }
     }
 
-    pub fn release_key(&mut self, line: usize, bit: u8) { // TODO: use key names here?
-        self.system.unset_key(line, bit);
+    pub fn release_key(&mut self, key: &str) {
+        if let Some((_shiftable, key_definition)) = self.keys.get(key) {
+            self.system.unset_key(key_definition.line, key_definition.bit);
+        }
     }
 
     pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
