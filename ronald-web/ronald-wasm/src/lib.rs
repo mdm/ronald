@@ -1,48 +1,53 @@
-use gloo_timers::callback::Timeout;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
-use ronald_core::{system, Driver, VideoSink, AudioSink};
+use ronald_core::{system, Driver};
 
 mod io;
 
 use io::{CanvasVideo, WebAudio};
 
 #[wasm_bindgen]
-pub fn run_cpc(canvas: JsValue) -> Result<(), JsValue> {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-
-    let audio = WebAudio {};
-
-    let canvas = canvas.dyn_into::<HtmlCanvasElement>()?;
-    let ctx = canvas
-        .get_context("2d")?
-        .unwrap()
-        .dyn_into::<CanvasRenderingContext2d>()?;
-    let video = CanvasVideo::new(ctx);
-
-    let driver = Driver::<system::CPC464>::new();
-
-    step_driver(driver, video, audio);
-
-    Ok(())
+pub struct Emulator {
+    driver: Driver<system::CPC464>,
+    video: CanvasVideo,
+    audio: WebAudio,
 }
 
-fn step_driver<S, V, A>(mut driver: Driver<S>, mut video: V, mut audio: A)
-where
-    S: system::System + 'static,
-    V: VideoSink + 'static,
-    A: AudioSink + 'static,
-{
-    let timer = gloo::console::Timer::new("frame");
-    driver.step(20_000, &mut video, &mut audio);
-    drop(timer);
+#[wasm_bindgen]
+impl Emulator {
+    #[wasm_bindgen(constructor)]
+    pub fn new(canvas: JsValue) -> Result<Emulator, JsValue> {
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let wait_ms = 1_000 / 20;
-    let timeout = Timeout::new(0, move || {
-        step_driver(driver, video, audio);
-    });
+        let audio = WebAudio {};
 
-    timeout.forget();
+        let canvas = canvas.dyn_into::<HtmlCanvasElement>()?;
+        let ctx = canvas
+            .get_context("2d")?
+            .unwrap()
+            .dyn_into::<CanvasRenderingContext2d>()?;
+        let video = CanvasVideo::new(ctx);
+
+        let driver = Driver::<system::CPC464>::new();
+
+        Ok(Self {
+            driver,
+            video,
+            audio,
+        })
+    }
+
+    pub fn step_driver(&mut self) {
+        self.driver.step(20_000, &mut self.video, &mut self.audio);    
+    }
+
+    pub fn press_key(&mut self, key: &str) {
+        self.driver.press_key(key);
+    }
+
+    pub fn release_key(&mut self, key: &str) {
+        self.driver.release_key(key);
+    }
 }
