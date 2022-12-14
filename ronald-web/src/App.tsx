@@ -5,6 +5,11 @@ import init, { Emulator } from '../ronald-wasm/pkg/ronald_wasm';
 import logo from './logo.svg';
 import styles from './App.module.css';
 
+const keymapURL = '/src/assets/default-keymap.json';
+const request = new Request(keymapURL);
+const response = await fetch(request);
+const keymap = await response.json();
+
 await init();
 const TARGET_FRAME_MS = 20;
 
@@ -20,10 +25,18 @@ const App: Component = () => {
   onMount(() => {
     const emulator = new Emulator(canvas);
     document.addEventListener('keydown', ((emulator: Emulator, event: KeyboardEvent) => {
-      emulator.press_key(event.key);
+      if (keymap[event.key]) {
+        for (const key of keymap[event.key]) {
+          emulator.press_key(key);    
+        }
+      }
     }).bind(null, emulator));
     document.addEventListener('keyup', ((emulator: Emulator, event: KeyboardEvent) => {
-      emulator.release_key(event.key);
+      if (keymap[event.key]) {
+        for (const key of keymap[event.key]) {
+          emulator.release_key(key);
+        }
+      }
     }).bind(null, emulator));
     step(emulator);
   });
