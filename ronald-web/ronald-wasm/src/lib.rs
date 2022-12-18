@@ -1,3 +1,4 @@
+use js_sys::Uint8Array;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -49,5 +50,10 @@ impl Emulator {
 
     pub fn release_key(&mut self, key: &str) {
         self.driver.release_key(key);
+    }
+
+    pub fn load_disk(&mut self, drive: usize, rom: JsValue) {
+        let array = Uint8Array::new(&rom);
+        self.driver.load_disk(drive, array.to_vec());
     }
 }
