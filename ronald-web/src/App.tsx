@@ -13,14 +13,27 @@ const keymap = await response.json();
 await init();
 const TARGET_FRAME_MS = 20;
 
-const step = (emulator: Emulator | null) => {
+const run = (emulator: Emulator | null) => {
   if (!emulator) {
     return;
   }
-  const start = performance.now();
-  emulator.step_driver();
-  const elapsed = performance.now() - start;
-  setTimeout(step.bind(null, emulator), Math.max(0, TARGET_FRAME_MS - elapsed));
+
+  let previousTime = performance.now();
+  let timeAvailable = 0;
+
+  const step = (time: DOMHighResTimeStamp) => {
+    timeAvailable += time - previousTime;
+    previousTime = time;
+
+    while (timeAvailable >= TARGET_FRAME_MS) {
+      emulator.step_driver();
+      timeAvailable -= TARGET_FRAME_MS;
+    }
+
+    requestAnimationFrame(step);
+  };
+
+  requestAnimationFrame(step);
 };
 
 const handleOnDrop = async (emulator: Emulator | null, event: DragEvent) => {
@@ -68,7 +81,7 @@ const App: Component = () => {
         }
       }
     }).bind(null, emulator()));
-    step(emulator());
+    run(emulator());
   });
 
   return (
