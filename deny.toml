@@ -110,6 +110,11 @@ allow = [
 # See https://spdx.org/licenses/ for list of possible licenses
 # [possible values: any SPDX 3.11 short identifier (+ optional exception)].
 deny = [
+    "GPL-1.0",
+    "GPL-2.0",
+    "GPL-3.0",
+    "LGPL-2.0",
+    "LGPL-3.0",
     #"Nokia",
 ]
 # Lint level for licenses considered copyleft
