@@ -1,3 +1,5 @@
+import { AudioWriter, RingBuffer } from "ringbuf.js";
+
 import { Emulator } from "../ronald-wasm/pkg/ronald_wasm";
 
 const TARGET_FRAME_MS = 20;
@@ -8,15 +10,19 @@ export class Harness {
   private previousTime: number;
   private timeAvailable: number;
   private keymap?: any;
+  private pressedKeys: Set<string>;
 
   constructor(canvas: HTMLCanvasElement) {
     this.emulator = new Emulator(canvas);
     this.running = false;
     this.previousTime = performance.now();
     this.timeAvailable = 0;
+    this.pressedKeys = new Set();
   }
 
   async run() {
+    console.log("run");
+
     if (!this.keymap) {
       await this.setupKeymap();
     }
@@ -24,16 +30,32 @@ export class Harness {
     this.previousTime = performance.now();
     this.timeAvailable = 0;
     this.running = true;
+    this.emulator.play_audio();
 
     requestAnimationFrame(this.step.bind(this));
   }
 
   pause() {
+    console.log("pause");
+
+    for (const pressedKey of this.pressedKeys) {
+      for (const key of this.keymap[pressedKey]) {
+        this.emulator.release_key(key);
+      }
+    }
+
+    this.emulator.pause_audio();
     this.running = false;
   }
 
   handleKeyDown(event: KeyboardEvent) {
+    if (!this.running) {
+      return;
+    }
+
     if (this.keymap[event.key]) {
+      this.pressedKeys.add(event.key);
+
       for (const key of this.keymap[event.key]) {
         this.emulator.press_key(key);
       }
@@ -41,7 +63,13 @@ export class Harness {
   }
 
   handleKeyUp(event: KeyboardEvent) {
+    if (!this.running) {
+      return;
+    }
+
     if (this.keymap[event.key]) {
+      this.pressedKeys.delete(event.key);
+
       for (const key of this.keymap[event.key]) {
         this.emulator.release_key(key);
       }
