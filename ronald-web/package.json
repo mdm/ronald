@@ -1,0 +1,23 @@
+{
+  "name": "vite-template-solid",
+  "version": "0.0.0",
+  "description": "",
+  "scripts": {
+    "start": "npm run wasm && vite",
+    "dev": "npm run wasm && vite",
+    "build": "npm run wasm && vite build",
+    "serve": "npm run wasm && vite preview",
+    "wasm": "wasm-pack build ./ronald-wasm --target web"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^4.8.2",
+    "vite": "^3.0.9",
+    "vite-plugin-rsw": "^2.0.11",
+    "vite-plugin-solid": "^2.3.0",
+    "vite-plugin-wasm-pack": "^0.1.12"
+  },
+  "dependencies": {
+    "solid-js": "^1.5.1"
+  }
+}
