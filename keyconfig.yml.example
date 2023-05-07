@@ -1,0 +1,459 @@
+---
+R:
+  normal:
+    scancode: 19
+    modifiers: 0
+  shifted:
+    scancode: 19
+    modifiers: 4
+Slash:
+  normal:
+    scancode: 8
+    modifiers: 4
+  shifted:
+    scancode: 12
+    modifiers: 4
+Caret:
+  normal:
+    scancode: 41
+    modifiers: 0
+  shifted:
+    scancode: 4
+    modifiers: 4
+Comma:
+  normal:
+    scancode: 51
+    modifiers: 0
+  shifted:
+    scancode: 86
+    modifiers: 0
+T:
+  normal:
+    scancode: 20
+    modifiers: 0
+  shifted:
+    scancode: 20
+    modifiers: 4
+Numpad4:
+  normal:
+    scancode: 75
+    modifiers: 0
+  shifted: ~
+G:
+  normal:
+    scancode: 34
+    modifiers: 0
+  shifted:
+    scancode: 34
+    modifiers: 4
+Key1:
+  normal:
+    scancode: 2
+    modifiers: 0
+  shifted:
+    scancode: 2
+    modifiers: 4
+O:
+  normal:
+    scancode: 24
+    modifiers: 0
+  shifted:
+    scancode: 24
+    modifiers: 4
+Key4:
+  normal:
+    scancode: 5
+    modifiers: 0
+  shifted:
+    scancode: 5
+    modifiers: 4
+BracketLeft:
+  normal:
+    scancode: 9
+    modifiers: 4096
+  shifted: ~
+Numpad8:
+  normal:
+    scancode: 72
+    modifiers: 0
+  shifted: ~
+Escape:
+  normal:
+    scancode: 1
+    modifiers: 0
+  shifted: ~
+X:
+  normal:
+    scancode: 45
+    modifiers: 0
+  shifted:
+    scancode: 45
+    modifiers: 4
+ArrowLeft:
+  normal:
+    scancode: 105
+    modifiers: 0
+  shifted: ~
+Delete:
+  normal:
+    scancode: 14
+    modifiers: 0
+  shifted: ~
+Y:
+  normal:
+    scancode: 44
+    modifiers: 0
+  shifted:
+    scancode: 44
+    modifiers: 4
+Minus:
+  normal:
+    scancode: 53
+    modifiers: 0
+  shifted:
+    scancode: 11
+    modifiers: 4
+CapsLock:
+  normal:
+    scancode: 58
+    modifiers: 0
+  shifted: ~
+U:
+  normal:
+    scancode: 22
+    modifiers: 0
+  shifted:
+    scancode: 22
+    modifiers: 4
+Copy:
+  normal:
+    scancode: 97
+    modifiers: 32
+  shifted: ~
+Key5:
+  normal:
+    scancode: 6
+    modifiers: 0
+  shifted:
+    scancode: 6
+    modifiers: 4
+F:
+  normal:
+    scancode: 33
+    modifiers: 0
+  shifted:
+    scancode: 33
+    modifiers: 4
+S:
+  normal:
+    scancode: 31
+    modifiers: 0
+  shifted:
+    scancode: 31
+    modifiers: 4
+Numpad3:
+  normal:
+    scancode: 81
+    modifiers: 0
+  shifted: ~
+W:
+  normal:
+    scancode: 17
+    modifiers: 0
+  shifted:
+    scancode: 17
+    modifiers: 4
+Key0:
+  normal:
+    scancode: 11
+    modifiers: 0
+  shifted:
+    scancode: 53
+    modifiers: 4
+Space:
+  normal:
+    scancode: 57
+    modifiers: 0
+  shifted: ~
+ArrowRight:
+  normal:
+    scancode: 106
+    modifiers: 0
+  shifted: ~
+C:
+  normal:
+    scancode: 46
+    modifiers: 0
+  shifted:
+    scancode: 46
+    modifiers: 4
+Numpad9:
+  normal:
+    scancode: 73
+    modifiers: 0
+  shifted: ~
+NumpadEnter:
+  normal:
+    scancode: 110
+    modifiers: 0
+  shifted: ~
+Semicolon:
+  normal:
+    scancode: 51
+    modifiers: 4
+  shifted:
+    scancode: 27
+    modifiers: 0
+A:
+  normal:
+    scancode: 30
+    modifiers: 0
+  shifted:
+    scancode: 30
+    modifiers: 4
+J:
+  normal:
+    scancode: 36
+    modifiers: 0
+  shifted:
+    scancode: 36
+    modifiers: 4
+Backslash:
+  normal:
+    scancode: 12
+    modifiers: 4096
+  shifted: ~
+Clear:
+  normal:
+    scancode: 111
+    modifiers: 0
+  shifted: ~
+Period:
+  normal:
+    scancode: 52
+    modifiers: 0
+  shifted:
+    scancode: 86
+    modifiers: 4
+ArrowDown:
+  normal:
+    scancode: 108
+    modifiers: 0
+  shifted: ~
+M:
+  normal:
+    scancode: 50
+    modifiers: 0
+  shifted:
+    scancode: 50
+    modifiers: 4
+Control:
+  normal:
+    scancode: 29
+    modifiers: 32
+  shifted: ~
+Numpad0:
+  normal:
+    scancode: 82
+    modifiers: 0
+  shifted: ~
+ShiftLeft:
+  normal:
+    scancode: 42
+    modifiers: 4
+  shifted: ~
+Colon:
+  normal:
+    scancode: 52
+    modifiers: 4
+  shifted:
+    scancode: 27
+    modifiers: 4
+Key8:
+  normal:
+    scancode: 9
+    modifiers: 0
+  shifted:
+    scancode: 9
+    modifiers: 4
+At:
+  normal:
+    scancode: 16
+    modifiers: 0
+  shifted:
+    scancode: 86
+    modifiers: 4096
+Key6:
+  normal:
+    scancode: 7
+    modifiers: 0
+  shifted:
+    scancode: 7
+    modifiers: 4
+Key2:
+  normal:
+    scancode: 3
+    modifiers: 0
+  shifted:
+    scancode: 3
+    modifiers: 4
+Key7:
+  normal:
+    scancode: 8
+    modifiers: 0
+  shifted:
+    scancode: 43
+    modifiers: 4
+D:
+  normal:
+    scancode: 32
+    modifiers: 0
+  shifted:
+    scancode: 32
+    modifiers: 4
+I:
+  normal:
+    scancode: 23
+    modifiers: 0
+  shifted:
+    scancode: 23
+    modifiers: 4
+Numpad5:
+  normal:
+    scancode: 76
+    modifiers: 0
+  shifted: ~
+H:
+  normal:
+    scancode: 35
+    modifiers: 0
+  shifted:
+    scancode: 35
+    modifiers: 4
+Numpad1:
+  normal:
+    scancode: 79
+    modifiers: 0
+  shifted: ~
+Numpad7:
+  normal:
+    scancode: 71
+    modifiers: 0
+  shifted: ~
+Key9:
+  normal:
+    scancode: 10
+    modifiers: 0
+  shifted:
+    scancode: 10
+    modifiers: 4
+Z:
+  normal:
+    scancode: 21
+    modifiers: 0
+  shifted:
+    scancode: 21
+    modifiers: 4
+ShiftRight:
+  normal:
+    scancode: 54
+    modifiers: 4
+  shifted: ~
+NumpadPeriod:
+  normal:
+    scancode: 83
+    modifiers: 0
+  shifted: ~
+P:
+  normal:
+    scancode: 25
+    modifiers: 0
+  shifted:
+    scancode: 25
+    modifiers: 4
+ArrowUp:
+  normal:
+    scancode: 103
+    modifiers: 0
+  shifted: ~
+E:
+  normal:
+    scancode: 18
+    modifiers: 0
+  shifted:
+    scancode: 18
+    modifiers: 4
+BracketRight:
+  normal:
+    scancode: 10
+    modifiers: 4096
+  shifted: ~
+Q:
+  normal:
+    scancode: 16
+    modifiers: 0
+  shifted:
+    scancode: 16
+    modifiers: 4
+Numpad6:
+  normal:
+    scancode: 77
+    modifiers: 0
+  shifted: ~
+Numpad2:
+  normal:
+    scancode: 80
+    modifiers: 0
+  shifted: ~
+Key3:
+  normal:
+    scancode: 4
+    modifiers: 0
+  shifted:
+    scancode: 43
+    modifiers: 0
+L:
+  normal:
+    scancode: 38
+    modifiers: 0
+  shifted:
+    scancode: 38
+    modifiers: 4
+V:
+  normal:
+    scancode: 47
+    modifiers: 0
+  shifted:
+    scancode: 47
+    modifiers: 4
+Tab:
+  normal:
+    scancode: 15
+    modifiers: 0
+  shifted: ~
+B:
+  normal:
+    scancode: 48
+    modifiers: 0
+  shifted:
+    scancode: 48
+    modifiers: 4
+N:
+  normal:
+    scancode: 49
+    modifiers: 0
+  shifted:
+    scancode: 49
+    modifiers: 4
+Enter:
+  normal:
+    scancode: 28
+    modifiers: 0
+  shifted: ~
+K:
+  normal:
+    scancode: 37
+    modifiers: 0
+  shifted:
+    scancode: 37
+    modifiers: 4
