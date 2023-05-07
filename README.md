@@ -25,6 +25,10 @@ There are a few optional arguments. To see their documentation run
 
 `cargo run --release -- --help`
 
+***Note:*** You need a valid keyboard configuration, to run the desktop version of the
+emulator. To get started renaming the included `keyconfig.yml.example` to `keyconfig.yml`
+should be sufficient.
+
 Loading DSK Files
 -----------------
 
@@ -47,3 +51,13 @@ debugger shell expects one of the following commands:
   be entered earlier.
 * `continue` continues executing instructions until a breakpoint is reached or
   indefinitely if there are no breakpoints.
+
+Browser Version
+---------------
+
+The repo contains a WASM version as well. To run it you need Node installed and
+execute the following commands:
+
+1. `cd ronald-web`
+2. `npm install`
+3. `npm run dev`
