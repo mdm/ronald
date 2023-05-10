@@ -1445,6 +1445,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74605f360ce573babfe43964cbe520294dcb081afbf8c108fc6e23036b4da2df"
 
 [[package]]
+name = "psg"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c0b48b89555e979817c75779d91d7691f508d67de1d5777b52e40f9abff228"
+
+[[package]]
 name = "quote"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1543,6 +1549,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "nom 7.1.1",
+ "psg",
 ]
 
 [[package]]

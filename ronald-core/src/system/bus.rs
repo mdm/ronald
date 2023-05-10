@@ -15,7 +15,7 @@ use fdc::FloppyDiskController;
 use gate_array::GateArray;
 use keyboard::Keyboard;
 use ppi::PeripheralInterface;
-use psg::SoundGenerator;
+use self::psg::SoundGenerator;
 use screen::Screen;
 use tape::TapeController;
 
