@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::system::bus::Bus;
-use crate::system::instruction::{Decoder, Instruction, JumpTest, Operand, InterruptMode};
-use crate::system::memory::{Read, Write, Mmu};
+use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
+use crate::system::memory::{Mmu, Read, Write};
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
 pub enum Register8 {
@@ -239,7 +239,19 @@ impl Cpu {
         cpu
     }
 
-    pub fn fetch_and_execute(&mut self, memory: &mut (impl Read + Write + Mmu), bus: &mut impl Bus) -> (u8, bool) {
+    pub fn fetch_and_execute(
+        &mut self,
+        memory: &mut (impl Read + Write + Mmu),
+        bus: &mut impl Bus,
+    ) -> (u8, bool) {
+        if self.halted {
+            if self.handle_interrupt(memory) {
+                return (4, true);
+            }
+
+            return (1, false);
+        }
+
         if self.enable_interrupt {
             self.iff1 = true;
             self.iff2 = true;
@@ -250,9 +262,7 @@ impl Cpu {
 
         let pc = self.registers.read_word(&Register16::PC);
 
-        let (instruction, next_address) = self
-            .decoder
-            .decode_at(memory, pc as usize);
+        let (instruction, next_address) = self.decoder.decode_at(memory, pc as usize);
 
         log::trace!("{:#06x}: {}", pc, &instruction);
 
@@ -605,7 +615,8 @@ impl Cpu {
             }
             Instruction::Ex(left, right) => {
                 match (left, right) {
-                    (Operand::Register16(Register16::AF), Operand::Register16(Register16::AF)) => { // TODO: test if this match arm works with references
+                    (Operand::Register16(Register16::AF), Operand::Register16(Register16::AF)) => {
+                        // TODO: test if this match arm works with references
                         self.registers.swap_word(&Register16::AF);
                     }
                     (left, right) => {
@@ -628,6 +639,12 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Halt => {
+                self.halted = true;
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Im(mode) => {
                 self.interrupt_mode = *mode;
 
@@ -646,7 +663,10 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::In(Operand::Register8(destination), Operand::RegisterIndirect(Register16::BC)) => {
+            Instruction::In(
+                Operand::Register8(destination),
+                Operand::RegisterIndirect(Register16::BC),
+            ) => {
                 // TODO: make this a special case of the other IN instruction above?
                 let port = self.registers.read_word(&Register16::BC);
 
@@ -879,13 +899,31 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Outd => {
+                // TODO: check implementation
+                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_sub(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(0x1);
+                self.registers.write_byte(&Register8::B, counter);
+
+                let address = self.registers.read_word(&Register16::BC);
+
+                bus.write_byte(memory, address, value);
+
+                self.set_flag(Flag::Zero, counter == 0);
+                self.set_flag(Flag::AddSubtract, false);
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Pop(Operand::Register16(destination)) => {
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
-                self.registers.write_word(
-                    destination,
-                    memory.read_word(old_sp as usize),
-                );
+                self.registers
+                    .write_word(destination, memory.read_word(old_sp as usize));
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
@@ -908,14 +946,18 @@ impl Cpu {
                 if self.check_jump(jump_test) {
                     let old_sp = self.registers.read_word(&Register16::SP);
                     self.registers.write_word(&Register16::SP, old_sp + 2);
-                    self.registers.write_word(
-                        &Register16::PC,
-                        memory.read_word(old_sp as usize),
-                    );
+                    self.registers
+                        .write_word(&Register16::PC, memory.read_word(old_sp as usize));
                 } else {
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
                 }
+            }
+            Instruction::Reti => {
+                let old_sp = self.registers.read_word(&Register16::SP);
+                self.registers.write_word(&Register16::SP, old_sp + 2);
+                self.registers
+                    .write_word(&Register16::PC, memory.read_word(old_sp as usize));
             }
             Instruction::Rl(destination, operand) => {
                 let value = self.load_byte(memory, operand);
@@ -1041,7 +1083,11 @@ impl Cpu {
                 let new_accumulator = (accumulator & 0xf0) | (memory_hl >> 4);
                 self.registers.write_byte(&Register8::A, new_accumulator);
                 let new_memory_hl = (memory_hl << 4) | (accumulator & 0xf);
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), new_memory_hl);
+                self.store_byte(
+                    memory,
+                    &Operand::RegisterIndirect(Register16::HL),
+                    new_memory_hl,
+                );
 
                 self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
                 self.set_flag(Flag::Zero, new_accumulator == 0);
@@ -1061,7 +1107,11 @@ impl Cpu {
                 let new_accumulator = (accumulator & 0xf0) | (memory_hl & 0xf);
                 self.registers.write_byte(&Register8::A, new_accumulator);
                 let new_memory_hl = ((accumulator & 0xf) << 4) | (memory_hl >> 4);
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), new_memory_hl);
+                self.store_byte(
+                    memory,
+                    &Operand::RegisterIndirect(Register16::HL),
+                    new_memory_hl,
+                );
 
                 self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
                 self.set_flag(Flag::Zero, new_accumulator == 0);
@@ -1080,8 +1130,9 @@ impl Cpu {
                 self.registers.write_word(&Register16::SP, new_sp);
                 memory.write_word(new_sp as usize, next_address as u16);
                 let address_lower = self.load_byte(memory, target);
-                
-                self.registers.write_word(&Register16::PC, address_lower as u16);
+
+                self.registers
+                    .write_word(&Register16::PC, address_lower as u16);
             }
             Instruction::Sbc(destination, source) => {
                 match destination {
@@ -1259,29 +1310,11 @@ impl Cpu {
             }
         }
 
-        if self.irq_received && self.iff1 && !prevent_interrupt {
-            // TODO: allow non-maskable interrupts (they are not used in the CPC)?
-            self.irq_received = false; // TODO: make requester hold interrupt until acknowledged?
-
-            match self.interrupt_mode {
-                InterruptMode::Mode1 => {
-                    log::trace!("Handling interrupt");
-                    let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
-                    let new_sp = self.registers.read_word(&Register16::SP) - 2;
-                    self.registers.write_word(&Register16::SP, new_sp);
-                    memory.write_word(new_sp as usize, old_pc);
-                    
-                    self.registers.write_word(&Register16::PC, 0x0038);
-
-                    timing_in_nops += 4; // + Instruction::Rst(_).timing()
-                }
-                _ => unimplemented!(),
-            }
-            
-            (timing_in_nops, true)
-        } else {
-            (timing_in_nops, false)
+        if !prevent_interrupt && self.handle_interrupt(memory) {
+            return (timing_in_nops + 4, true);
         }
+
+        (timing_in_nops, false)
     }
 
     pub fn request_interrupt(&mut self) {
@@ -1391,6 +1424,33 @@ impl Cpu {
                 memory.write_word((address as i64 + *displacement as i64) as usize, value)
             }
             _ => unreachable!(),
+        }
+    }
+
+    fn handle_interrupt(&mut self, memory: &mut (impl Read + Write + Mmu)) -> bool {
+        if self.irq_received && self.iff1 {
+            // TODO: allow non-maskable interrupts (they are not used in the CPC)?
+            self.halted = false;
+            self.irq_received = false; // TODO: make requester hold interrupt until acknowledged?
+
+            match self.interrupt_mode {
+                InterruptMode::Mode1 => {
+                    log::trace!("Handling interrupt");
+                    let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
+                    let new_sp = self.registers.read_word(&Register16::SP) - 2;
+                    self.registers.write_word(&Register16::SP, new_sp);
+                    memory.write_word(new_sp as usize, old_pc);
+
+                    self.registers.write_word(&Register16::PC, 0x0038);
+
+                    // timing_in_nops += 4; // + Instruction::Rst(_).timing()
+                }
+                _ => unimplemented!(),
+            }
+
+            true
+        } else {
+            false
         }
     }
 
