@@ -1265,7 +1265,7 @@ impl Cpu {
 
             match self.interrupt_mode {
                 InterruptMode::Mode1 => {
-                    log::debug!("Handling interrupt");
+                    log::trace!("Handling interrupt");
                     let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
