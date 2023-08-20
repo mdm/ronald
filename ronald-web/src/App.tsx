@@ -43,7 +43,7 @@ const App: Component = () => {
   });
 
   return (
-    <div style="display:flex">
+    <div class="flex bg-slate-900 h-screen">
       <canvas
         ref={canvas}
         width="768"
@@ -62,19 +62,24 @@ const App: Component = () => {
           harness()?.handleKeyUp(event);
         }}
       />
-      <button
-        onClick={async () => {
-          if (running()) {
-            setRunning(false);
-            pause();
-          } else {
-            setRunning(true);
-            await run();
-          }
-        }}
-      >
-        {running() ? "Pause" : "Run"}
-      </button>
+      <div>
+        <div class="flex">
+          <button
+            class="w-20 h-20 rounded text-slate-900 bg-slate-400 hover:bg-slate-200"
+            onClick={async () => {
+              if (running()) {
+                setRunning(false);
+                pause();
+              } else {
+                setRunning(true);
+                await run();
+              }
+            }}
+          >
+            {running() ? "Pause" : "Run"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
