@@ -2,3 +2,6 @@
 **/*.rs.bk
 /docs
 /data
+
+# Local Netlify folder
+.netlify
