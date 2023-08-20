@@ -10,18 +10,19 @@ await init();
 const App: Component = () => {
   const [harness, setHarness] = createSignal<Harness>();
   const [running, setRunning] = createSignal(false);
+  let canvas: HTMLCanvasElement | undefined;
 
   const pause = () => {
-    console.log("pause", running(), harness())
+    console.log("pause", running(), harness());
     harness()?.pause();
   };
 
   const run = async () => {
-    console.log("run", running(), harness())
+    console.log("run", running(), harness());
+    canvas?.focus();
     await harness()?.run();
   };
 
-  let canvas: HTMLCanvasElement | undefined;
   onMount(async () => {
     if (!canvas) {
       return;
@@ -39,27 +40,27 @@ const App: Component = () => {
         await run();
       }
     });
-
-    document.addEventListener("keydown", (event: KeyboardEvent) =>
-      harness()?.handleKeyDown(event)
-    );
-    document.addEventListener("keyup", (event: KeyboardEvent) =>
-      harness()?.handleKeyUp(event)
-    );
   });
 
   return (
     <div style="display:flex">
       <canvas
         ref={canvas}
+        width="768"
+        height="560"
+        tabindex="0"
         onDrop={(event: DragEvent) => {
           harness()?.handleOnDrop(event);
         }}
         onDragOver={(event: DragEvent) => {
           harness()?.handleOnDragOver(event);
         }}
-        width="768"
-        height="560"
+        onKeyDown={(event: KeyboardEvent) => {
+          harness()?.handleKeyDown(event);
+        }}
+        onKeyUp={(event: KeyboardEvent) => {
+          harness()?.handleKeyUp(event);
+        }}
       />
       <button
         onClick={async () => {
