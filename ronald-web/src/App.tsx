@@ -4,6 +4,7 @@ import { createSignal, onMount } from "solid-js";
 import init, { Emulator } from "../ronald-wasm/pkg/ronald_wasm";
 
 import { Harness } from "./Harness";
+import ControlButton from "./components/ControlButton";
 
 await init();
 
@@ -64,8 +65,7 @@ const App: Component = () => {
       />
       <div>
         <div class="flex">
-          <button
-            class="w-20 h-20 rounded text-slate-900 bg-slate-400 hover:bg-slate-200"
+          <ControlButton
             onClick={async () => {
               if (running()) {
                 setRunning(false);
@@ -77,7 +77,9 @@ const App: Component = () => {
             }}
           >
             {running() ? "Pause" : "Run"}
-          </button>
+          </ControlButton>
+          <ControlButton>Single Step</ControlButton>
+          <ControlButton>Toggle Breakpoint</ControlButton>
         </div>
       </div>
     </div>
