@@ -23,10 +23,13 @@ pub struct CRTController {
     registers: [u8; 18],
     selected_register: usize,
     horizontal_counter: u8,
-    horizontal_sync_width_counter: u8,
-    character_row_counter: u8,
     scan_line_counter: u8,
+    character_row_counter: u8,
     display_start_address: u16,
+    horizontal_sync_active: bool,
+    horizontal_sync_counter: u8,
+    vertical_sync_active: bool,
+    vertical_sync_counter: u8,
 }
 
 impl CRTController {
@@ -35,10 +38,13 @@ impl CRTController {
             registers: [0; 18],
             selected_register: 0,
             horizontal_counter: 0,
-            horizontal_sync_width_counter: 0,
             character_row_counter: 0,
             scan_line_counter: 0,
             display_start_address: 0,
+            horizontal_sync_active: false,
+            horizontal_sync_counter: 0,
+            vertical_sync_active: false,
+            vertical_sync_counter: 0,
         }
     }
 
@@ -98,31 +104,43 @@ impl CRTController {
     }
 
     pub fn read_vertical_sync(&self) -> bool {
-        // TODO: what happens before registers are initialized?
-        let sync_start = self.registers[Register::VerticalSyncPosition as usize] as i32;
-        let character_rows_since_start = self.character_row_counter as i32 - sync_start;
-        let scan_lines_since_start =
-            (self.registers[Register::MaximumRasterAddress as usize] as i32 + 1)
-                * character_rows_since_start + self.scan_line_counter as i32;
-        (0.. 16 * 8).contains(&scan_lines_since_start) // should be 16, not 16 * 8 - TODO: find out why shortening this messes with Fruity Frank colors
+        self.vertical_sync_active
     }
 
     pub fn step(&mut self) {
         self.horizontal_counter += 1;
 
         if self.horizontal_counter > self.registers[Register::HorizontalTotal as usize] {
-            self.scan_line_counter += 1;
             self.horizontal_counter = 0;
+            self.scan_line_counter += 1;
+
+            if self.vertical_sync_active {
+                self.vertical_sync_counter += 1;
+
+                if self.vertical_sync_counter > 16 { // TODO: don't hardcode type 2
+                    self.vertical_sync_active = false;
+                }
+            }
         }
 
         if self.scan_line_counter > self.registers[Register::MaximumRasterAddress as usize] {
-            self.character_row_counter += 1;
             self.scan_line_counter = 0;
+            self.character_row_counter += 1;
         }
 
         if self.character_row_counter > self.registers[Register::VerticalTotal as usize] {
-            // TODO: take VerticalTotalAdjust into account
+            if self.registers[Register::VerticalTotalAdjust as usize] != 0 {
+                log::debug!(
+                    "CRTC VERTICAL TOTAL ADJUST: {}",
+                    self.registers[Register::VerticalTotalAdjust as usize]
+                );
+            }
             self.character_row_counter = 0;
+        }
+
+        if self.character_row_counter > self.registers[Register::VerticalSyncPosition as usize] {
+            self.vertical_sync_active = true;
+            self.vertical_sync_counter = 0;
         }
 
         if self.horizontal_counter == 0 && self.character_row_counter == 0 {
