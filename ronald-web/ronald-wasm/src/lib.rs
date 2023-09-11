@@ -66,4 +66,8 @@ impl Emulator {
     pub fn pause_audio(&mut self) {
         self.audio.pause_audio()
     }
+
+    pub fn get_snapshot(&self) -> String {
+        self.driver.get_json_snapshot().unwrap_or_else(|_err| String::new())
+    }
 }

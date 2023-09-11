@@ -65,6 +65,11 @@ where
         self.system.load_disk(drive, rom)
     }
 
+    pub fn get_json_snapshot(&self) -> serde_json::Result<String> {
+        let snapshot = self.system.make_snapshot();
+        serde_json::to_string(&snapshot)
+    }
+
     pub fn save_rom(&self) -> Vec<u8> {
         todo!()
     }

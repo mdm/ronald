@@ -1,15 +1,18 @@
 import type { Component } from "solid-js";
 import { createSignal, onMount } from "solid-js";
+import { createStore } from "solid-js/store";
 
 import init, { Emulator } from "../ronald-wasm/pkg/ronald_wasm";
 
 import { Harness } from "./Harness";
 import ControlButton from "./components/ControlButton";
+import CpuStateView from "./components/CpuStateView";
 
 await init();
 
 const App: Component = () => {
   const [harness, setHarness] = createSignal<Harness>();
+  const [snapshot, setSnapshot] = createStore<any>(); // TODO: makes this typed
   const [running, setRunning] = createSignal(false);
   let canvas: HTMLCanvasElement | undefined;
 
@@ -74,12 +77,16 @@ const App: Component = () => {
                 setRunning(true);
                 await run();
               }
+              setSnapshot(harness()?.getSnapshot());
             }}
           >
             {running() ? "Pause" : "Run"}
           </ControlButton>
           <ControlButton>Single Step</ControlButton>
           <ControlButton>Toggle Breakpoint</ControlButton>
+        </div>
+        <div>
+          <CpuStateView state={snapshot.cpu}/>
         </div>
       </div>
     </div>

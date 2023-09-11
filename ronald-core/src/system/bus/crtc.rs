@@ -19,7 +19,7 @@ enum Register {
     LightPenAddressLow,
 }
 
-pub struct CRTController {
+pub struct CrtController {
     registers: [u8; 18],
     selected_register: usize,
     horizontal_counter: u8,
@@ -29,9 +29,9 @@ pub struct CRTController {
     display_start_address: u16,
 }
 
-impl CRTController {
+impl CrtController {
     pub fn new() -> Self {
-        CRTController {
+        CrtController {
             registers: [0; 18],
             selected_register: 0,
             horizontal_counter: 0,

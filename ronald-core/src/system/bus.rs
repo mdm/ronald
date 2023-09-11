@@ -10,7 +10,7 @@ mod psg;
 pub mod screen; // TODO: refactor to not use pub
 mod tape;
 
-use crtc::CRTController;
+use crtc::CrtController;
 use fdc::FloppyDiskController;
 use gate_array::GateArray;
 use keyboard::Keyboard;
@@ -43,7 +43,7 @@ impl Bus for DummyBus {
 }
 
 pub struct StandardBus {
-    crtc: CRTController,
+    crtc: CrtController,
     fdc: FloppyDiskController,
     gate_array: GateArray,
     keyboard: Keyboard,
@@ -55,7 +55,7 @@ pub struct StandardBus {
 
 impl StandardBus {
     pub fn new() -> Self {
-        let crtc = CRTController::new();
+        let crtc = CrtController::new();
         let fdc = FloppyDiskController::new();
         let gate_array = GateArray::new();
         let keyboard = Keyboard::new();

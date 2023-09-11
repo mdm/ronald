@@ -1,5 +1,7 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 use crate::system::bus::Bus;
 use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
 use crate::system::memory::{Mmu, Read, Write};
@@ -33,6 +35,7 @@ pub enum Register16 {
     PC,
 }
 
+#[derive(Clone)]
 pub struct RegisterFile {
     data: Vec<u16>,
 }
@@ -205,6 +208,38 @@ impl Flag {
             Flag::Sign => 1 << 7,
         }
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CpuSnapshot {
+    register_a: u8,
+    register_f: u8,
+    register_b: u8,
+    register_c: u8,
+    register_d: u8,
+    register_e: u8,
+    register_h: u8,
+    register_l: u8,
+    alt_register_a: u8,
+    alt_register_f: u8,
+    alt_register_b: u8,
+    alt_register_c: u8,
+    alt_register_d: u8,
+    alt_register_e: u8,
+    alt_register_h: u8,
+    alt_register_l: u8,
+    register_i: u8,
+    register_r: u8,
+    register_ix: u16,
+    register_iy: u16,
+    register_sp: u16,
+    register_pc: u16,
+    iff1: bool,
+    iff2: bool,
+    interrupt_mode: InterruptMode,
+    enable_interrupt: bool, // TODO: eliminate by moving logic to end of fetch_and_execute
+    irq_received: bool, // TODO: possible to eliminate? yes, if we make sure to regenerate irq when restoring
 }
 
 pub struct Cpu {
@@ -677,6 +712,7 @@ impl Cpu {
                 let port = self.registers.read_word(&Register16::BC);
 
                 let value = bus.read_byte(port);
+                // TODO: can this write affect the flags register in unintended ways?
                 self.registers.write_byte(destination, value);
 
                 self.set_flag(Flag::Sign, (value as i8) < 0);
@@ -1655,5 +1691,61 @@ impl Cpu {
             "S = {}, Z = {}, H = {}, P/V = {}, N = {}, C = {}",
             sign, zero, half_carry, parity_oveflow, add_subtract, carry
         );
+    }
+
+    pub fn make_snapshot(&self) -> CpuSnapshot {
+        let mut registers = self.registers.clone();
+        registers.swap_word(&Register16::AF);
+        registers.swap_word(&Register16::BC);
+        registers.swap_word(&Register16::DE);
+        registers.swap_word(&Register16::HL);
+
+        let alt_register_a = registers.read_byte(&Register8::A);
+        let alt_register_f = registers.read_byte(&Register8::F);
+        let alt_register_b = registers.read_byte(&Register8::B);
+        let alt_register_c = registers.read_byte(&Register8::C);
+        let alt_register_d = registers.read_byte(&Register8::D);
+        let alt_register_e = registers.read_byte(&Register8::E);
+        let alt_register_h = registers.read_byte(&Register8::H);
+        let alt_register_l = registers.read_byte(&Register8::L);
+
+        let f = self.registers.read_byte(&Register8::F);
+        log::debug!("{:#02x}", f);
+        log::debug!("  S {:?}", self.check_flag(Flag::Sign));
+        log::debug!("  Z {:?}", self.check_flag(Flag::Zero));
+        log::debug!("  H {:?}", self.check_flag(Flag::HalfCarry));
+        log::debug!("P/V {:?}", self.check_flag(Flag::ParityOverflow));
+        log::debug!("  N {:?}", self.check_flag(Flag::AddSubtract));
+        log::debug!("  C {:?}", self.check_flag(Flag::Carry));
+
+        CpuSnapshot {
+            register_a: self.registers.read_byte(&Register8::A),
+            register_f: self.registers.read_byte(&Register8::F),
+            register_b: self.registers.read_byte(&Register8::B),
+            register_c: self.registers.read_byte(&Register8::C),
+            register_d: self.registers.read_byte(&Register8::D),
+            register_e: self.registers.read_byte(&Register8::E),
+            register_h: self.registers.read_byte(&Register8::H),
+            register_l: self.registers.read_byte(&Register8::L),
+            alt_register_a,
+            alt_register_f,
+            alt_register_b,
+            alt_register_c,
+            alt_register_d,
+            alt_register_e,
+            alt_register_h,
+            alt_register_l,
+            register_i: self.registers.read_byte(&Register8::I),
+            register_r: self.registers.read_byte(&Register8::R),
+            register_ix: self.registers.read_word(&Register16::IX),
+            register_iy: self.registers.read_word(&Register16::IY),
+            register_sp: self.registers.read_word(&Register16::SP),
+            register_pc: self.registers.read_word(&Register16::PC),
+            iff1: self.iff1,
+            iff2: self.iff2,
+            interrupt_mode: self.interrupt_mode,
+            enable_interrupt: self.enable_interrupt,
+            irq_received: self.irq_received,
+        }
     }
 }
