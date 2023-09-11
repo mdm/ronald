@@ -4,10 +4,12 @@ mod cpu;
 mod instruction; // TODO: do we need this at this level? for debugger?
 mod memory;
 
+use serde::{Serialize, Deserialize};
+
 use crate::{AudioSink, VideoSink};
 
 use bus::{DummyBus, StandardBus};
-use cpu::{Cpu, Register8, Register16};
+use cpu::{Cpu, CpuSnapshot, Register8, Register16};
 // use debugger::Debugger;
 use bus::keyboard::Keyboard;
 use memory::{Ram, Memory, Read, Write};
@@ -83,6 +85,17 @@ pub trait System {
     fn set_key(&mut self, line: usize, bit: u8);
     fn unset_key(&mut self, line: usize, bit: u8);
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>);
+    fn make_snapshot(&self) -> SystemSnapshot;
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SystemSnapshot {
+    cpu: CpuSnapshot,
+    // gate_array: GateArraySnapshot,
+    // crtc: CrtcSnapshot,
+    // ppi: PpiSnapshot,
+    // psg: PsgShanpshot,
+    // memory: MemorySnapshot,
 }
 
 pub struct CPC464 {
@@ -145,5 +158,11 @@ impl System for CPC464 {
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
         // TODO: allow loading tapes as well
         self.bus.load_disk(drive, rom);
+    }
+
+    fn make_snapshot(&self) -> SystemSnapshot {
+        SystemSnapshot {
+            cpu: self.cpu.make_snapshot(),
+        }
     }
 }

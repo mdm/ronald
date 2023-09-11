@@ -48,6 +48,15 @@ export class Harness {
     this.running = false;
   }
 
+  getSnapshot() {
+    if (this.running) {
+      return undefined;
+    }
+
+    // TODO: deserialze this properly
+    return  JSON.parse(this.emulator.get_snapshot());
+  }
+
   handleKeyDown(event: KeyboardEvent) {
     if (!this.running) {
       return;

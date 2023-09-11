@@ -1,5 +1,7 @@
 use std::fmt;
 
+use serde::{Serialize, Deserialize};
+
 use crate::system::cpu;
 use crate::system::memory::Read;
 
@@ -69,10 +71,13 @@ impl fmt::Display for Operand {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum InterruptMode {
+    #[serde(rename = "0")]
     Mode0,
+    #[serde(rename = "1")]
     Mode1,
+    #[serde(rename = "2")]
     Mode2,
 }
 

@@ -1,8 +1,10 @@
 use std::fmt;
 
+use serde::{Serialize, Deserialize};
+
 use crate::system::bus::Bus;
-use crate::system::instruction::{Decoder, Instruction, JumpTest, Operand, InterruptMode};
-use crate::system::memory::{Read, Write, Mmu};
+use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
+use crate::system::memory::{Mmu, Read, Write};
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
 pub enum Register8 {
@@ -33,6 +35,7 @@ pub enum Register16 {
     PC,
 }
 
+#[derive(Clone)]
 pub struct RegisterFile {
     data: Vec<u16>,
 }
@@ -207,6 +210,38 @@ impl Flag {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CpuSnapshot {
+    register_a: u8,
+    register_f: u8,
+    register_b: u8,
+    register_c: u8,
+    register_d: u8,
+    register_e: u8,
+    register_h: u8,
+    register_l: u8,
+    alt_register_a: u8,
+    alt_register_f: u8,
+    alt_register_b: u8,
+    alt_register_c: u8,
+    alt_register_d: u8,
+    alt_register_e: u8,
+    alt_register_h: u8,
+    alt_register_l: u8,
+    register_i: u8,
+    register_r: u8,
+    register_ix: u16,
+    register_iy: u16,
+    register_sp: u16,
+    register_pc: u16,
+    iff1: bool,
+    iff2: bool,
+    interrupt_mode: InterruptMode,
+    enable_interrupt: bool, // TODO: eliminate by moving logic to end of fetch_and_execute
+    irq_received: bool, // TODO: possible to eliminate? yes, if we make sure to regenerate irq when restoring
+}
+
 pub struct Cpu {
     pub registers: RegisterFile,
     pub decoder: Decoder,
@@ -239,7 +274,11 @@ impl Cpu {
         cpu
     }
 
-    pub fn fetch_and_execute(&mut self, memory: &mut (impl Read + Write + Mmu), bus: &mut impl Bus) -> (u8, bool) {
+    pub fn fetch_and_execute(
+        &mut self,
+        memory: &mut (impl Read + Write + Mmu),
+        bus: &mut impl Bus,
+    ) -> (u8, bool) {
         if self.enable_interrupt {
             self.iff1 = true;
             self.iff2 = true;
@@ -250,9 +289,7 @@ impl Cpu {
 
         let pc = self.registers.read_word(&Register16::PC);
 
-        let (instruction, next_address) = self
-            .decoder
-            .decode_at(memory, pc as usize);
+        let (instruction, next_address) = self.decoder.decode_at(memory, pc as usize);
 
         log::trace!("{:#06x}: {}", pc, &instruction);
 
@@ -605,7 +642,8 @@ impl Cpu {
             }
             Instruction::Ex(left, right) => {
                 match (left, right) {
-                    (Operand::Register16(Register16::AF), Operand::Register16(Register16::AF)) => { // TODO: test if this match arm works with references
+                    (Operand::Register16(Register16::AF), Operand::Register16(Register16::AF)) => {
+                        // TODO: test if this match arm works with references
                         self.registers.swap_word(&Register16::AF);
                     }
                     (left, right) => {
@@ -646,11 +684,15 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
-            Instruction::In(Operand::Register8(destination), Operand::RegisterIndirect(Register16::BC)) => {
+            Instruction::In(
+                Operand::Register8(destination),
+                Operand::RegisterIndirect(Register16::BC),
+            ) => {
                 // TODO: make this a special case of the other IN instruction above?
                 let port = self.registers.read_word(&Register16::BC);
 
                 let value = bus.read_byte(port);
+                // TODO: can this write affect the flags register in unintended ways?
                 self.registers.write_byte(destination, value);
 
                 self.set_flag(Flag::Sign, (value as i8) < 0);
@@ -882,10 +924,8 @@ impl Cpu {
             Instruction::Pop(Operand::Register16(destination)) => {
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
-                self.registers.write_word(
-                    destination,
-                    memory.read_word(old_sp as usize),
-                );
+                self.registers
+                    .write_word(destination, memory.read_word(old_sp as usize));
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
@@ -908,10 +948,8 @@ impl Cpu {
                 if self.check_jump(jump_test) {
                     let old_sp = self.registers.read_word(&Register16::SP);
                     self.registers.write_word(&Register16::SP, old_sp + 2);
-                    self.registers.write_word(
-                        &Register16::PC,
-                        memory.read_word(old_sp as usize),
-                    );
+                    self.registers
+                        .write_word(&Register16::PC, memory.read_word(old_sp as usize));
                 } else {
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
@@ -1041,7 +1079,11 @@ impl Cpu {
                 let new_accumulator = (accumulator & 0xf0) | (memory_hl >> 4);
                 self.registers.write_byte(&Register8::A, new_accumulator);
                 let new_memory_hl = (memory_hl << 4) | (accumulator & 0xf);
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), new_memory_hl);
+                self.store_byte(
+                    memory,
+                    &Operand::RegisterIndirect(Register16::HL),
+                    new_memory_hl,
+                );
 
                 self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
                 self.set_flag(Flag::Zero, new_accumulator == 0);
@@ -1061,7 +1103,11 @@ impl Cpu {
                 let new_accumulator = (accumulator & 0xf0) | (memory_hl & 0xf);
                 self.registers.write_byte(&Register8::A, new_accumulator);
                 let new_memory_hl = ((accumulator & 0xf) << 4) | (memory_hl >> 4);
-                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), new_memory_hl);
+                self.store_byte(
+                    memory,
+                    &Operand::RegisterIndirect(Register16::HL),
+                    new_memory_hl,
+                );
 
                 self.set_flag(Flag::Sign, (new_accumulator as i8) < 0);
                 self.set_flag(Flag::Zero, new_accumulator == 0);
@@ -1080,8 +1126,9 @@ impl Cpu {
                 self.registers.write_word(&Register16::SP, new_sp);
                 memory.write_word(new_sp as usize, next_address as u16);
                 let address_lower = self.load_byte(memory, target);
-                
-                self.registers.write_word(&Register16::PC, address_lower as u16);
+
+                self.registers
+                    .write_word(&Register16::PC, address_lower as u16);
             }
             Instruction::Sbc(destination, source) => {
                 match destination {
@@ -1270,14 +1317,14 @@ impl Cpu {
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
                     memory.write_word(new_sp as usize, old_pc);
-                    
+
                     self.registers.write_word(&Register16::PC, 0x0038);
 
                     timing_in_nops += 4; // + Instruction::Rst(_).timing()
                 }
                 _ => unimplemented!(),
             }
-            
+
             (timing_in_nops, true)
         } else {
             (timing_in_nops, false)
@@ -1418,5 +1465,61 @@ impl Cpu {
             "S = {}, Z = {}, H = {}, P/V = {}, N = {}, C = {}",
             sign, zero, half_carry, parity_oveflow, add_subtract, carry
         );
+    }
+
+    pub fn make_snapshot(&self) -> CpuSnapshot {
+        let mut registers = self.registers.clone();
+        registers.swap_word(&Register16::AF);
+        registers.swap_word(&Register16::BC);
+        registers.swap_word(&Register16::DE);
+        registers.swap_word(&Register16::HL);
+
+        let alt_register_a = registers.read_byte(&Register8::A);
+        let alt_register_f = registers.read_byte(&Register8::F);
+        let alt_register_b = registers.read_byte(&Register8::B);
+        let alt_register_c = registers.read_byte(&Register8::C);
+        let alt_register_d = registers.read_byte(&Register8::D);
+        let alt_register_e = registers.read_byte(&Register8::E);
+        let alt_register_h = registers.read_byte(&Register8::H);
+        let alt_register_l = registers.read_byte(&Register8::L);
+        
+        let f = self.registers.read_byte(&Register8::F);
+        log::debug!("{:#02x}", f);
+        log::debug!("  S {:?}", self.check_flag(Flag::Sign));
+        log::debug!("  Z {:?}", self.check_flag(Flag::Zero));
+        log::debug!("  H {:?}", self.check_flag(Flag::HalfCarry));
+        log::debug!("P/V {:?}", self.check_flag(Flag::ParityOverflow));
+        log::debug!("  N {:?}", self.check_flag(Flag::AddSubtract));
+        log::debug!("  C {:?}", self.check_flag(Flag::Carry));
+
+        CpuSnapshot {
+            register_a: self.registers.read_byte(&Register8::A),
+            register_f: self.registers.read_byte(&Register8::F),
+            register_b: self.registers.read_byte(&Register8::B),
+            register_c: self.registers.read_byte(&Register8::C),
+            register_d: self.registers.read_byte(&Register8::D),
+            register_e: self.registers.read_byte(&Register8::E),
+            register_h: self.registers.read_byte(&Register8::H),
+            register_l: self.registers.read_byte(&Register8::L),
+            alt_register_a,
+            alt_register_f,
+            alt_register_b,
+            alt_register_c,
+            alt_register_d,
+            alt_register_e,
+            alt_register_h,
+            alt_register_l,
+            register_i: self.registers.read_byte(&Register8::I),
+            register_r: self.registers.read_byte(&Register8::R),
+            register_ix: self.registers.read_word(&Register16::IX),
+            register_iy: self.registers.read_word(&Register16::IY),
+            register_sp: self.registers.read_word(&Register16::SP),
+            register_pc: self.registers.read_word(&Register16::PC),
+            iff1: self.iff1,
+            iff2: self.iff2,
+            interrupt_mode: self.interrupt_mode,
+            enable_interrupt: self.enable_interrupt,
+            irq_received: self.irq_received,
+        }
     }
 }

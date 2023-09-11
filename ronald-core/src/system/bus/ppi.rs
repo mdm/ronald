@@ -1,4 +1,4 @@
-use crate::system::bus::crtc::CRTController;
+use crate::system::bus::crtc::CrtController;
 use crate::system::bus::keyboard::Keyboard;
 use crate::system::bus::psg::SoundGenerator;
 use crate::system::bus::tape::TapeController;
@@ -37,7 +37,7 @@ impl PeripheralInterface {
         }
     }
 
-    pub fn read_byte(&self, crtc: &CRTController, psg: &SoundGenerator, tape: &TapeController, port: u16) -> u8 {
+    pub fn read_byte(&self, crtc: &CrtController, psg: &SoundGenerator, tape: &TapeController, port: u16) -> u8 {
         let function = (port >> 8) & 0x03;
 
         match function {
