@@ -848,6 +848,7 @@ impl DecoderMode {
     }
 }
 
+// TODO: make decoder stateless?
 pub struct Decoder {
     next_address: usize,
     mode: DecoderMode,
