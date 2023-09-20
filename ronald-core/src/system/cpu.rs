@@ -1534,6 +1534,23 @@ impl Cpu {
         self.irq_received = true;
     }
 
+    pub fn disassemble(
+        &mut self,
+        memory: &mut (impl Read + Write + Mmu),
+        count: usize,
+    ) -> Vec<(u16, String)> {
+        let mut address = self.registers.read_word(&Register16::PC);
+
+        let mut assembly = Vec::with_capacity(count);
+        for _ in 0..count {
+            let (instruction, next_address) = self.decoder.decode_at(memory, address as usize);
+            assembly.push((address, format!("{instruction}")));
+            address = next_address as u16;
+        }
+
+        assembly
+    }
+
     fn reset(&mut self) {
         // TODO: implement reset
     }
@@ -1665,32 +1682,6 @@ impl Cpu {
         } else {
             false
         }
-    }
-
-    pub fn print_state(&self) {
-        // TODO: move this from CPU to register file
-        let ix = self.registers.read_word(&Register16::IX);
-        let iy = self.registers.read_word(&Register16::IY);
-        let hl = self.registers.read_word(&Register16::HL);
-        let de = self.registers.read_word(&Register16::DE);
-        let bc = self.registers.read_word(&Register16::BC);
-        let af = self.registers.read_word(&Register16::AF);
-        let sp = self.registers.read_word(&Register16::SP);
-        println!(
-            "IX = {:#06x}, IY = {:#06x}, HL = {:#06x}, DE = {:#06x}, BC = {:#06x}, AF = {:#06x}, SP = {:#06x}",
-            ix, iy, hl, de, bc, af, sp
-        );
-
-        let sign = self.check_flag(Flag::Sign);
-        let zero = self.check_flag(Flag::Zero);
-        let half_carry = self.check_flag(Flag::HalfCarry);
-        let parity_oveflow = self.check_flag(Flag::ParityOverflow);
-        let add_subtract = self.check_flag(Flag::AddSubtract);
-        let carry = self.check_flag(Flag::Carry);
-        println!(
-            "S = {}, Z = {}, H = {}, P/V = {}, N = {}, C = {}",
-            sign, zero, half_carry, parity_oveflow, add_subtract, carry
-        );
     }
 
     pub fn make_snapshot(&self) -> CpuSnapshot {
