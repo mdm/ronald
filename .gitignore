@@ -3,5 +3,7 @@
 /docs
 /data
 
+keyconfig*.yml
+
 # Local Netlify folder
 .netlify
