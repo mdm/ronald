@@ -1,3 +1,6 @@
+**Try a hosted demo of the WebAssembly version at https://ronald.migge.io
+
+
 Ronald - An Amstrad CPC Emulator
 ================================
 
@@ -35,23 +38,6 @@ Loading DSK Files
 The `F5` key opens a dialog to load DSK files. These files are images of floppy
 disks. Both standard and extended versions of the DSK format are supported.
 
-Using The Debugger
-------------------
-
-`F12` starts a simple debugger in the terminal used to run the emulator. The
-debugger shell expects one of the following commands:
-
-* `disassemble` shows the next 10 instructions in human readable form.
-* `registers` shows the current contents of the CPU registers.
-* `breakpoint <address>` toggles a breakpoint at the given address (adresses
-  can be decimal or hexadecimal, e.g. `0xc000`).
-* `step <skip>` executes `<skip> + 1` instructions before dropping back into the
-  debugger shell. If the argument is ommited it defaults to `0`, i.e. `step`
-  executes a single instruction. Breakpoints might cause the debugger shell to
-  be entered earlier.
-* `continue` continues executing instructions until a breakpoint is reached or
-  indefinitely if there are no breakpoints.
-
 Browser Version
 ---------------
 
@@ -61,3 +47,6 @@ execute the following commands:
 1. `cd ronald-web`
 2. `npm install`
 3. `npm run dev`
+
+You can drag and drop DSK files onto the emulator screen to load them.
+
