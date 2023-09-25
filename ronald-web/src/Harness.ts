@@ -1,4 +1,5 @@
 import { Emulator } from "../ronald-wasm/pkg/ronald_wasm";
+import defaultKeymap from "./assets/default-keymap.json";
 
 const TARGET_FRAME_MS = 20;
 
@@ -7,7 +8,7 @@ export class Harness {
   private running: boolean;
   private previousTime: number;
   private timeAvailable: number;
-  private keymap?: any;
+  private keymap: any;
   private pressedKeys: Set<string>;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -15,15 +16,12 @@ export class Harness {
     this.running = false;
     this.previousTime = performance.now();
     this.timeAvailable = 0;
+    this.keymap = defaultKeymap;
     this.pressedKeys = new Set();
   }
 
   async run() {
     console.log("run");
-
-    if (!this.keymap) {
-      await this.setupKeymap();
-    }
 
     this.previousTime = performance.now();
     this.timeAvailable = 0;
@@ -52,7 +50,7 @@ export class Harness {
     }
 
     // TODO: deserialze this properly
-    return  JSON.parse(this.emulator.get_snapshot());
+    return JSON.parse(this.emulator.get_snapshot());
   }
 
   handleKeyDown(event: KeyboardEvent) {
@@ -108,7 +106,7 @@ export class Harness {
   }
 
   private async setupKeymap() {
-    const keymapURL = "/src/assets/default-keymap.json";
+    const keymapURL = "src/assets/default-keymap.json";
     const request = new Request(keymapURL);
     const response = await fetch(request);
     this.keymap = await response.json();
