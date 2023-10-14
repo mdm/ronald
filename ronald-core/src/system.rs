@@ -86,6 +86,7 @@ pub trait System {
     fn unset_key(&mut self, line: usize, bit: u8);
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>);
     fn make_snapshot(&self) -> SystemSnapshot;
+    fn disassemble(&mut self, count: usize) -> Vec<(u16,String)>;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -164,5 +165,9 @@ impl System for CPC464 {
         SystemSnapshot {
             cpu: self.cpu.make_snapshot(),
         }
+    }
+
+    fn disassemble(&mut self, count: usize) -> Vec<(u16,String)> {
+        self.cpu.disassemble(&mut self.memory, count)
     }
 }

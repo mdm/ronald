@@ -1,4 +1,4 @@
-import { hex } from "../Utils";
+import { hex } from "../../Utils";
 
 type CpuState = {
     registerA: number;
@@ -32,7 +32,7 @@ type CpuState = {
 
 type Props = {
     state?: CpuState;
-}
+};
 
 const BASIC_REGISTERS = ['A', 'B', 'C', 'D', 'E', 'H', 'L'];
 const SPECIAL_REGISTERS = ['IX', 'IY', 'SP', 'PC'];
