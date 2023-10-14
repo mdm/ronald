@@ -70,4 +70,8 @@ impl Emulator {
     pub fn get_snapshot(&self) -> String {
         self.driver.get_json_snapshot().unwrap_or_else(|_err| String::new())
     }
+
+    pub fn disassemble(&mut self, count: usize) -> String {
+        self.driver.disassemble(count).unwrap_or_else(|_err| String::new())
+    }
 }

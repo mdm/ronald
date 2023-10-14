@@ -153,6 +153,7 @@ impl FloppyDiskController {
                             log::debug!("Reading result from FDC: {:#04x}", result);
                             result
                         } else {
+                            // TODO: we hit this if no disk is loaded and CAT is executed
                             unreachable!()
                         };
 

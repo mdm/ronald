@@ -6,13 +6,13 @@ import init, { Emulator } from "../ronald-wasm/pkg/ronald_wasm";
 
 import { Harness } from "./Harness";
 import ControlButton from "./components/ControlButton";
-import CpuStateView from "./components/CpuStateView";
+import CpuStateView from "./components/devtools/CpuStateView";
+import DevTools from "./components/devtools";
 
 await init();
 
 const App: Component = () => {
   const [harness, setHarness] = createSignal<Harness>();
-  const [snapshot, setSnapshot] = createStore<any>(); // TODO: makes this typed
   const [running, setRunning] = createSignal(false);
   let canvas: HTMLCanvasElement | undefined;
 
@@ -71,13 +71,12 @@ const App: Component = () => {
           <ControlButton
             onClick={async () => {
               if (running()) {
-                setRunning(false);
                 pause();
+                setRunning(false);
               } else {
-                setRunning(true);
                 await run();
+                setRunning(true);
               }
-              setSnapshot(harness()?.getSnapshot());
             }}
           >
             {running() ? "Pause" : "Run"}
@@ -86,7 +85,7 @@ const App: Component = () => {
           <ControlButton>Toggle Breakpoint</ControlButton>
         </div>
         <div>
-          <CpuStateView state={snapshot.cpu}/>
+          <DevTools active={!running()} harness={harness()}/>
         </div>
       </div>
     </div>
