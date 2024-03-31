@@ -443,7 +443,10 @@ impl Instruction {
             Instruction::Ld(Operand::Register8(_), Operand::Indexed(_, _)) => 5,
             Instruction::Ld(Operand::Indexed(_, _), Operand::Register8(_)) => 5,
             Instruction::Ld(Operand::Indexed(_, _), Operand::Immediate8(_)) => 6,
-            Instruction::Ld(Operand::Register16(cpu::Register16::SP), Operand::Register16(cpu::Register16::HL)) => 2,
+            Instruction::Ld(
+                Operand::Register16(cpu::Register16::SP),
+                Operand::Register16(cpu::Register16::HL),
+            ) => 2,
             Instruction::Ld(_, _) => {
                 log::error!("No timing for {}", self);
                 unimplemented!()
@@ -1253,8 +1256,7 @@ impl Decoder {
 
                 match opcode_q {
                     0 => {
-                        let value =
-                            Operand::Immediate16(memory.read_word(self.next_address));
+                        let value = Operand::Immediate16(memory.read_word(self.next_address));
                         self.next_address += 2;
                         Instruction::Ld(register_pair, value)
                     }
@@ -1417,16 +1419,14 @@ impl Decoder {
             (3, _, 2) => {
                 let jump_test = JumpTest::decode(opcode_y);
 
-                let target =
-                    Operand::Immediate16(memory.read_word(self.next_address));
+                let target = Operand::Immediate16(memory.read_word(self.next_address));
                 self.next_address += 2;
 
                 Instruction::Jp(jump_test, target)
             }
             (3, _, 3) => match opcode_y {
                 0 => {
-                    let target =
-                        Operand::Immediate16(memory.read_word(self.next_address));
+                    let target = Operand::Immediate16(memory.read_word(self.next_address));
                     self.next_address += 2;
 
                     Instruction::Jp(JumpTest::Unconditional, target)
@@ -1469,8 +1469,7 @@ impl Decoder {
             (3, _, 4) => {
                 let jump_test = JumpTest::decode(opcode_y);
 
-                let target =
-                    Operand::Immediate16(memory.read_word(self.next_address));
+                let target = Operand::Immediate16(memory.read_word(self.next_address));
                 self.next_address += 2;
 
                 Instruction::Call(jump_test, target)
@@ -1486,9 +1485,7 @@ impl Decoder {
                     }
                     1 => {
                         if opcode_p == 0 {
-                            let target = Operand::Immediate16(
-                                memory.read_word(self.next_address),
-                            );
+                            let target = Operand::Immediate16(memory.read_word(self.next_address));
                             self.next_address += 2;
 
                             Instruction::Call(JumpTest::Unconditional, target)
