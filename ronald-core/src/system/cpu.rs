@@ -381,6 +381,9 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Bit(_, _) => {
+                unreachable!();
+            }
             Instruction::Call(jump_test, Operand::Immediate16(address)) => {
                 if self.check_jump(jump_test) {
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
@@ -391,6 +394,9 @@ impl Cpu {
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
                 }
+            }
+            Instruction::Call(_, _) => {
+                unreachable!();
             }
             Instruction::Ccf => {
                 let carry = self.check_flag(Flag::Carry);
@@ -682,6 +688,9 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::In(_, _) => {
+                unreachable!();
+            }
             Instruction::Inc(destination) => {
                 match destination {
                     Operand::Register16(register) => {
@@ -703,6 +712,88 @@ impl Cpu {
 
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Ind => {
+                let address = self.registers.read_word(&Register16::BC);
+
+                let value = bus.read_byte(address);
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), value);
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_sub(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(1);
+                self.registers.write_byte(&Register8::B, counter);
+
+                self.set_flag(Flag::Zero, counter == 0);
+                self.set_flag(Flag::AddSubtract, true);
+                // TODO: parity, sign, half carry flags (according to http://www.z80.info/z80sflag.htm)
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Indr => {
+                let address = self.registers.read_word(&Register16::BC);
+
+                let value = bus.read_byte(address);
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), value);
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_sub(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(1);
+                self.registers.write_byte(&Register8::B, counter);
+
+                self.set_flag(Flag::Zero, counter == 0);
+                self.set_flag(Flag::AddSubtract, true);
+                // TODO: parity, sign, half carry flags (according to http://www.z80.info/z80sflag.htm)
+
+                if counter == 0 {
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
+                    timing_in_nops = 5; // not having to adjust the PC saves time
+                }
+            }
+            Instruction::Ini => {
+                let address = self.registers.read_word(&Register16::BC);
+
+                let value = bus.read_byte(address);
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), value);
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_add(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(1);
+                self.registers.write_byte(&Register8::B, counter);
+
+                self.set_flag(Flag::Zero, counter == 0);
+                self.set_flag(Flag::AddSubtract, true);
+                // TODO: parity, sign, half carry flags (according to http://www.z80.info/z80sflag.htm)
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Inir => {
+                let address = self.registers.read_word(&Register16::BC);
+
+                let value = bus.read_byte(address);
+                self.store_byte(memory, &Operand::RegisterIndirect(Register16::HL), value);
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_add(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(1);
+                self.registers.write_byte(&Register8::B, counter);
+
+                self.set_flag(Flag::Zero, counter == 0);
+                self.set_flag(Flag::AddSubtract, true);
+                // TODO: parity, sign, half carry flags (according to http://www.z80.info/z80sflag.htm)
+
+                if counter == 0 {
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
+                    timing_in_nops = 5; // not having to adjust the PC saves time
+                }
             }
             Instruction::Jp(jump_test, target) => {
                 if self.check_jump(jump_test) {
@@ -883,6 +974,14 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Out(Operand::Direct8(port_low), Operand::Register8(Register8::A)) => {
+                let value = self.registers.read_byte(&Register8::A);
+                let address = ((value as u16) << 8) + *port_low as u16;
+                bus.write_byte(memory, address, value);
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
             Instruction::Out(Operand::RegisterIndirect(port), Operand::Register8(source)) => {
                 let address = self.registers.read_word(port);
                 let value = self.registers.read_byte(source);
@@ -899,14 +998,16 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Out(_, _) => {
+                unreachable!();
+            }
             Instruction::Outd => {
-                // TODO: check implementation
                 let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
 
                 let address = self.registers.read_word(&Register16::HL).wrapping_sub(1);
                 self.registers.write_word(&Register16::HL, address);
 
-                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(0x1);
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(1);
                 self.registers.write_byte(&Register8::B, counter);
 
                 let address = self.registers.read_word(&Register16::BC);
@@ -914,10 +1015,77 @@ impl Cpu {
                 bus.write_byte(memory, address, value);
 
                 self.set_flag(Flag::Zero, counter == 0);
-                self.set_flag(Flag::AddSubtract, false);
+                self.set_flag(Flag::AddSubtract, true);
+                // TODO: parity, sign, half carry flags (according to http://www.z80.info/z80sflag.htm)
 
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Outi => {
+                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_add(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(1);
+                self.registers.write_byte(&Register8::B, counter);
+
+                let address = self.registers.read_word(&Register16::BC);
+
+                bus.write_byte(memory, address, value);
+
+                self.set_flag(Flag::Zero, counter == 0);
+                self.set_flag(Flag::AddSubtract, true);
+                // TODO: parity, sign, half carry flags (according to http://www.z80.info/z80sflag.htm)
+
+                self.registers
+                    .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Otdr => {
+                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_sub(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(1);
+                self.registers.write_byte(&Register8::B, counter);
+
+                let address = self.registers.read_word(&Register16::BC);
+
+                bus.write_byte(memory, address, value);
+
+                self.set_flag(Flag::Zero, counter == 0);
+                self.set_flag(Flag::AddSubtract, true);
+                // TODO: parity, sign, half carry flags (according to http://www.z80.info/z80sflag.htm)
+
+                if counter == 0 {
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
+                    timing_in_nops = 5; // not having to adjust the PC saves time
+                }
+            }
+            Instruction::Otir => {
+                let value = self.load_byte(memory, &Operand::RegisterIndirect(Register16::HL));
+
+                let address = self.registers.read_word(&Register16::HL).wrapping_add(1);
+                self.registers.write_word(&Register16::HL, address);
+
+                let counter = self.registers.read_byte(&Register8::B).wrapping_sub(1);
+                self.registers.write_byte(&Register8::B, counter);
+
+                let address = self.registers.read_word(&Register16::BC);
+
+                bus.write_byte(memory, address, value);
+
+                self.set_flag(Flag::Zero, counter == 0);
+                self.set_flag(Flag::AddSubtract, true);
+                // TODO: parity, sign, half carry flags (according to http://www.z80.info/z80sflag.htm)
+
+                if counter == 0 {
+                    self.registers
+                        .write_word(&Register16::PC, next_address as u16);
+                    timing_in_nops = 5; // not having to adjust the PC saves time
+                }
             }
             Instruction::Pop(Operand::Register16(destination)) => {
                 let old_sp = self.registers.read_word(&Register16::SP);
@@ -927,12 +1095,18 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Pop(_) => {
+                unreachable!();
+            }
             Instruction::Push(Operand::Register16(source)) => {
                 let new_sp = self.registers.read_word(&Register16::SP) - 2;
                 self.registers.write_word(&Register16::SP, new_sp);
                 memory.write_word(new_sp as usize, self.registers.read_word(source));
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Push(_) => {
+                unreachable!();
             }
             Instruction::Res(destination, Operand::Bit(bit), operand) => {
                 let value = self.load_byte(memory, operand) & (!(1 << bit));
@@ -941,6 +1115,9 @@ impl Cpu {
 
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
+            }
+            Instruction::Res(_, _, _) => {
+                unreachable!();
             }
             Instruction::Ret(jump_test) => {
                 if self.check_jump(jump_test) {
@@ -954,6 +1131,13 @@ impl Cpu {
                 }
             }
             Instruction::Reti => {
+                let old_sp = self.registers.read_word(&Register16::SP);
+                self.registers.write_word(&Register16::SP, old_sp + 2);
+                self.registers
+                    .write_word(&Register16::PC, memory.read_word(old_sp as usize));
+            }
+            Instruction::Retn => {
+                self.iff1 = self.iff2;
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
                 self.registers
@@ -1195,6 +1379,9 @@ impl Cpu {
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
             }
+            Instruction::Set(_, _, _) => {
+                unreachable!();
+            }
             Instruction::Sla(destination, operand) => {
                 let value = self.load_byte(memory, operand);
                 let carry = (value >> 7) != 0;
@@ -1297,16 +1484,6 @@ impl Cpu {
 
                 self.registers
                     .write_word(&Register16::PC, next_address as u16);
-            }
-            _ => {
-                // TODO: don't forget to adjust timing for:
-                // Indr, Inir, Jr, Otdr, Otir
-                log::error!(
-                    "The instruction \"{}\" at {:#06x} is not implemented",
-                    &instruction,
-                    self.registers.read_word(&Register16::PC)
-                );
-                unimplemented!();
             }
         }
 
