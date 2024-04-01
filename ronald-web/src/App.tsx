@@ -14,6 +14,8 @@ await init();
 const App: Component = () => {
   const [harness, setHarness] = createSignal<Harness>();
   const [running, setRunning] = createSignal(false);
+  const [snapshot, setSnapshot] = createSignal<any>();
+  const [disassembly, setDisassembly] = createSignal<any>();
   let canvas: HTMLCanvasElement | undefined;
 
   const pause = () => {
@@ -33,6 +35,8 @@ const App: Component = () => {
     }
 
     setHarness(new Harness(canvas));
+    setSnapshot(harness()!.getSnapshot());
+    setDisassembly(harness()!.getDisassembly());
 
     window.addEventListener("blur", () => {
       if (running()) {
@@ -72,6 +76,8 @@ const App: Component = () => {
             onClick={async () => {
               if (running()) {
                 pause();
+                setSnapshot(harness()!.getSnapshot());
+                setDisassembly(harness()!.getDisassembly());
                 setRunning(false);
               } else {
                 await run();
@@ -81,11 +87,23 @@ const App: Component = () => {
           >
             {running() ? "Pause" : "Run"}
           </ControlButton>
-          <ControlButton>Single Step</ControlButton>
+          <ControlButton
+            onClick={() => {
+              harness()?.stepSingle();
+              setSnapshot(harness()!.getSnapshot());
+              setDisassembly(harness()!.getDisassembly());
+            }}
+          >
+            Single Step
+          </ControlButton>
           <ControlButton>Toggle Breakpoint</ControlButton>
         </div>
         <div>
-          <DevTools active={!running()} harness={harness()}/>
+          <DevTools
+            active={!running()}
+            snapshot={snapshot()}
+            disassembly={disassembly()}
+          />
         </div>
       </div>
     </div>

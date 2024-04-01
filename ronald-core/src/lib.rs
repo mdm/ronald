@@ -44,6 +44,10 @@ where
         }
     }
 
+    pub fn step_single(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) {
+        self.system.emulate(video, audio);
+    }
+
     pub fn activate_debugger(&self) {
         todo!()
     }
@@ -56,7 +60,8 @@ where
 
     pub fn release_key(&mut self, key: &str) {
         if let Some((_shiftable, key_definition)) = self.keys.get(key) {
-            self.system.unset_key(key_definition.line, key_definition.bit);
+            self.system
+                .unset_key(key_definition.line, key_definition.bit);
         }
     }
 
