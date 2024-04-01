@@ -4,16 +4,16 @@ mod cpu;
 mod instruction; // TODO: do we need this at this level? for debugger?
 mod memory;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{AudioSink, VideoSink};
 
 use bus::{DummyBus, StandardBus};
-use cpu::{Cpu, CpuSnapshot, Register8, Register16};
+use cpu::{Cpu, CpuSnapshot, Register16, Register8};
 // use debugger::Debugger;
 use bus::keyboard::Keyboard;
-use memory::{Ram, Memory, Read, Write};
 use bus::screen::Screen;
+use memory::{Memory, Ram, Read, Write};
 
 pub struct ZexHarness {
     cpu: Cpu,
@@ -43,10 +43,7 @@ impl ZexHarness {
                 0x0000 => break,
                 0x0005 => {
                     match self.cpu.registers.read_byte(&Register8::C) {
-                        2 => print!(
-                            "{}",
-                            self.cpu.registers.read_byte(&Register8::E) as char
-                        ),
+                        2 => print!("{}", self.cpu.registers.read_byte(&Register8::E) as char),
                         9 => {
                             let mut address =
                                 self.cpu.registers.read_word(&Register16::DE) as usize;
@@ -74,7 +71,10 @@ impl ZexHarness {
         println!();
 
         let elapsed_seconds = start.elapsed().as_secs_f64();
-        println!("Executed {total_cycles} in {elapsed_seconds} seconds ({} MHz).", total_cycles as f64 / 1_000_000.0 / elapsed_seconds);
+        println!(
+            "Executed {total_cycles} in {elapsed_seconds} seconds ({} MHz).",
+            total_cycles as f64 / 1_000_000.0 / elapsed_seconds
+        );
     }
 }
 
@@ -86,7 +86,7 @@ pub trait System {
     fn unset_key(&mut self, line: usize, bit: u8);
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>);
     fn make_snapshot(&self) -> SystemSnapshot;
-    fn disassemble(&mut self, count: usize) -> Vec<(u16,String)>;
+    fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction>;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -97,6 +97,12 @@ pub struct SystemSnapshot {
     // ppi: PpiSnapshot,
     // psg: PsgShanpshot,
     // memory: MemorySnapshot,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DisassembledInstruction {
+    address: u16,
+    instruction: String,
 }
 
 pub struct CPC464 {
@@ -126,7 +132,8 @@ impl System for CPC464 {
         //     self.debugger.run_command_shell(&mut self.cpu, &self.memory);
         // }
 
-        let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+        let (cycles, interrupt_acknowledged) =
+            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
         for _ in 0..cycles {
             let interrupt = self.bus.step(&mut self.memory, video, audio);
@@ -167,7 +174,14 @@ impl System for CPC464 {
         }
     }
 
-    fn disassemble(&mut self, count: usize) -> Vec<(u16,String)> {
-        self.cpu.disassemble(&mut self.memory, count)
+    fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
+        self.cpu
+            .disassemble(&mut self.memory, count)
+            .into_iter()
+            .map(|(address, instruction)| DisassembledInstruction {
+                address,
+                instruction,
+            })
+            .collect()
     }
 }

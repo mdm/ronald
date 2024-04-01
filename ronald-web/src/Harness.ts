@@ -44,6 +44,10 @@ export class Harness {
     this.running = false;
   }
 
+  stepSingle() {
+    this.emulator.step_single();
+  }
+
   getSnapshot() {
     if (this.running) {
       return undefined;
@@ -51,6 +55,15 @@ export class Harness {
 
     // TODO: deserialze this properly
     return JSON.parse(this.emulator.get_snapshot());
+  }
+
+  getDisassembly() {
+    if (this.running) {
+      return undefined;
+    }
+
+    // TODO: deserialze this properly
+    return JSON.parse(this.emulator.disassemble(20));
   }
 
   handleKeyDown(event: KeyboardEvent) {
