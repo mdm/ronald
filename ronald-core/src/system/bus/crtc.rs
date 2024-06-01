@@ -103,8 +103,9 @@ impl CrtController {
         let character_rows_since_start = self.character_row_counter as i32 - sync_start;
         let scan_lines_since_start =
             (self.registers[Register::MaximumRasterAddress as usize] as i32 + 1)
-                * character_rows_since_start + self.scan_line_counter as i32;
-        (0.. 16 * 8).contains(&scan_lines_since_start) // should be 16, not 16 * 8 - TODO: find out why shortening this messes with Fruity Frank colors
+                * character_rows_since_start
+                + self.scan_line_counter as i32;
+        (0..16 * 8).contains(&scan_lines_since_start) // should be 16, not 16 * 8 - TODO: find out why shortening this messes with Fruity Frank colors
     }
 
     pub fn step(&mut self) {
@@ -129,6 +130,18 @@ impl CrtController {
             self.display_start_address =
                 ((self.registers[Register::DisplayStartAddressHigh as usize] as u16) << 8)
                     + self.registers[Register::DisplayStartAddressLow as usize] as u16;
+        }
+    }
+
+    pub fn make_snapshot(&self) -> CrtcSnapshot {
+        CrtcSnapshot {
+            registers: self.registers,
+            selected_register: self.selected_register,
+            horizontal_counter: self.horizontal_counter,
+            horizontal_sync_width_counter: self.horizontal_sync_width_counter,
+            character_row_counter: self.character_row_counter,
+            scan_line_counter: self.scan_line_counter,
+            display_start_address: self.display_start_address,
         }
     }
 }
