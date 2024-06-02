@@ -1,3 +1,34 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrtControllerSnapshot {
+    horizontal_total: u8,
+    horizontal_displayed: u8,
+    horizontal_sync_position: u8,
+    horizontal_and_vertical_sync_widths: u8,
+    vertical_total: u8,
+    vertical_total_adjust: u8,
+    vertical_displayed: u8,
+    vertical_sync_position: u8,
+    interlace_and_skew: u8,
+    maximum_raster_address: u8,
+    cursor_start_raster: u8,
+    cursor_end_raster: u8,
+    display_start_address_high: u8,
+    cisplay_start_address_low: u8,
+    cursor_address_high: u8,
+    cursor_address_low: u8,
+    light_pen_address_high: u8,
+    light_pen_address_low: u8,
+    selected_register: usize,
+    horizontal_counter: u8,
+    horizontal_sync_width_counter: u8,
+    character_row_counter: u8,
+    scan_line_counter: u8,
+    display_start_address: u16,
+}
+
 enum Register {
     HorizontalTotal,
     HorizontalDisplayed,
@@ -133,9 +164,26 @@ impl CrtController {
         }
     }
 
-    pub fn make_snapshot(&self) -> CrtcSnapshot {
-        CrtcSnapshot {
-            registers: self.registers,
+    pub fn make_snapshot(&self) -> CrtControllerSnapshot {
+        CrtControllerSnapshot {
+            horizontal_total: self.registers[0],
+            horizontal_displayed: self.registers[1],
+            horizontal_sync_position: self.registers[2],
+            horizontal_and_vertical_sync_widths: self.registers[3],
+            vertical_total: self.registers[4],
+            vertical_total_adjust: self.registers[5],
+            vertical_displayed: self.registers[6],
+            vertical_sync_position: self.registers[7],
+            interlace_and_skew: self.registers[8],
+            maximum_raster_address: self.registers[9],
+            cursor_start_raster: self.registers[10],
+            cursor_end_raster: self.registers[11],
+            display_start_address_high: self.registers[12],
+            cisplay_start_address_low: self.registers[13],
+            cursor_address_high: self.registers[14],
+            cursor_address_low: self.registers[15],
+            light_pen_address_high: self.registers[16],
+            light_pen_address_low: self.registers[17],
             selected_register: self.selected_register,
             horizontal_counter: self.horizontal_counter,
             horizontal_sync_width_counter: self.horizontal_sync_width_counter,
