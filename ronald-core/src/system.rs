@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AudioSink, VideoSink};
 
-use bus::{DummyBus, StandardBus};
+use bus::{BusSnapshot, CrtControllerSnapshot, DummyBus, StandardBus};
 use cpu::{Cpu, CpuSnapshot, Register16, Register8};
 // use debugger::Debugger;
 use bus::keyboard::Keyboard;
@@ -93,7 +93,7 @@ pub trait System {
 pub struct SystemSnapshot {
     cpu: CpuSnapshot,
     // gate_array: GateArraySnapshot,
-    // crtc: CrtcSnapshot,
+    crtc: CrtControllerSnapshot,
     // ppi: PpiSnapshot,
     // psg: PsgShanpshot,
     // memory: MemorySnapshot,
@@ -169,8 +169,20 @@ impl System for CPC464 {
     }
 
     fn make_snapshot(&self) -> SystemSnapshot {
+        let BusSnapshot {
+            crtc,
+            fdc,
+            gate_array,
+            keyboard,
+            ppi,
+            psg,
+            screen,
+            tape,
+        } = self.bus.make_snapshot();
+
         SystemSnapshot {
             cpu: self.cpu.make_snapshot(),
+            crtc,
         }
     }
 

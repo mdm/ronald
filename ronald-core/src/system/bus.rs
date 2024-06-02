@@ -1,6 +1,8 @@
 use crate::system::memory::{Memory, Mmu};
 use crate::{AudioSink, VideoSink};
 
+pub use self::crtc::CrtControllerSnapshot;
+
 mod crtc;
 mod fdc;
 mod gate_array;
@@ -10,12 +12,12 @@ mod psg;
 pub mod screen; // TODO: refactor to not use pub
 mod tape;
 
+use self::psg::SoundGenerator;
 use crtc::CrtController;
 use fdc::FloppyDiskController;
 use gate_array::GateArray;
 use keyboard::Keyboard;
 use ppi::PeripheralInterface;
-use self::psg::SoundGenerator;
 use screen::Screen;
 use tape::TapeController;
 
@@ -40,6 +42,17 @@ impl Bus for DummyBus {
     fn write_byte(&mut self, _memory: &mut impl Mmu, _port: u16, _value: u8) {
         unimplemented!();
     }
+}
+
+pub struct BusSnapshot {
+    pub crtc: CrtControllerSnapshot,
+    pub fdc: FloppyDiskControllerSnapshot,
+    pub gate_array: GateArraySnapshot,
+    pub keyboard: KeyboardSnapshot,
+    pub ppi: PeripheralInterfaceSnapshot,
+    pub psg: SoundGeneratorSnapshot,
+    pub screen: ScreenSnapshot,
+    pub tape: TapeControllerSnapshot,
 }
 
 pub struct StandardBus {
@@ -76,10 +89,16 @@ impl StandardBus {
         }
     }
 
-    pub fn step(&mut self, memory: &mut Memory, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> bool {
+    pub fn step(
+        &mut self,
+        memory: &mut Memory,
+        video: &mut impl VideoSink,
+        audio: &mut impl AudioSink,
+    ) -> bool {
         self.psg.step(audio);
         self.crtc.step();
-        self.gate_array.step(&self.crtc, memory, &mut self.screen, video)
+        self.gate_array
+            .step(&self.crtc, memory, &mut self.screen, video)
     }
 
     pub fn acknowledge_interrupt(&mut self) {
@@ -96,6 +115,19 @@ impl StandardBus {
 
     pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
         self.fdc.load_disk(drive, rom);
+    }
+
+    pub fn make_snapshot(&self) -> BusSnapshot {
+        BusSnapshot {
+            crtc: self.crtc.make_snapshot(),
+            fdc: self.fdc.make_snapshot(),
+            gate_array: self.gate_array.make_snapshot(),
+            keyboard: self.keyboard.make_snapshot(),
+            ppi: self.ppi.make_snapshot(),
+            psg: self.psg.make_snapshot(),
+            screen: self.screen.make_snapshot(),
+            tape: self.tape.make_snapshot(),
+        }
     }
 }
 
@@ -121,7 +153,13 @@ impl Bus for StandardBus {
             _ if port & 0x4000 == 0 => self.crtc.write_byte(port, value),
             _ if port & 0xdf00 == 0xdf00 => memory.select_upper_rom(value),
             _ if port & 0xef00 == 0xef00 => (), // printer port (unsupported)
-            _ if port & 0x0800 == 0 => self.ppi.write_byte(&mut self.keyboard, &mut self.psg, &mut self.tape, port, value),
+            _ if port & 0x0800 == 0 => self.ppi.write_byte(
+                &mut self.keyboard,
+                &mut self.psg,
+                &mut self.tape,
+                port,
+                value,
+            ),
             0xfa7e | 0xfb7f => self.fdc.write_byte(port, value),
             0xf8ff => (), // peripheral soft reset (ignored)
             _ => {
