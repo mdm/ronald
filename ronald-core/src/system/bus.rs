@@ -2,6 +2,7 @@ use crate::system::memory::{Memory, Mmu};
 use crate::{AudioSink, VideoSink};
 
 pub use self::crtc::CrtControllerSnapshot;
+pub use self::fdc::FloppyDiskControllerSnapshot;
 
 mod crtc;
 mod fdc;
