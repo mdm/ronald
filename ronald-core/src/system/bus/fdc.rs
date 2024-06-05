@@ -4,6 +4,27 @@ mod dsk_file;
 
 use dsk_file::Disk;
 
+pub struct FloppyDiskControllerSnapshot {
+    drives: [Drive; 2],
+    phase: Phase,
+    command: Option<Command>,
+    parameters_buffer: Vec<u8>,
+    data_buffer: VecDeque<u8>,
+    result_buffer: VecDeque<u8>,
+    motors_on: bool,
+    request_for_master: bool,
+    data_input_output: bool, // false: CPU -> FDC, true: FDC -> CPU
+    execution_mode: bool,
+    floppy_controller_busy: bool,
+    floppy_drive_busy: [bool; 2], // TODO: do we need this? commands finish immediately in our implementation
+    seek_end: bool,
+    drive_not_ready: bool,
+    selected_drive: usize,
+    end_of_track: bool,
+    status1: u8,
+    status2: u8,
+}
+
 struct Drive {
     track: usize,
     sector: usize,
@@ -243,6 +264,10 @@ impl FloppyDiskController {
                 None
             }
         }
+    }
+
+    pub fn make_snapshot(&self) -> FloppyDiskControllerSnapshot {
+        FloppyDiskControllerSnapshot {}
     }
 
     fn execute_command(&mut self) {
