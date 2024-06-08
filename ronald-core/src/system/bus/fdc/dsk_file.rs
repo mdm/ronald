@@ -1,5 +1,9 @@
 use std::convert::TryInto;
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Disk {
     pub extended: bool,
     pub creator: String,
@@ -10,7 +14,8 @@ pub struct Disk {
 }
 
 impl Disk {
-    pub fn load(rom: Vec<u8>) -> std::io::Result<Disk> { // TODO: use custom Result instead of std::io:Result
+    pub fn load(rom: Vec<u8>) -> std::io::Result<Disk> {
+        // TODO: use custom Result instead of std::io:Result
         log::debug!("Loading DSK file.");
 
         let contents = rom;
@@ -48,9 +53,8 @@ impl Disk {
                     }
                     offset_sum
                 } else {
-                    track_size as usize
-                    * (num_sides as usize * track as usize + side as usize)
-                    + 0x100
+                    track_size as usize * (num_sides as usize * track as usize + side as usize)
+                        + 0x100
                 };
                 match contents[track_start..(track_start + 0x0c)].cmp(header) {
                     std::cmp::Ordering::Equal => {
@@ -90,7 +94,7 @@ impl Disk {
                                 sector_size: contents[sector_info_start + 0x03], // TODO: verify this is the same as above?
                                 fdc_status1: contents[sector_info_start + 0x04],
                                 fdc_status2: contents[sector_info_start + 0x05],
-                                actual_length
+                                actual_length,
                             });
 
                             sectors.push(
@@ -139,6 +143,8 @@ impl Disk {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Track {
     pub track: u8,
     pub side: u8,
@@ -158,6 +164,8 @@ impl Track {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SectorInfo {
     pub track: u8,
     pub side: u8,

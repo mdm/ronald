@@ -1,6 +1,6 @@
 use std::fmt;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::system::cpu;
 use crate::system::memory::Read;
@@ -834,7 +834,7 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 enum DecoderMode {
     Default,
     PatchIX,
@@ -852,6 +852,8 @@ impl DecoderMode {
 }
 
 // TODO: make decoder stateless?
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Decoder {
     next_address: usize,
     mode: DecoderMode,
