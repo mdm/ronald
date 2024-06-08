@@ -8,11 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AudioSink, VideoSink};
 
-use bus::{BusSnapshot, CrtControllerSnapshot, DummyBus, StandardBus};
-use cpu::{Cpu, CpuSnapshot, Register16, Register8};
-// use debugger::Debugger;
-use bus::keyboard::Keyboard;
-use bus::screen::Screen;
+use bus::{DummyBus, StandardBus};
+use cpu::{Cpu, Register16, Register8};
 use memory::{Memory, Ram, Read, Write};
 
 pub struct ZexHarness {
@@ -78,25 +75,14 @@ impl ZexHarness {
     }
 }
 
-pub trait System {
+pub trait System<'de>: Serialize + Deserialize<'de> {
     fn new() -> Self;
     fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8;
     fn activate_debugger(&mut self);
     fn set_key(&mut self, line: usize, bit: u8);
     fn unset_key(&mut self, line: usize, bit: u8);
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>);
-    fn make_snapshot(&self) -> SystemSnapshot;
     fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction>;
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SystemSnapshot {
-    cpu: CpuSnapshot,
-    // gate_array: GateArraySnapshot,
-    crtc: CrtControllerSnapshot,
-    // ppi: PpiSnapshot,
-    // psg: PsgShanpshot,
-    // memory: MemorySnapshot,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -105,14 +91,17 @@ pub struct DisassembledInstruction {
     instruction: String,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CPC464 {
     cpu: Cpu,
     memory: Memory,
+    #[serde(flatten)]
     bus: StandardBus,
     // debugger: Debugger,
 }
 
-impl System for CPC464 {
+impl System<'_> for CPC464 {
     fn new() -> CPC464 {
         let cpu = Cpu::new(0);
         let memory = Memory::new();
@@ -166,24 +155,6 @@ impl System for CPC464 {
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
         // TODO: allow loading tapes as well
         self.bus.load_disk(drive, rom);
-    }
-
-    fn make_snapshot(&self) -> SystemSnapshot {
-        let BusSnapshot {
-            crtc,
-            fdc,
-            gate_array,
-            keyboard,
-            ppi,
-            psg,
-            screen,
-            tape,
-        } = self.bus.make_snapshot();
-
-        SystemSnapshot {
-            cpu: self.cpu.make_snapshot(),
-            crtc,
-        }
     }
 
     fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {

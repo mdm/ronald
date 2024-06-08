@@ -18,7 +18,7 @@ pub trait AudioSink {
 
 pub struct Driver<S>
 where
-    S: system::System,
+    S: system::System<'static>,
 {
     system: S,
     keys: HashMap<&'static str, (bool, KeyDefinition)>,
@@ -26,7 +26,7 @@ where
 
 impl<S> Driver<S>
 where
-    S: system::System,
+    S: system::System<'static>,
 {
     pub fn new() -> Self {
         let keys = HashMap::from(constants::KEYS);
@@ -71,8 +71,7 @@ where
     }
 
     pub fn get_json_snapshot(&self) -> serde_json::Result<String> {
-        let snapshot = self.system.make_snapshot();
-        serde_json::to_string(&snapshot)
+        serde_json::to_string(&self.system)
     }
 
     pub fn disassemble(&mut self, count: usize) -> serde_json::Result<String> {
@@ -95,7 +94,7 @@ where
 
 impl<S> Default for Driver<S>
 where
-    S: system::System,
+    S: system::System<'static>,
 {
     fn default() -> Self {
         Self::new()

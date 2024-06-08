@@ -1,37 +1,20 @@
 use std::collections::VecDeque;
 
+use serde::{Deserialize, Serialize};
+
 mod dsk_file;
 
 use dsk_file::Disk;
 
-pub struct FloppyDiskControllerSnapshot {
-    drives: [Drive; 2],
-    phase: Phase,
-    command: Option<Command>,
-    parameters_buffer: Vec<u8>,
-    data_buffer: VecDeque<u8>,
-    result_buffer: VecDeque<u8>,
-    motors_on: bool,
-    request_for_master: bool,
-    data_input_output: bool, // false: CPU -> FDC, true: FDC -> CPU
-    execution_mode: bool,
-    floppy_controller_busy: bool,
-    floppy_drive_busy: [bool; 2], // TODO: do we need this? commands finish immediately in our implementation
-    seek_end: bool,
-    drive_not_ready: bool,
-    selected_drive: usize,
-    end_of_track: bool,
-    status1: u8,
-    status2: u8,
-}
-
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Drive {
     track: usize,
     sector: usize,
     disk: Option<Disk>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 enum Command {
     ReadTrack,
     Specify,
@@ -93,6 +76,8 @@ impl Command {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FloppyDiskController {
     drives: [Drive; 2],
     phase: Phase,
@@ -264,10 +249,6 @@ impl FloppyDiskController {
                 None
             }
         }
-    }
-
-    pub fn make_snapshot(&self) -> FloppyDiskControllerSnapshot {
-        FloppyDiskControllerSnapshot {}
     }
 
     fn execute_command(&mut self) {
@@ -529,6 +510,7 @@ impl FloppyDiskController {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 enum Phase {
     Command,
     Execution,

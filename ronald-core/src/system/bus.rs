@@ -1,8 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 use crate::system::memory::{Memory, Mmu};
 use crate::{AudioSink, VideoSink};
-
-pub use self::crtc::CrtControllerSnapshot;
-pub use self::fdc::FloppyDiskControllerSnapshot;
 
 mod crtc;
 mod fdc;
@@ -45,17 +44,8 @@ impl Bus for DummyBus {
     }
 }
 
-pub struct BusSnapshot {
-    pub crtc: CrtControllerSnapshot,
-    pub fdc: FloppyDiskControllerSnapshot,
-    pub gate_array: GateArraySnapshot,
-    pub keyboard: KeyboardSnapshot,
-    pub ppi: PeripheralInterfaceSnapshot,
-    pub psg: SoundGeneratorSnapshot,
-    pub screen: ScreenSnapshot,
-    pub tape: TapeControllerSnapshot,
-}
-
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StandardBus {
     crtc: CrtController,
     fdc: FloppyDiskController,
@@ -116,19 +106,6 @@ impl StandardBus {
 
     pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
         self.fdc.load_disk(drive, rom);
-    }
-
-    pub fn make_snapshot(&self) -> BusSnapshot {
-        BusSnapshot {
-            crtc: self.crtc.make_snapshot(),
-            fdc: self.fdc.make_snapshot(),
-            gate_array: self.gate_array.make_snapshot(),
-            keyboard: self.keyboard.make_snapshot(),
-            ppi: self.ppi.make_snapshot(),
-            psg: self.psg.make_snapshot(),
-            screen: self.screen.make_snapshot(),
-            tape: self.tape.make_snapshot(),
-        }
     }
 }
 
