@@ -1,28 +1,9 @@
 import { hex } from "../../Utils";
 
 type CpuState = {
-  registerA: number;
-  registerF: number;
-  registerB: number;
-  registerC: number;
-  registerD: number;
-  registerE: number;
-  registerH: number;
-  registerL: number;
-  altRegisterA: number;
-  altRegisterF: number;
-  altRegisterB: number;
-  altRegisterC: number;
-  altRegisterD: number;
-  altRegisterE: number;
-  altRegisterH: number;
-  altRegisterL: number;
-  registerI: number;
-  registerR: number;
-  registerIx: number;
-  registerIy: number;
-  registerSp: number;
-  registerPc: number;
+  // decoder: DecoderState;
+  registers: number[];
+  halted: boolean;
   iff1: boolean;
   iff2: boolean;
   interruptMode: string;
@@ -54,28 +35,28 @@ const CpuStateView = (props: Props) => {
         <tbody>
           <tr>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerA, 2) : "-"}
+              {props.active ? hex(props.state!.registers[0] >> 8, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerB, 2) : "-"}
+              {props.active ? hex(props.state!.registers[1] >> 8, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerC, 2) : "-"}
+              {props.active ? hex(props.state!.registers[1] & 0xff, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerD, 2) : "-"}
+              {props.active ? hex(props.state!.registers[2] >> 8, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerE, 2) : "-"}
+              {props.active ? hex(props.state!.registers[2] & 0xff, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerH, 2) : "-"}
+              {props.active ? hex(props.state!.registers[3] >> 8, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerL, 2) : "-"}
+              {props.active ? hex(props.state!.registers[3] & 0xff, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerI, 2) : "-"}
+              {props.active ? hex(props.state!.registers[8] & 0xff, 2) : "-"}
             </td>
           </tr>
         </tbody>
@@ -96,28 +77,28 @@ const CpuStateView = (props: Props) => {
         <tbody>
           <tr>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.registerF & 0x80) >> 7 : "-"}
+              {props.active ? (props.state!.registers[0] & 0x80) >> 7 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.registerF & 0x40) >> 6 : "-"}
+              {props.active ? (props.state!.registers[0] & 0x40) >> 6 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.registerF & 0x20) >> 5 : "-"}
+              {props.active ? (props.state!.registers[0] & 0x20) >> 5 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.registerF & 0x10) >> 4 : "-"}
+              {props.active ? (props.state!.registers[0] & 0x10) >> 4 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.registerF & 0x08) >> 3 : "-"}
+              {props.active ? (props.state!.registers[0] & 0x08) >> 3 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.registerF & 0x04) >> 2 : "-"}
+              {props.active ? (props.state!.registers[0] & 0x04) >> 2 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.registerF & 0x02) >> 1 : "-"}
+              {props.active ? (props.state!.registers[0] & 0x02) >> 1 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.registerF & 0x01) >> 0 : "-"}
+              {props.active ? (props.state!.registers[0] & 0x01) >> 0 : "-"}
             </td>
           </tr>
         </tbody>
@@ -134,28 +115,28 @@ const CpuStateView = (props: Props) => {
         <tbody>
           <tr>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.altRegisterA, 2) : "-"}
+              {props.active ? hex(props.state!.registers[4] >> 8, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.altRegisterB, 2) : "-"}
+              {props.active ? hex(props.state!.registers[5] >> 8, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.altRegisterC, 2) : "-"}
+              {props.active ? hex(props.state!.registers[5] & 0xff, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.altRegisterD, 2) : "-"}
+              {props.active ? hex(props.state!.registers[6] >> 8, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.altRegisterE, 2) : "-"}
+              {props.active ? hex(props.state!.registers[6] & 0xff, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.altRegisterH, 2) : "-"}
+              {props.active ? hex(props.state!.registers[7] >> 8, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.altRegisterL, 2) : "-"}
+              {props.active ? hex(props.state!.registers[7] & 0xff, 2) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerR, 2) : "-"}
+              {props.active ? hex(props.state!.registers[9] & 0xff, 2) : "-"}
             </td>
           </tr>
         </tbody>
@@ -176,28 +157,28 @@ const CpuStateView = (props: Props) => {
         <tbody>
           <tr>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.altRegisterF & 0x80) >> 7 : "-"}
+              {props.active ? (props.state!.registers[4] & 0x80) >> 7 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.altRegisterF & 0x40) >> 6 : "-"}
+              {props.active ? (props.state!.registers[4] & 0x40) >> 6 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.altRegisterF & 0x20) >> 5 : "-"}
+              {props.active ? (props.state!.registers[4] & 0x20) >> 5 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.altRegisterF & 0x10) >> 4 : "-"}
+              {props.active ? (props.state!.registers[4] & 0x10) >> 4 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.altRegisterF & 0x08) >> 3 : "-"}
+              {props.active ? (props.state!.registers[4] & 0x08) >> 3 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.altRegisterF & 0x04) >> 2 : "-"}
+              {props.active ? (props.state!.registers[4] & 0x04) >> 2 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.altRegisterF & 0x02) >> 1 : "-"}
+              {props.active ? (props.state!.registers[4] & 0x02) >> 1 : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? (props.state!.altRegisterF & 0x01) >> 0 : "-"}
+              {props.active ? (props.state!.registers[4] & 0x01) >> 0 : "-"}
             </td>
           </tr>
         </tbody>
@@ -213,16 +194,16 @@ const CpuStateView = (props: Props) => {
         <tbody>
           <tr>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerIx, 4) : "-"}
+              {props.active ? hex(props.state!.registers[10], 4) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerIy, 4) : "-"}
+              {props.active ? hex(props.state!.registers[11], 4) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerSp, 4) : "-"}
+              {props.active ? hex(props.state!.registers[12], 4) : "-"}
             </td>
             <td class="bg-slate-100 text-center">
-              {props.active ? hex(props.state!.registerPc, 4) : "-"}
+              {props.active ? hex(props.state!.registers[13], 4) : "-"}
             </td>
           </tr>
         </tbody>

@@ -54,7 +54,9 @@ export class Harness {
     }
 
     // TODO: deserialze this properly
-    return JSON.parse(this.emulator.get_snapshot());
+    const snapshot = JSON.parse(this.emulator.get_snapshot());
+    console.log(snapshot);
+    return snapshot
   }
 
   getDisassembly() {
