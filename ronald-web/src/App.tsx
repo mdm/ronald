@@ -73,6 +73,7 @@ const App: Component = () => {
       <div>
         <div class="flex">
           <ControlButton
+            title="Play/Pause"
             onClick={async () => {
               if (running()) {
                 pause();
@@ -85,18 +86,29 @@ const App: Component = () => {
               }
             }}
           >
-            {running() ? "Pause" : "Run"}
+            <span class="material-symbols-outlined">
+              {running() ? "pause" : "play_arrow"}
+            </span>
           </ControlButton>
           <ControlButton
+            title="Step"
             onClick={() => {
               harness()?.stepSingle();
               setSnapshot(harness()!.getSnapshot());
               setDisassembly(harness()!.getDisassembly());
             }}
           >
-            Single Step
+            <span class="material-symbols-outlined">step_into</span>
           </ControlButton>
-          <ControlButton>Toggle Breakpoint</ControlButton>
+          <ControlButton title="Step over">
+            <span class="material-symbols-outlined">step_over</span>
+          </ControlButton>
+          <ControlButton title="Step out">
+            <span class="material-symbols-outlined">step_out</span>
+          </ControlButton>
+          <ControlButton title="Add breakpoint">
+            <span class="material-symbols-outlined">my_location</span>
+          </ControlButton>
         </div>
         <div>
           <DevTools
