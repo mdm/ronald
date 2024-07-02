@@ -23,6 +23,7 @@ const FLAGS = ["S", "Z", "X", "H", "X", "P/V", "N", "C"];
 const CpuStateView = (props: Props) => {
   return (
     <>
+      Registers
       <table class="border-separate">
         <thead>
           <tr>
@@ -204,6 +205,49 @@ const CpuStateView = (props: Props) => {
             </td>
             <td class="bg-slate-100 text-center">
               {props.active ? hex(props.state!.registers[13], 4) : "-"}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      Interrupts
+      <table class="w-full border-separate">
+        <thead>
+          <tr>
+            <th class="bg-slate-300 w-10">Mode</th>
+            <th class="bg-slate-300 w-10">IFF1</th>
+            <th class="bg-slate-300 w-10">IFF2</th>
+            <th class="bg-slate-300 w-10">IRQ</th>
+            <th class="bg-slate-300 w-10">Enable</th>
+            <th class="bg-slate-300 w-10">Halted</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="bg-slate-100 text-center">
+              {props.active ? props.state!.interruptMode : "-"}
+            </td>
+            <td class="bg-slate-100 text-center">
+              {props.active ? (props.state!.iff1 ? "true" : "false") : "-"}
+            </td>
+            <td class="bg-slate-100 text-center">
+              {props.active ? (props.state!.iff2 ? "true" : "false") : "-"}
+            </td>
+            <td class="bg-slate-100 text-center">
+              {props.active
+                ? props.state!.irqReceived
+                  ? "true"
+                  : "false"
+                : "-"}
+            </td>
+            <td class="bg-slate-100 text-center">
+              {props.active
+                ? props.state!.enableInterrupt
+                  ? "true"
+                  : "false"
+                : "-"}
+            </td>
+            <td class="bg-slate-100 text-center">
+              {props.active ? (props.state!.halted ? "true" : "false") : "-"}
             </td>
           </tr>
         </tbody>

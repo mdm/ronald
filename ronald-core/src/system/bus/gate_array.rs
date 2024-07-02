@@ -29,7 +29,7 @@ impl GateArray {
             hsyncs_since_last_vsync: 0,
             interrupt_counter: 0,
             selected_pen: 0,
-            pen_colors: vec![0; 17],
+            pen_colors: vec![0; 17], // 16 pens + border
         }
     }
 

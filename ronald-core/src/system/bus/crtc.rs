@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 enum Register {
+    // TODO: use all registers
     HorizontalTotal,
     HorizontalDisplayed,
     HorizontalSyncPosition,
