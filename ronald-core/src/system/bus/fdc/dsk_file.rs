@@ -23,7 +23,8 @@ impl Disk {
 
         let standard_header = b"MV - CPCEMU Disk-File\r\nDisk-Info\r\n";
         let extended_header = b"EXTENDED CPC DSK File\r\nDisk-Info\r\n";
-        let extended = if contents[0..0x0b] == standard_header[0..0xb] {
+        let extended = if contents[0..0x08] == standard_header[0..0x8] {
+            // some disk images have a slightly different header. so don't compare the whole header
             false
         } else if contents[0..0x22] == extended_header[0..0x22] {
             true
