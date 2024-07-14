@@ -4,6 +4,7 @@ import DisassemblyView from "./DisassemblyView";
 import CrtcStateView from "./CrtcStateView";
 import GateArrayStateView from "./GateArrayStateView";
 import ScreenStateView from "./ScreenStateView";
+import FdcStateView from "./FdcStateView";
 
 type Props = {
   active: boolean;
@@ -134,6 +135,9 @@ const DevTools = (props: Props) => {
               active={props.active}
               state={props.snapshot?.screen}
             />
+          </Match>
+          <Match when={activeTab() === 5}>
+            <FdcStateView active={props.active} state={props.snapshot?.fdc} />
           </Match>
         </Switch>
       </div>

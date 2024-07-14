@@ -1,8 +1,10 @@
 #![allow(dead_code, unused_variables)]
 
+use std::path::PathBuf;
+
 use clap::{App, Arg};
 
-use ronald_core::{Driver, system};
+use ronald_core::{system, Driver};
 
 mod gui;
 mod keybindings;
@@ -54,13 +56,12 @@ fn main() {
 
             if let Some(dsk_filename) = matches.value_of("floppy") {
                 match std::fs::read(dsk_filename) {
-                    Ok(rom) => driver.load_disk(0, rom),
+                    Ok(rom) => driver.load_disk(0, rom, PathBuf::from(dsk_filename)),
                     Err(err) => {
                         println!("Floppy load error: {err}");
                         return;
                     }
                 }
-                
             }
 
             gui::run(driver);

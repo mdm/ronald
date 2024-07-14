@@ -43,22 +43,24 @@ const FdcStateView = (props: Props) => {
       <table class="w-full border-separate">
         <tbody>
           <tr>
-            <th class="bg-slate-300 text-start">Width Counter</th>
+            <th class="bg-slate-300 text-start">Phase</th>
             <td class="bg-slate-100 text-center w-10">
-              {props.active ? props.state!.widthCounter : "-"}
+              {props.active ? props.state!.phase : "-"}
             </td>
           </tr>
           <tr>
-            <th class="bg-slate-300 text-start">Gun Position</th>
+            <th class="bg-slate-300 text-start">Command</th>
             <td class="bg-slate-100 text-center w-10">
-              {props.active ? props.state!.gunPosition : "-"}
+              {props.active && props.state!.command
+                ? props.state!.command
+                : "-"}
             </td>
           </tr>
           <tr>
-            <th class="bg-slate-300 text-start">Waiting for VSYNC</th>
+            <th class="bg-slate-300 text-start">Parameters Buffer</th>
             <td class="bg-slate-100 text-center w-10">
               {props.active
-                ? props.state!.waitingForVsync
+                ? props.state!.parametersBuffer.map((b) => hex(b)).join(" ")
                   ? "true"
                   : "false"
                 : "-"}

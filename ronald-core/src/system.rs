@@ -4,6 +4,8 @@ mod cpu;
 mod instruction; // TODO: do we need this at this level? for debugger?
 mod memory;
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{AudioSink, VideoSink};
@@ -81,7 +83,7 @@ pub trait System<'de>: Serialize + Deserialize<'de> {
     fn activate_debugger(&mut self);
     fn set_key(&mut self, line: usize, bit: u8);
     fn unset_key(&mut self, line: usize, bit: u8);
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>);
+    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
     fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction>;
 }
 
@@ -152,9 +154,9 @@ impl System<'_> for CPC464 {
         self.bus.unset_key(line, bit);
     }
 
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
+    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         // TODO: allow loading tapes as well
-        self.bus.load_disk(drive, rom);
+        self.bus.load_disk(drive, rom, path);
     }
 
     fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
