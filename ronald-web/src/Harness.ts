@@ -56,7 +56,7 @@ export class Harness {
     // TODO: deserialze this properly
     const snapshot = JSON.parse(this.emulator.get_snapshot());
     console.log(snapshot);
-    return snapshot
+    return snapshot;
   }
 
   getDisassembly() {
@@ -112,7 +112,7 @@ export class Harness {
     if (file) {
       console.log(file.name, file.size);
       const buffer = await file.arrayBuffer();
-      this.emulator.load_disk(0, buffer);
+      this.emulator.load_disk(0, buffer, file.name);
     }
   }
 

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use js_sys::Uint8Array;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
@@ -58,9 +60,10 @@ impl Emulator {
         self.driver.release_key(key);
     }
 
-    pub fn load_disk(&mut self, drive: usize, rom: JsValue) {
+    pub fn load_disk(&mut self, drive: usize, rom: JsValue, path: &str) {
         let array = Uint8Array::new(&rom);
-        self.driver.load_disk(drive, array.to_vec());
+        self.driver
+            .load_disk(drive, array.to_vec(), PathBuf::from(path));
     }
 
     pub fn play_audio(&mut self) {

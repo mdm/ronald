@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use crate::system::memory::{Memory, Mmu};
@@ -104,8 +106,8 @@ impl StandardBus {
         self.keyboard.unset_key(line, bit)
     }
 
-    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
-        self.fdc.load_disk(drive, rom);
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
+        self.fdc.load_disk(drive, rom, path);
     }
 }
 

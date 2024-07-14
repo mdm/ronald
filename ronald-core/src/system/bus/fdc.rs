@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -238,8 +239,8 @@ impl FloppyDiskController {
         }
     }
 
-    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
-        self.drives[drive].disk = match dsk_file::Disk::load(rom) {
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
+        self.drives[drive].disk = match dsk_file::Disk::load(rom, path) {
             Ok(disk) => {
                 log::info!("Disk loaded successfully");
                 Some(disk)

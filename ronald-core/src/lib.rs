@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
 
@@ -65,9 +65,9 @@ where
         }
     }
 
-    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         // TODO: Return result -> Err if slot unsuitable
-        self.system.load_disk(drive, rom)
+        self.system.load_disk(drive, rom, path)
     }
 
     pub fn get_json_snapshot(&self) -> serde_json::Result<String> {

@@ -2,7 +2,7 @@ import { Index } from "solid-js";
 import { hex } from "../../Utils";
 
 type ScreenState = {
-  buffer: number[][];
+  buffer: number[][]; // ignore for UI
   gunPosition: number;
   widthCounter: number;
   waitingForVsync: boolean;

@@ -1,10 +1,11 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Disk {
+    pub path: PathBuf,
     pub extended: bool,
     pub creator: String,
     pub num_tracks: u8,
@@ -14,7 +15,7 @@ pub struct Disk {
 }
 
 impl Disk {
-    pub fn load(rom: Vec<u8>) -> std::io::Result<Disk> {
+    pub fn load(rom: Vec<u8>, path: PathBuf) -> std::io::Result<Disk> {
         // TODO: use custom Result instead of std::io:Result
         log::debug!("Loading DSK file.");
 
@@ -126,6 +127,7 @@ impl Disk {
         }
 
         let disk = Disk {
+            path,
             extended,
             creator,
             num_tracks,

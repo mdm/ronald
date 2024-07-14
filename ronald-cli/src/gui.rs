@@ -137,8 +137,8 @@ where
                                 .add_filter("DSK file", &["dsk"])
                                 .show_open_single_file()
                             {
-                                if let Ok(rom) = std::fs::read(pathbuf) {
-                                    driver.load_disk(0, rom);
+                                if let Ok(rom) = std::fs::read(pathbuf.clone()) {
+                                    driver.load_disk(0, rom, pathbuf);
                                 }
                             }
                         }
