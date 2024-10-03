@@ -35,6 +35,7 @@ impl Emulator {
         let video = CanvasVideo::new(ctx);
 
         let driver = Driver::<system::CPC464>::new();
+        log::debug!("Initialized CPC 464 emulator");
 
         Ok(Self {
             driver,

@@ -3,23 +3,24 @@
   "version": "0.0.0",
   "description": "",
   "scripts": {
-    "start": "npm run wasm && vite",
-    "dev": "npm run wasm && vite",
-    "build": "npm run wasm && vite build",
-    "serve": "npm run wasm && vite preview",
-    "wasm": "wasm-pack build ./ronald-wasm --target web"
+    "start": "concurrently \"npm run wasm\" \"vite\"",
+    "dev": "concurrently \"npm run wasm\" \"vite\"",
+    "build": "npm run wasm-dist && vite build",
+    "serve": "vite preview",
+    "wasm": "cd ./ronald-wasm && cargo watch -s \"wasm-pack build --target web\"",
+    "wasm-dist": "wasm-pack build ./ronald-wasm --target web"
   },
   "license": "MIT",
   "devDependencies": {
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.39",
-    "tailwindcss": "^3.4.4",
-    "typescript": "^5.5.3",
-    "vite": "^5.3.3",
-    "vite-plugin-solid": "^2.10.2",
-    "vite-plugin-wasm-pack": "^0.1.12"
+    "autoprefixer": "10.4.20",
+    "concurrently": "^9.0.1",
+    "postcss": "8.4.47",
+    "tailwindcss": "3.4.13",
+    "typescript": "5.6.2",
+    "vite": "5.4.8",
+    "vite-plugin-solid": "2.10.2"
   },
   "dependencies": {
-    "solid-js": "^1.8.18"
+    "solid-js": "1.9.1"
   }
 }
