@@ -1,6 +1,11 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, path::PathBuf};
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Disk {
+    pub path: PathBuf,
     pub extended: bool,
     pub creator: String,
     pub num_tracks: u8,
@@ -10,14 +15,16 @@ pub struct Disk {
 }
 
 impl Disk {
-    pub fn load(rom: Vec<u8>) -> std::io::Result<Disk> { // TODO: use custom Result instead of std::io:Result
+    pub fn load(rom: Vec<u8>, path: PathBuf) -> std::io::Result<Disk> {
+        // TODO: use custom Result instead of std::io:Result
         log::debug!("Loading DSK file.");
 
         let contents = rom;
 
         let standard_header = b"MV - CPCEMU Disk-File\r\nDisk-Info\r\n";
         let extended_header = b"EXTENDED CPC DSK File\r\nDisk-Info\r\n";
-        let extended = if contents[0..0x0b] == standard_header[0..0xb] {
+        let extended = if contents[0..0x08] == standard_header[0..0x8] {
+            // some disk images have a slightly different header. so don't compare the whole header
             false
         } else if contents[0..0x22] == extended_header[0..0x22] {
             true
@@ -48,9 +55,8 @@ impl Disk {
                     }
                     offset_sum
                 } else {
-                    track_size as usize
-                    * (num_sides as usize * track as usize + side as usize)
-                    + 0x100
+                    track_size as usize * (num_sides as usize * track as usize + side as usize)
+                        + 0x100
                 };
                 match contents[track_start..(track_start + 0x0c)].cmp(header) {
                     std::cmp::Ordering::Equal => {
@@ -90,7 +96,7 @@ impl Disk {
                                 sector_size: contents[sector_info_start + 0x03], // TODO: verify this is the same as above?
                                 fdc_status1: contents[sector_info_start + 0x04],
                                 fdc_status2: contents[sector_info_start + 0x05],
-                                actual_length
+                                actual_length,
                             });
 
                             sectors.push(
@@ -122,6 +128,7 @@ impl Disk {
         }
 
         let disk = Disk {
+            path,
             extended,
             creator,
             num_tracks,
@@ -139,6 +146,8 @@ impl Disk {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Track {
     pub track: u8,
     pub side: u8,
@@ -158,6 +167,8 @@ impl Track {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SectorInfo {
     pub track: u8,
     pub side: u8,

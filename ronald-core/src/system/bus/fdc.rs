@@ -1,16 +1,21 @@
 use std::collections::VecDeque;
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
 
 mod dsk_file;
 
 use dsk_file::Disk;
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Drive {
     track: usize,
     sector: usize,
     disk: Option<Disk>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 enum Command {
     ReadTrack,
     Specify,
@@ -72,6 +77,8 @@ impl Command {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FloppyDiskController {
     drives: [Drive; 2],
     phase: Phase,
@@ -153,6 +160,7 @@ impl FloppyDiskController {
                             log::debug!("Reading result from FDC: {:#04x}", result);
                             result
                         } else {
+                            // TODO: we hit this if no disk is loaded and CAT is executed
                             unreachable!()
                         };
 
@@ -231,8 +239,8 @@ impl FloppyDiskController {
         }
     }
 
-    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
-        self.drives[drive].disk = match dsk_file::Disk::load(rom) {
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
+        self.drives[drive].disk = match dsk_file::Disk::load(rom, path) {
             Ok(disk) => {
                 log::info!("Disk loaded successfully");
                 Some(disk)
@@ -503,6 +511,7 @@ impl FloppyDiskController {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 enum Phase {
     Command,
     Execution,

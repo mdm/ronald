@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::fs::*;
 use std::io;
 
+use serde::{Deserialize, Serialize};
+
 pub trait Read {
     fn read_byte(&self, address: usize) -> u8;
 
@@ -30,7 +32,9 @@ pub trait Mmu {
     fn select_upper_rom(&mut self, upper_rom_nr: u8);
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Rom {
+    #[serde(rename = "rom")]
     data: Vec<u8>,
 }
 
@@ -50,7 +54,9 @@ impl Read for Rom {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Ram {
+    #[serde(rename = "ram")]
     data: Vec<u8>,
 }
 
@@ -100,8 +106,12 @@ impl Mmu for Ram {
     fn select_upper_rom(&mut self, upper_rom_nr: u8) {}
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Memory {
+    #[serde(flatten)]
     ram: Ram,
+    #[serde(flatten)]
     lower_rom: Rom,
     lower_rom_enabled: bool,
     upper_roms: HashMap<u8, Rom>,
@@ -113,8 +123,14 @@ impl Memory {
     pub fn new() -> Self {
         // TODO: receive rom paths as parameters
         let mut upper_roms = HashMap::new();
-        upper_roms.insert(0, Rom::from_bytes(include_bytes!("../../rom/basic_1.0.rom")));
-        upper_roms.insert(7, Rom::from_bytes(include_bytes!("../../rom/amsdos_0.5.rom")));
+        upper_roms.insert(
+            0,
+            Rom::from_bytes(include_bytes!("../../rom/basic_1.0.rom")),
+        );
+        upper_roms.insert(
+            7,
+            Rom::from_bytes(include_bytes!("../../rom/amsdos_0.5.rom")),
+        );
 
         Memory {
             ram: Ram::new(0x10000),

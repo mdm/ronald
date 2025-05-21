@@ -1,4 +1,6 @@
-use crate::constants::{SCREEN_BUFFER_WIDTH, SCREEN_BUFFER_HEIGHT};
+use serde::{Deserialize, Serialize};
+
+use crate::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 use crate::VideoSink;
 
 const VIRTUAL_BUFFER_WIDTH: usize = 64 * 16;
@@ -71,6 +73,8 @@ const HARDWARE_TO_FIRMWARE_COLORS: [usize; 32] = [
     14, // 31 (0x5f)
 ];
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Screen {
     buffer: Vec<(u8, u8, u8)>,
     gun_position: usize,
@@ -99,8 +103,10 @@ impl Screen {
 
         if y >= 4 * 16 && x < 48 * 16 {
             let y = y - (4 * 16);
-            self.buffer[(y * SCREEN_BUFFER_WIDTH + x) % buffer_len] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
-            self.buffer[(y * SCREEN_BUFFER_WIDTH + x + SCREEN_BUFFER_WIDTH) % buffer_len] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
+            self.buffer[(y * SCREEN_BUFFER_WIDTH + x) % buffer_len] =
+                FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
+            self.buffer[(y * SCREEN_BUFFER_WIDTH + x + SCREEN_BUFFER_WIDTH) % buffer_len] =
+                FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[color]];
         }
 
         self.gun_position += 1;

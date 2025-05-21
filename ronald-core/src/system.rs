@@ -4,14 +4,15 @@ mod cpu;
 mod instruction; // TODO: do we need this at this level? for debugger?
 mod memory;
 
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+
 use crate::{AudioSink, VideoSink};
 
 use bus::{DummyBus, StandardBus};
-use cpu::{Cpu, Register8, Register16};
-// use debugger::Debugger;
-use bus::keyboard::Keyboard;
-use memory::{Ram, Memory, Read, Write};
-use bus::screen::Screen;
+use cpu::{Cpu, Register16, Register8};
+use memory::{Memory, Ram, Read, Write};
 
 pub struct ZexHarness {
     cpu: Cpu,
@@ -41,10 +42,7 @@ impl ZexHarness {
                 0x0000 => break,
                 0x0005 => {
                     match self.cpu.registers.read_byte(&Register8::C) {
-                        2 => print!(
-                            "{}",
-                            self.cpu.registers.read_byte(&Register8::E) as char
-                        ),
+                        2 => print!("{}", self.cpu.registers.read_byte(&Register8::E) as char),
                         9 => {
                             let mut address =
                                 self.cpu.registers.read_word(&Register16::DE) as usize;
@@ -72,27 +70,40 @@ impl ZexHarness {
         println!();
 
         let elapsed_seconds = start.elapsed().as_secs_f64();
-        println!("Executed {total_cycles} in {elapsed_seconds} seconds ({} MHz).", total_cycles as f64 / 1_000_000.0 / elapsed_seconds);
+        println!(
+            "Executed {total_cycles} in {elapsed_seconds} seconds ({} MHz).",
+            total_cycles as f64 / 1_000_000.0 / elapsed_seconds
+        );
     }
 }
 
-pub trait System {
+pub trait System<'de>: Serialize + Deserialize<'de> {
     fn new() -> Self;
     fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8;
     fn activate_debugger(&mut self);
     fn set_key(&mut self, line: usize, bit: u8);
     fn unset_key(&mut self, line: usize, bit: u8);
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>);
+    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
+    fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction>;
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct DisassembledInstruction {
+    address: u16,
+    instruction: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CPC464 {
     cpu: Cpu,
     memory: Memory,
+    #[serde(flatten)]
     bus: StandardBus,
     // debugger: Debugger,
 }
 
-impl System for CPC464 {
+impl System<'_> for CPC464 {
     fn new() -> CPC464 {
         let cpu = Cpu::new(0);
         let memory = Memory::new();
@@ -112,7 +123,8 @@ impl System for CPC464 {
         //     self.debugger.run_command_shell(&mut self.cpu, &self.memory);
         // }
 
-        let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+        let (cycles, interrupt_acknowledged) =
+            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
         for _ in 0..cycles {
             let interrupt = self.bus.step(&mut self.memory, video, audio);
@@ -142,8 +154,19 @@ impl System for CPC464 {
         self.bus.unset_key(line, bit);
     }
 
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
+    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         // TODO: allow loading tapes as well
-        self.bus.load_disk(drive, rom);
+        self.bus.load_disk(drive, rom, path);
+    }
+
+    fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
+        self.cpu
+            .disassemble(&mut self.memory, count)
+            .into_iter()
+            .map(|(address, instruction)| DisassembledInstruction {
+                address,
+                instruction,
+            })
+            .collect()
     }
 }

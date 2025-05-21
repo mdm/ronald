@@ -1,4 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 enum Register {
+    // TODO: use all registers
     HorizontalTotal,
     HorizontalDisplayed,
     HorizontalSyncPosition,
@@ -19,7 +22,9 @@ enum Register {
     LightPenAddressLow,
 }
 
-pub struct CRTController {
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrtController {
     registers: [u8; 18],
     selected_register: usize,
     horizontal_counter: u8,
@@ -29,9 +34,9 @@ pub struct CRTController {
     display_start_address: u16,
 }
 
-impl CRTController {
+impl CrtController {
     pub fn new() -> Self {
-        CRTController {
+        CrtController {
             registers: [0; 18],
             selected_register: 0,
             horizontal_counter: 0,
@@ -103,8 +108,9 @@ impl CRTController {
         let character_rows_since_start = self.character_row_counter as i32 - sync_start;
         let scan_lines_since_start =
             (self.registers[Register::MaximumRasterAddress as usize] as i32 + 1)
-                * character_rows_since_start + self.scan_line_counter as i32;
-        (0.. 16 * 8).contains(&scan_lines_since_start) // should be 16, not 16 * 8 - TODO: find out why shortening this messes with Fruity Frank colors
+                * character_rows_since_start
+                + self.scan_line_counter as i32;
+        (0..16 * 8).contains(&scan_lines_since_start) // should be 16, not 16 * 8 - TODO: find out why shortening this messes with Fruity Frank colors
     }
 
     pub fn step(&mut self) {

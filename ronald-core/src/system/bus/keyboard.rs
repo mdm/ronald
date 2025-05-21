@@ -1,3 +1,7 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Keyboard {
     lines: [u8; 10],
     active_line: usize,
