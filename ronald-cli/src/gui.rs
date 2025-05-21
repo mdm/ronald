@@ -46,10 +46,7 @@ impl PixelsWindow {
             .unwrap()
         };
 
-        Self {
-            pixels,
-            window,
-        }
+        Self { pixels, window }
     }
 }
 
@@ -61,14 +58,14 @@ impl VideoSink for PixelsWindow {
             pixel[2] = buffer[i].2; // B
             pixel[3] = 255; // A
         }
-        
+
         self.window.request_redraw();
     }
 }
 
 pub fn run<S>(mut driver: Driver<S>)
 where
-    S: system::System + 'static,
+    S: system::System<'static> + 'static,
 {
     let file = File::open("keyconfig.yml").unwrap();
     let key_configs: HashMap<String, keybindings::KeyConfig> =
@@ -78,10 +75,7 @@ where
     for (key, key_config) in key_configs {
         key_map.insert(key_config.normal, vec![key.clone()]);
         if let Some(key_config_shifted) = key_config.shifted {
-            key_map.insert(
-                key_config_shifted,
-                vec![key.clone(), "Shift".into()],
-            );
+            key_map.insert(key_config_shifted, vec![key.clone(), "Shift".into()]);
         }
     }
 
@@ -102,7 +96,7 @@ where
             winit::event::Event::RedrawRequested(_) => {
                 log::trace!("Drawing current frame");
                 let start = std::time::Instant::now();
-      
+
                 pixels_window.pixels.render().unwrap();
 
                 log::trace!(
@@ -121,11 +115,7 @@ where
                 log::trace!("Starting new frame");
                 let start = std::time::Instant::now();
 
-                driver.step(
-                    20_000,
-                    &mut pixels_window,
-                    &mut audio,
-                );
+                driver.step(20_000, &mut pixels_window, &mut audio);
 
                 log::trace!(
                     "Frame emulated in {} microseconds",
@@ -147,8 +137,8 @@ where
                                 .add_filter("DSK file", &["dsk"])
                                 .show_open_single_file()
                             {
-                                if let Ok(rom) = std::fs::read(pathbuf) {
-                                    driver.load_disk(0, rom);
+                                if let Ok(rom) = std::fs::read(pathbuf.clone()) {
+                                    driver.load_disk(0, rom, pathbuf);
                                 }
                             }
                         }

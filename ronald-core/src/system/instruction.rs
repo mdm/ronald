@@ -1,5 +1,7 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 use crate::system::cpu;
 use crate::system::memory::Read;
 
@@ -69,10 +71,13 @@ impl fmt::Display for Operand {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum InterruptMode {
+    #[serde(rename = "0")]
     Mode0,
+    #[serde(rename = "1")]
     Mode1,
+    #[serde(rename = "2")]
     Mode2,
 }
 
@@ -829,7 +834,7 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 enum DecoderMode {
     Default,
     PatchIX,
@@ -846,6 +851,9 @@ impl DecoderMode {
     }
 }
 
+// TODO: make decoder stateless?
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Decoder {
     next_address: usize,
     mode: DecoderMode,

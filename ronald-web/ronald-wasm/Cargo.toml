@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 console_error_panic_hook = "0.1.7"
-cpal = { version = "0.15.2", features = ["wasm-bindgen"] }
+cpal = { version = "0.15", features = ["wasm-bindgen"] }
 js-sys = "0.3"
 log = "0.4"
 ronald-core = { path = "../../ronald-core" }

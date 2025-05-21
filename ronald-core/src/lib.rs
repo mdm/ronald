@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
 
@@ -18,7 +18,7 @@ pub trait AudioSink {
 
 pub struct Driver<S>
 where
-    S: system::System,
+    S: system::System<'static>,
 {
     system: S,
     keys: HashMap<&'static str, (bool, KeyDefinition)>,
@@ -26,7 +26,7 @@ where
 
 impl<S> Driver<S>
 where
-    S: system::System,
+    S: system::System<'static>,
 {
     pub fn new() -> Self {
         let keys = HashMap::from(constants::KEYS);
@@ -44,6 +44,10 @@ where
         }
     }
 
+    pub fn step_single(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) {
+        self.system.emulate(video, audio);
+    }
+
     pub fn activate_debugger(&self) {
         todo!()
     }
@@ -56,13 +60,23 @@ where
 
     pub fn release_key(&mut self, key: &str) {
         if let Some((_shiftable, key_definition)) = self.keys.get(key) {
-            self.system.unset_key(key_definition.line, key_definition.bit);
+            self.system
+                .unset_key(key_definition.line, key_definition.bit);
         }
     }
 
-    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>) {
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         // TODO: Return result -> Err if slot unsuitable
-        self.system.load_disk(drive, rom)
+        self.system.load_disk(drive, rom, path)
+    }
+
+    pub fn get_json_snapshot(&self) -> serde_json::Result<String> {
+        serde_json::to_string(&self.system)
+    }
+
+    pub fn disassemble(&mut self, count: usize) -> serde_json::Result<String> {
+        let disassembly = self.system.disassemble(count);
+        serde_json::to_string(&disassembly)
     }
 
     pub fn save_rom(&self) -> Vec<u8> {
@@ -80,7 +94,7 @@ where
 
 impl<S> Default for Driver<S>
 where
-    S: system::System,
+    S: system::System<'static>,
 {
     fn default() -> Self {
         Self::new()

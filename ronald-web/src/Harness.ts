@@ -1,6 +1,5 @@
-import { AudioWriter, RingBuffer } from "ringbuf.js";
-
 import { Emulator } from "../ronald-wasm/pkg/ronald_wasm";
+import defaultKeymap from "./assets/default-keymap.json";
 
 const TARGET_FRAME_MS = 20;
 
@@ -9,7 +8,7 @@ export class Harness {
   private running: boolean;
   private previousTime: number;
   private timeAvailable: number;
-  private keymap?: any;
+  private keymap: any;
   private pressedKeys: Set<string>;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -17,15 +16,12 @@ export class Harness {
     this.running = false;
     this.previousTime = performance.now();
     this.timeAvailable = 0;
+    this.keymap = defaultKeymap;
     this.pressedKeys = new Set();
   }
 
   async run() {
     console.log("run");
-
-    if (!this.keymap) {
-      await this.setupKeymap();
-    }
 
     this.previousTime = performance.now();
     this.timeAvailable = 0;
@@ -46,6 +42,30 @@ export class Harness {
 
     this.emulator.pause_audio();
     this.running = false;
+  }
+
+  stepSingle() {
+    this.emulator.step_single();
+  }
+
+  getSnapshot() {
+    if (this.running) {
+      return undefined;
+    }
+
+    // TODO: deserialze this properly
+    const snapshot = JSON.parse(this.emulator.get_snapshot());
+    console.log(snapshot);
+    return snapshot;
+  }
+
+  getDisassembly() {
+    if (this.running) {
+      return undefined;
+    }
+
+    // TODO: deserialze this properly
+    return JSON.parse(this.emulator.disassemble(20));
   }
 
   handleKeyDown(event: KeyboardEvent) {
@@ -92,7 +112,7 @@ export class Harness {
     if (file) {
       console.log(file.name, file.size);
       const buffer = await file.arrayBuffer();
-      this.emulator.load_disk(0, buffer);
+      this.emulator.load_disk(0, buffer, file.name);
     }
   }
 
@@ -101,7 +121,7 @@ export class Harness {
   }
 
   private async setupKeymap() {
-    const keymapURL = "/src/assets/default-keymap.json";
+    const keymapURL = "src/assets/default-keymap.json";
     const request = new Request(keymapURL);
     const response = await fetch(request);
     this.keymap = await response.json();

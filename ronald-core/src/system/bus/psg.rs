@@ -1,12 +1,17 @@
+use serde::{Deserialize, Serialize};
+
 use crate::system::bus::keyboard::Keyboard;
 use crate::AudioSink;
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SoundGenerator {
     buffer: u8,
     registers: [u8; 14],
     selected_register: usize,
     chip_clock_now: u32,
     chip_clock_next_sample: f32,
+    #[serde(skip)] // TODO: restore state as best as possible when deserializing
     psg: Option<psg::PSG>,
 }
 

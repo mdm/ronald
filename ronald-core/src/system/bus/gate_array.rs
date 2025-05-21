@@ -1,9 +1,13 @@
-use crate::VideoSink;
+use serde::{Deserialize, Serialize};
+
 use crate::system::bus::crtc;
+use crate::system::bus::screen;
 use crate::system::memory;
 use crate::system::memory::Mmu;
-use crate::system::bus::screen;
+use crate::VideoSink;
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GateArray {
     current_screen_mode: u8,
     requested_screen_mode: u8,
@@ -25,7 +29,7 @@ impl GateArray {
             hsyncs_since_last_vsync: 0,
             interrupt_counter: 0,
             selected_pen: 0,
-            pen_colors: vec![0; 17],
+            pen_colors: vec![0; 17], // 16 pens + border
         }
     }
 
@@ -42,7 +46,12 @@ impl GateArray {
                 }
             }
             1 => {
-                log::trace!("Gate Array color select (pen {}): {:#04x} ({:#04x})", self.selected_pen, value, value & 0x1f);
+                log::trace!(
+                    "Gate Array color select (pen {}): {:#04x} ({:#04x})",
+                    self.selected_pen,
+                    value,
+                    value & 0x1f
+                );
                 self.pen_colors[self.selected_pen] = value & 0x1f;
             }
             2 => {
@@ -57,6 +66,7 @@ impl GateArray {
             }
             3 => {
                 // ROM banking (only available in CPC 6128)
+                // TODO: show error message to user
                 log::error!("Gate Array ROM banking not supported: {:#010b}", value);
                 unimplemented!();
             }
@@ -70,7 +80,13 @@ impl GateArray {
         self.interrupt_counter &= 0x1f;
     }
 
-    pub fn step(&mut self, crtc: &crtc::CRTController, memory: &memory::Memory, screen: &mut screen::Screen, video: &mut impl VideoSink) -> bool {
+    pub fn step(
+        &mut self,
+        crtc: &crtc::CrtController,
+        memory: &memory::Memory,
+        screen: &mut screen::Screen,
+        video: &mut impl VideoSink,
+    ) -> bool {
         let generate_interrupt = self.update_interrupt_counter(crtc);
         self.update_screen_mode(crtc);
         self.write_to_screen(crtc, memory, screen, video);
@@ -81,7 +97,7 @@ impl GateArray {
         generate_interrupt
     }
 
-    fn update_interrupt_counter(&mut self, crtc: &crtc::CRTController) -> bool {
+    fn update_interrupt_counter(&mut self, crtc: &crtc::CrtController) -> bool {
         let mut generate_interrupt = false;
         if self.hsync_active && !crtc.read_horizontal_sync() {
             self.interrupt_counter += 1;
@@ -110,14 +126,20 @@ impl GateArray {
         generate_interrupt
     }
 
-    fn update_screen_mode(&mut self, crtc: &crtc::CRTController) {
+    fn update_screen_mode(&mut self, crtc: &crtc::CrtController) {
         if !self.hsync_active && crtc.read_horizontal_sync() {
             self.current_screen_mode = self.requested_screen_mode;
             log::trace!("New screen mode: {}", self.current_screen_mode);
         }
     }
 
-    fn write_to_screen(&self, crtc: &crtc::CRTController, memory: &memory::Memory, screen: &mut screen::Screen, video: &mut impl VideoSink) {
+    fn write_to_screen(
+        &self,
+        crtc: &crtc::CrtController,
+        memory: &memory::Memory,
+        screen: &mut screen::Screen,
+        video: &mut impl VideoSink,
+    ) {
         if !self.vsync_active && crtc.read_vertical_sync() {
             screen.trigger_vsync(video);
         }
@@ -144,8 +166,14 @@ impl GateArray {
             match self.current_screen_mode {
                 0 => {
                     let pixels = [
-                        ((packed & 0x80) >> 7) | ((packed & 0x08) >> 2) | ((packed & 0x20) >> 3) | ((packed & 0x02) << 2),
-                        ((packed & 0x40) >> 6) | ((packed & 0x04) >> 1) | ((packed & 0x10) >> 2) | ((packed & 0x01) << 3),
+                        ((packed & 0x80) >> 7)
+                            | ((packed & 0x08) >> 2)
+                            | ((packed & 0x20) >> 3)
+                            | ((packed & 0x02) << 2),
+                        ((packed & 0x40) >> 6)
+                            | ((packed & 0x04) >> 1)
+                            | ((packed & 0x10) >> 2)
+                            | ((packed & 0x01) << 3),
                     ];
 
                     for pixel in pixels {
@@ -172,7 +200,7 @@ impl GateArray {
                     for bit in 0..8 {
                         let pixel = (packed >> (7 - bit)) & 1;
                         screen.write(self.pen_colors[pixel as usize] as usize);
-                    }                    
+                    }
                 }
                 _ => unimplemented!(),
             }

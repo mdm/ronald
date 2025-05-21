@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use js_sys::Uint8Array;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
@@ -33,6 +35,7 @@ impl Emulator {
         let video = CanvasVideo::new(ctx);
 
         let driver = Driver::<system::CPC464>::new();
+        log::debug!("Initialized CPC 464 emulator");
 
         Ok(Self {
             driver,
@@ -46,6 +49,10 @@ impl Emulator {
         self.driver.step(20_000, &mut self.video, &mut self.audio);
     }
 
+    pub fn step_single(&mut self) {
+        self.driver.step_single(&mut self.video, &mut self.audio);
+    }
+
     pub fn press_key(&mut self, key: &str) {
         self.driver.press_key(key);
     }
@@ -54,9 +61,10 @@ impl Emulator {
         self.driver.release_key(key);
     }
 
-    pub fn load_disk(&mut self, drive: usize, rom: JsValue) {
+    pub fn load_disk(&mut self, drive: usize, rom: JsValue, path: &str) {
         let array = Uint8Array::new(&rom);
-        self.driver.load_disk(drive, array.to_vec());
+        self.driver
+            .load_disk(drive, array.to_vec(), PathBuf::from(path));
     }
 
     pub fn play_audio(&mut self) {
@@ -65,5 +73,13 @@ impl Emulator {
 
     pub fn pause_audio(&mut self) {
         self.audio.pause_audio()
+    }
+
+    pub fn get_snapshot(&self) -> String {
+        self.driver.get_json_snapshot().unwrap_or_default()
+    }
+
+    pub fn disassemble(&mut self, count: usize) -> String {
+        self.driver.disassemble(count).unwrap_or_default()
     }
 }
