@@ -1,0 +1,16 @@
+[package]
+name = "ronald-desktop"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ronald-egui = { path = "../ronald-egui" }
+eframe = { version = "0.31.1", default-features = false, features = [
+  "accesskit",
+  "default_fonts",
+  "persistence",
+  "wgpu",
+  "x11",
+] }
+env_logger = "0.11.8"
+egui = "0.31.1"
