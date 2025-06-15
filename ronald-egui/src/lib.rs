@@ -3,6 +3,8 @@ use std::time::Instant;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
+mod frontend;
+
 #[derive(Deserialize, Serialize)]
 #[serde(default)]
 pub struct RonaldApp {
@@ -88,3 +90,19 @@ impl eframe::App for RonaldApp {
         ctx.request_repaint();
     }
 }
+
+// // Setup winit + wgpu yourself
+// let event_loop = EventLoop::new();
+// let window = WindowBuilder::new().build(&event_loop).unwrap();
+//
+// // Initialize wgpu
+// let instance = wgpu::Instance::default();
+// let surface = unsafe { instance.create_surface(&window) }.unwrap();
+// let adapter = instance.request_adapter(...).await.unwrap();
+// let (device, queue) = adapter.request_device(...).await.unwrap();
+//
+// // Setup egui context and egui_wgpu renderer
+// let egui_ctx = egui::Context::default();
+// let mut egui_wgpu_renderer = egui_wgpu::Renderer::new(&device, ...);
+//
+// // Now you have access to `device` and `queue` freely
