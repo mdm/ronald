@@ -5,12 +5,9 @@ edition = "2024"
 
 [dependencies]
 ronald-egui = { path = "../ronald-egui" }
-eframe = { version = "0.31.1", default-features = false, features = [
-  "accesskit",
-  "default_fonts",
-  "persistence",
-  "wgpu",
-  "x11",
-] }
 env_logger = "0.11.8"
 egui = "0.31.1"
+pollster = "0.4.0"
+winit = "0.30.11"
+egui-winit = "0.31.1"
+egui-wgpu = "0.31.1"
