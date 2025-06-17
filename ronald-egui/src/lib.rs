@@ -1,21 +1,18 @@
 use std::time::Instant;
 
 use eframe::egui;
-use serde::{Deserialize, Serialize};
 
-mod frontend;
+// mod frontend;
 
-#[derive(Deserialize, Serialize)]
-#[serde(default)]
-pub struct RonaldApp {
+// TODO: look into serializing parts of this struct to restore ui state
+pub struct RonaldUi {
     label: String,
     screen_only: bool,
-    #[serde(skip)]
     hovering_screen: Option<Instant>,
     last_hover_pos: Option<egui::Pos2>,
 }
 
-impl Default for RonaldApp {
+impl Default for RonaldUi {
     fn default() -> Self {
         Self {
             label: "Hello, Ronald!".to_string(),
@@ -26,17 +23,17 @@ impl Default for RonaldApp {
     }
 }
 
-impl RonaldApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
+impl RonaldUi {
+    // pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new() -> Self {
+        // if let Some(storage) = cc.storage {
+        //     return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        // }
 
         Default::default()
     }
-}
-impl eframe::App for RonaldApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+
+    pub fn ui(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label(&self.label);
         });
