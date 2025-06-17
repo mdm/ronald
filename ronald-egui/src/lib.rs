@@ -1,7 +1,11 @@
 use std::time::Instant;
 
-use eframe::egui;
+use eframe::{egui, wgpu};
 use serde::{Deserialize, Serialize};
+
+use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
+
+use frontend::video::EguiWgpuVideo;
 
 mod frontend;
 
@@ -12,7 +16,12 @@ pub struct RonaldApp {
     screen_only: bool,
     #[serde(skip)]
     hovering_screen: Option<Instant>,
+    #[serde(skip)]
     last_hover_pos: Option<egui::Pos2>,
+    #[serde(skip)]
+    frontend_video: Option<EguiWgpuVideo>,
+    #[serde(skip)]
+    framebuffer_texture_id: Option<egui::TextureId>,
 }
 
 impl Default for RonaldApp {
@@ -22,6 +31,8 @@ impl Default for RonaldApp {
             screen_only: false,
             hovering_screen: None,
             last_hover_pos: None,
+            frontend_video: None,
+            framebuffer_texture_id: None,
         }
     }
 }
@@ -36,17 +47,38 @@ impl RonaldApp {
     }
 }
 impl eframe::App for RonaldApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label(&self.label);
         });
 
+        if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend_video) {
+            // TODO: pass full render state to EguiWgpuVideo and have framebuffer() return a TextureId
+            let frontend_video =
+                EguiWgpuVideo::new(&render_state.device, render_state.queue.clone());
+
+            let framebuffer_texture_id = render_state.renderer.write().register_native_texture(
+                &render_state.device,
+                frontend_video.framebuffer(),
+                wgpu::FilterMode::Linear,
+            );
+
+            self.frontend_video = Some(frontend_video);
+            self.framebuffer_texture_id = Some(framebuffer_texture_id);
+        }
+
+        let framebuffer_size =
+            egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
+
         let mut screen = egui::Window::new("Screen")
             .collapsible(false)
             .resizable(false)
-            .default_size(egui::Vec2::new(640.0, 400.0))
+            .default_size(framebuffer_size)
             .show(ctx, |ui| {
-                ui.label("This is where the Amstrad CPC screen would be displayed.");
+                if let Some(texture_id) = self.framebuffer_texture_id {
+                    let texture = egui::load::SizedTexture::new(texture_id, framebuffer_size);
+                    ui.image(texture);
+                }
                 let window_rect = ui.min_rect();
                 let pointer_pos = ctx.pointer_hover_pos();
 
