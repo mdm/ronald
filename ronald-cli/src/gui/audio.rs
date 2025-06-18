@@ -42,6 +42,9 @@ impl CpalAudio {
                         cpal::SampleFormat::U16 => {
                             self.run_audio_stream::<u16>(&device, &config.into(), sample_queue)
                         }
+                        sample_format => {
+                            log::error!("Unsupported sample format: {:?}", sample_format);
+                        }
                     }
                 }
                 Err(err) => {
@@ -60,7 +63,7 @@ impl CpalAudio {
         config: &cpal::StreamConfig,
         sample_queue: mpsc::Receiver<f32>,
     ) where
-        T: cpal::Sample,
+        T: cpal::SizedSample + cpal::FromSample<f32>,
     {
         let sample_rate = config.sample_rate.0 as f32;
         let channels = config.channels as usize;
@@ -77,16 +80,14 @@ impl CpalAudio {
             move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
                 for frame in output.chunks_mut(channels) {
                     let next_sample = match sample_queue.try_recv() {
-                        Ok(sample) => {
-                            sample
-                        }
+                        Ok(sample) => sample,
                         Err(err) => {
                             log::trace!("Error fetching next audio sample batch: {}", err);
                             last_sample
                         }
                     };
 
-                    let value: T = cpal::Sample::from::<f32>(&next_sample);
+                    let value: T = cpal::Sample::from_sample::<f32>(next_sample);
                     for sample in frame.iter_mut() {
                         *sample = value;
                     }
@@ -102,6 +103,7 @@ impl CpalAudio {
                 }
             },
             err_fn,
+            None,
         ) {
             Ok(audio_stream) => {
                 self.audio_stream = Some(audio_stream);

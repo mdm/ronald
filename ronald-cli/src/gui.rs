@@ -1,185 +1,224 @@
 use std::fs::File;
+use std::sync::Arc;
+use std::time::Instant;
 use std::{collections::HashMap, time::Duration};
 
-use pixels::Pixels;
-use winit::event_loop::EventLoop;
-use winit::window::Window;
+use pixels::PixelsBuilder;
+use winit::application::ApplicationHandler;
+use winit::dpi::{LogicalSize, Size};
+use winit::platform::scancode::PhysicalKeyExtScancode;
+use winit::window::WindowAttributes;
 
-use ronald_core::{
-    constants::{self, KeyDefinition},
-    system, Driver, VideoSink,
-};
+use ronald_core::{constants, system::System, Driver};
 
-use crate::keybindings;
+use crate::gui::audio::CpalAudio;
+use crate::gui::video::PixelsVideo;
+use crate::keybindings::{HostKey, KeyConfig};
 
 mod audio;
+mod video;
 
-struct PixelsWindow {
-    pixels: Pixels,
-    window: Window,
-}
-
-impl PixelsWindow {
-    fn new(event_loop: &EventLoop<()>) -> Self {
-        let window = {
-            let size = winit::dpi::LogicalSize::new(
-                constants::SCREEN_BUFFER_WIDTH as f64,
-                constants::SCREEN_BUFFER_HEIGHT as f64,
-            );
-            winit::window::WindowBuilder::new()
-                .with_title("Ronald - Amstrad CPC Emulator")
-                .with_inner_size(size)
-                .with_min_inner_size(size)
-                .build(event_loop)
-                .unwrap()
-        };
-
-        let pixels = {
-            let window_size = window.inner_size();
-            let surface_texture =
-                pixels::SurfaceTexture::new(window_size.width, window_size.height, &window);
-            pixels::Pixels::new(
-                constants::SCREEN_BUFFER_WIDTH as u32,
-                constants::SCREEN_BUFFER_HEIGHT as u32,
-                surface_texture,
-            )
-            .unwrap()
-        };
-
-        Self { pixels, window }
-    }
-}
-
-impl VideoSink for PixelsWindow {
-    fn draw_frame(&mut self, buffer: &Vec<(u8, u8, u8)>) {
-        for (i, pixel) in self.pixels.get_frame().chunks_exact_mut(4).enumerate() {
-            pixel[0] = buffer[i].0; // R
-            pixel[1] = buffer[i].1; // G
-            pixel[2] = buffer[i].2; // B
-            pixel[3] = 255; // A
-        }
-
-        self.window.request_redraw();
-    }
-}
-
-pub fn run<S>(mut driver: Driver<S>)
+pub struct RonaldApp<'win, S>
 where
-    S: system::System<'static> + 'static,
+    S: System<'static> + 'static,
 {
-    let file = File::open("keyconfig.yml").unwrap();
-    let key_configs: HashMap<String, keybindings::KeyConfig> =
-        serde_yaml::from_reader(file).unwrap();
-    let mut key_map = HashMap::new();
+    driver: Driver<S>,
+    video: Option<PixelsVideo<'win>>,
+    audio: CpalAudio,
+    key_map: HashMap<HostKey, Vec<String>>,
+    current_modifiers: u32,
+    alt_gr_modifier: u32,
+    pressed_keys: HashMap<u32, HostKey>,
+    joystick_enabled: bool,
+    frame_start: Instant,
+}
 
-    for (key, key_config) in key_configs {
-        key_map.insert(key_config.normal, vec![key.clone()]);
-        if let Some(key_config_shifted) = key_config.shifted {
-            key_map.insert(key_config_shifted, vec![key.clone(), "Shift".into()]);
+impl<'win, S> RonaldApp<'win, S>
+where
+    S: System<'static> + 'static,
+{
+    pub fn new(driver: Driver<S>) -> Self {
+        let audio = CpalAudio::new();
+
+        let file = File::open("keyconfig.yml").unwrap();
+        let key_configs: HashMap<String, KeyConfig> = serde_yaml::from_reader(file).unwrap();
+        let mut key_map = HashMap::new();
+
+        for (key, key_config) in key_configs {
+            key_map.insert(key_config.normal, vec![key.clone()]);
+            if let Some(key_config_shifted) = key_config.shifted {
+                key_map.insert(key_config_shifted, vec![key.clone(), "Shift".into()]);
+            }
+        }
+
+        let current_modifiers = winit::keyboard::ModifiersState::empty().bits();
+        let alt_gr_modifier = 0;
+        let pressed_keys = HashMap::new();
+        let joystick_enabled = false;
+
+        let frame_start = Instant::now();
+
+        Self {
+            driver,
+            video: None,
+            audio,
+            key_map,
+            current_modifiers,
+            alt_gr_modifier,
+            pressed_keys,
+            joystick_enabled,
+            frame_start,
         }
     }
+}
 
-    let event_loop = winit::event_loop::EventLoop::new();
-    let mut pixels_window = PixelsWindow::new(&event_loop);
+impl<'win, S> ApplicationHandler for RonaldApp<'win, S>
+where
+    S: System<'static> + 'static,
+{
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let size = LogicalSize::new(
+            constants::SCREEN_BUFFER_WIDTH as f64,
+            constants::SCREEN_BUFFER_HEIGHT as f64,
+        );
 
-    let mut audio = audio::CpalAudio::new();
+        let Ok(window) = event_loop.create_window(
+            WindowAttributes::default()
+                .with_title("Ronald - Amstrad CPC Emulator")
+                .with_inner_size(Size::Logical(size))
+                .with_min_inner_size(Size::Logical(size)),
+        ) else {
+            log::error!("Failed to create window");
+            event_loop.exit();
+            return;
+        };
 
-    let mut current_modifiers = winit::event::ModifiersState::empty().bits();
-    let mut alt_gr_modifier = 0;
-    let mut pressed_keys = HashMap::new();
-    let joystick_enabled = false;
+        let window = Arc::new(window);
 
-    let mut frame_start = std::time::Instant::now();
+        let surface_texture = pixels::SurfaceTexture::new(
+            constants::SCREEN_BUFFER_WIDTH as u32,
+            constants::SCREEN_BUFFER_HEIGHT as u32,
+            window.clone(),
+        );
 
-    event_loop.run(move |event, _, control_flow| {
+        let Ok(pixels) = PixelsBuilder::new(
+            constants::SCREEN_BUFFER_WIDTH as u32,
+            constants::SCREEN_BUFFER_HEIGHT as u32,
+            surface_texture,
+        )
+        .build() else {
+            log::error!("Failed to create Pixels framebuffer");
+            event_loop.exit();
+            return;
+        };
+
+        self.video = Some(PixelsVideo { pixels, window });
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
         match event {
-            winit::event::Event::RedrawRequested(_) => {
+            winit::event::WindowEvent::RedrawRequested => {
                 log::trace!("Drawing current frame");
                 let start = std::time::Instant::now();
 
-                pixels_window.pixels.render().unwrap();
+                self.video.as_ref().unwrap().pixels.render().unwrap();
 
                 log::trace!(
                     "Frame drawn in {} microseconds",
                     start.elapsed().as_micros()
                 );
 
-                if frame_start.elapsed().as_micros() < 20_000 {
-                    let delay = 20_000 - frame_start.elapsed().as_micros() as u64;
+                if self.frame_start.elapsed().as_micros() < 20_000 {
+                    let delay = 20_000 - self.frame_start.elapsed().as_micros() as u64;
                     std::thread::sleep(Duration::from_micros(delay));
                 }
-            }
-            winit::event::Event::RedrawEventsCleared => {
-                frame_start = std::time::Instant::now();
+
+                self.frame_start = std::time::Instant::now();
 
                 log::trace!("Starting new frame");
                 let start = std::time::Instant::now();
 
-                driver.step(20_000, &mut pixels_window, &mut audio);
+                self.driver
+                    .step(20_000, &mut self.video.as_mut().unwrap(), &mut self.audio);
 
                 log::trace!(
                     "Frame emulated in {} microseconds",
                     start.elapsed().as_micros()
                 );
+
+                self.video.as_ref().unwrap().window.request_redraw();
             }
-            winit::event::Event::WindowEvent { event, .. } => match event {
-                winit::event::WindowEvent::ModifiersChanged(modifiers) => {
-                    current_modifiers = modifiers.bits();
-                }
-                winit::event::WindowEvent::KeyboardInput { input, .. } => match input.state {
-                    winit::event::ElementState::Pressed => {
-                        if let Some(winit::event::VirtualKeyCode::F12) = input.virtual_keycode {
-                            driver.activate_debugger();
-                        }
+            winit::event::WindowEvent::ModifiersChanged(modifiers) => {
+                self.current_modifiers = modifiers.state().bits();
+            }
+            winit::event::WindowEvent::KeyboardInput { event, .. } => match event.state {
+                winit::event::ElementState::Pressed => {
+                    if let winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::F12) =
+                        event.physical_key
+                    {
+                        self.driver.activate_debugger();
+                    }
 
-                        if let Some(winit::event::VirtualKeyCode::F5) = input.virtual_keycode {
-                            if let Ok(Some(pathbuf)) = native_dialog::FileDialog::new()
-                                .add_filter("DSK file", &["dsk"])
-                                .show_open_single_file()
-                            {
-                                if let Ok(rom) = std::fs::read(pathbuf.clone()) {
-                                    driver.load_disk(0, rom, pathbuf);
-                                }
+                    if let winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::F5) =
+                        event.physical_key
+                    {
+                        if let Ok(Some(pathbuf)) = native_dialog::DialogBuilder::file()
+                            .add_filter("DSK file", &["dsk"])
+                            .open_single_file()
+                            .show()
+                        {
+                            if let Ok(rom) = std::fs::read(pathbuf.clone()) {
+                                self.driver.load_disk(0, rom, pathbuf);
                             }
                         }
+                    }
 
-                        if input.scancode == 100 {
-                            // TODO: make this more portable
-                            alt_gr_modifier = 1 << 12;
+                    if event.repeat {
+                        return;
+                    }
+
+                    let scancode = event.physical_key.to_scancode().unwrap();
+                    if scancode == 100 {
+                        // TODO: make this more portable
+                        self.alt_gr_modifier = 1 << 12;
+                    }
+
+                    let host_key = HostKey {
+                        scancode,
+                        modifiers: self.current_modifiers | self.alt_gr_modifier,
+                    };
+                    if let Some(keys) = self.key_map.get(&host_key) {
+                        self.pressed_keys.insert(scancode, host_key);
+                        for key in keys {
+                            self.driver.press_key(key)
                         }
+                    }
+                }
+                winit::event::ElementState::Released => {
+                    let scancode = event.physical_key.to_scancode().unwrap();
+                    if scancode == 100 {
+                        // TODO: make this more portable
+                        self.alt_gr_modifier = 0;
+                    }
 
-                        let host_key = keybindings::HostKey {
-                            scancode: input.scancode,
-                            modifiers: current_modifiers | alt_gr_modifier,
-                        };
-                        if let Some(keys) = key_map.get(&host_key) {
-                            pressed_keys.insert(input.scancode, host_key);
+                    if let Some(host_key) = self.pressed_keys.get(&scancode) {
+                        if let Some(keys) = self.key_map.get(host_key) {
                             for key in keys {
-                                driver.press_key(key)
+                                self.driver.release_key(key)
                             }
                         }
                     }
-                    winit::event::ElementState::Released => {
-                        if input.scancode == 100 {
-                            // TODO: make this more portable
-                            alt_gr_modifier = 0;
-                        }
-
-                        if let Some(host_key) = pressed_keys.get(&input.scancode) {
-                            if let Some(keys) = key_map.get(host_key) {
-                                for key in keys {
-                                    driver.release_key(key)
-                                }
-                            }
-                        }
-                    }
-                },
-                winit::event::WindowEvent::CloseRequested => {
-                    *control_flow = winit::event_loop::ControlFlow::Exit;
                 }
-                _ => {}
             },
+            winit::event::WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
             _ => {}
         }
-    });
+    }
 }
