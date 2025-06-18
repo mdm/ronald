@@ -2,9 +2,12 @@
 
 use std::path::PathBuf;
 
-use clap::{App, Arg};
+use clap::{Arg, ArgAction, Command};
 
 use ronald_core::{system, Driver};
+use winit::event_loop::{ControlFlow, EventLoop};
+
+use gui::RonaldApp;
 
 mod gui;
 mod keybindings;
@@ -15,46 +18,45 @@ fn main() {
         // .filter_level(log::LevelFilter::Info)
         .init();
 
-    let matches = App::new(env!("CARGO_PKG_NAME"))
+    let matches = Command::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .about("an Amstrad CPC emulator")
         .arg(
-            Arg::with_name("debug")
+            Arg::new("debug")
                 .short('d')
                 .long("debug")
                 .value_name("DEBUG")
                 .help("Runs the emulator in debug mode (not available for zexdoc and keyconfig)")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name("system")
+            Arg::new("system")
                 .short('s')
                 .long("system")
                 .value_name("SYSTEM")
                 .help("Selects the system to run")
-                .takes_value(true),
+                .default_value("cpc464"),
         )
         .arg(
-            Arg::with_name("floppy")
+            Arg::new("floppy")
                 .short('f')
                 .long("floppy")
                 .value_name("DSK_FILE")
-                .help("Loads a DSK file")
-                .takes_value(true),
+                .help("Loads a DSK file"),
         )
         .get_matches();
 
-    let system = matches.value_of("system").unwrap_or("cpc464");
+    let system = matches.get_one::<String>("system").unwrap();
 
-    match system {
+    match system.as_str() {
         "cpc464" => {
-            let debug = matches.is_present("debug");
+            let debug = matches.get_flag("debug");
             let mut driver = Driver::<system::CPC464>::new();
             if debug {
                 driver.activate_debugger();
             }
 
-            if let Some(dsk_filename) = matches.value_of("floppy") {
+            if let Some(dsk_filename) = matches.get_one::<String>("floppy") {
                 match std::fs::read(dsk_filename) {
                     Ok(rom) => driver.load_disk(0, rom, PathBuf::from(dsk_filename)),
                     Err(err) => {
@@ -64,15 +66,20 @@ fn main() {
                 }
             }
 
-            gui::run(driver);
+            let event_loop = EventLoop::new().unwrap();
+            event_loop.set_control_flow(ControlFlow::Poll);
+            let mut app = RonaldApp::new(driver);
+            event_loop.run_app(&mut app);
         }
         "zexdoc" => {
             let mut zex_harness = system::ZexHarness::new("rom/zexdoc.rom");
             zex_harness.emulate();
         }
         "keyconfig" => {
-            let keyboard_configurator = keyboard_configurator::KeyboardConfigurator::new();
-            keyboard_configurator.run();
+            let event_loop = EventLoop::new().unwrap();
+            event_loop.set_control_flow(ControlFlow::Poll);
+            let mut app = keyboard_configurator::KeyboardConfigurator::new();
+            event_loop.run_app(&mut app);
         }
         unknown_system => {
             println!(
