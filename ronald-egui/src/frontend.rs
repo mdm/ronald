@@ -25,6 +25,7 @@ where
     video: EguiWgpuVideo,
     frame_start: Instant,
     time_available: usize,
+    input_test: String,
 }
 
 impl<S> Frontend<S>
@@ -42,6 +43,7 @@ where
             video,
             frame_start: Instant::now(),
             time_available: 0,
+            input_test: String::new(),
         }
     }
 
@@ -50,6 +52,9 @@ where
             Some(ui) => {
                 let size = ui.min_rect().size();
 
+                if !ctx.wants_keyboard_input() {
+                    ui.input(|input| self.handle_input(input));
+                }
                 self.step_emulation();
                 self.draw_framebuffer(ctx, ui, size);
             }
@@ -61,9 +66,44 @@ where
                     .resizable(false)
                     .default_size(size)
                     .show(ctx, |ui| {
+                        if !ctx.wants_keyboard_input() {
+                            ui.input(|input| self.handle_input(input));
+                        }
                         self.step_emulation();
                         self.draw_framebuffer(ctx, ui, size);
                     });
+
+                egui::Window::new("Input Test").show(ctx, |ui| {
+                    ui.text_edit_singleline(&mut self.input_test);
+                });
+            }
+        }
+    }
+
+    fn handle_input(&mut self, input: &egui::InputState) {
+        for event in &input.events {
+            if let egui::Event::Key {
+                key,
+                pressed,
+                modifiers,
+                ..
+            } = event
+            {
+                if *pressed {
+                    log::trace!("Key pressed: {:?} with modifiers: {:?}", key, modifiers);
+                    if key.name() == "Backspace" {
+                        self.driver.press_key("Delete");
+                    } else {
+                        self.driver.press_key(key.name());
+                    }
+                } else {
+                    log::trace!("Key released: {:?}", key);
+                    if key.name() == "Backspace" {
+                        self.driver.release_key("Delete");
+                    } else {
+                        self.driver.release_key(key.name());
+                    }
+                }
             }
         }
     }
