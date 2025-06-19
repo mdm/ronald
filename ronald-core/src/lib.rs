@@ -6,7 +6,7 @@ pub mod constants;
 pub mod system;
 
 pub trait VideoSink {
-    fn draw_frame(&mut self, buffer: &Vec<(u8, u8, u8)>);
+    fn draw_frame(&mut self, buffer: &Vec<u8>);
 }
 
 pub trait AudioSink {
