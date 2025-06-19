@@ -81,7 +81,7 @@ where
     }
 
     fn handle_input(&mut self, input: &egui::InputState) {
-        for event in &input.events {
+        for event in &input.raw.events {
             if let egui::Event::Key {
                 key,
                 pressed,
@@ -90,14 +90,14 @@ where
             } = event
             {
                 if *pressed {
-                    log::trace!("Key pressed: {:?} with modifiers: {:?}", key, modifiers);
+                    log::debug!("Key pressed: {:?} with modifiers: {:?}", key, modifiers);
                     if key.name() == "Backspace" {
                         self.driver.press_key("Delete");
                     } else {
                         self.driver.press_key(key.name());
                     }
                 } else {
-                    log::trace!("Key released: {:?}", key);
+                    log::debug!("Key released: {:?}", key);
                     if key.name() == "Backspace" {
                         self.driver.release_key("Delete");
                     } else {
