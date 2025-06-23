@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 use ronald_core::system::CPC464;
 
 use frontend::Frontend;
+use keyboard::Keyboard;
 
 mod frontend;
+mod keyboard;
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -13,6 +15,10 @@ pub struct RonaldApp {
     screen_only: bool,
     #[serde(skip)]
     frontend: Option<Frontend<CPC464>>,
+    #[serde(skip)]
+    show_keyboard: bool,
+    #[serde(skip)]
+    keyboard: Keyboard,
 }
 
 impl RonaldApp {
@@ -26,7 +32,7 @@ impl RonaldApp {
 }
 impl eframe::App for RonaldApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        // self.screen_only = true;
+        egui_extras::install_image_loaders(ctx);
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -42,6 +48,11 @@ impl eframe::App for RonaldApp {
                         .clicked()
                     {
                         self.screen_only = false;
+                    }
+                });
+                ui.menu_button("Settings", |ui| {
+                    if ui.button("Key Bindings").clicked() {
+                        self.show_keyboard = true;
                     }
                 });
             });
@@ -65,6 +76,10 @@ impl eframe::App for RonaldApp {
             if !self.screen_only {
                 frontend.ui(ctx, None);
             }
+        }
+
+        if self.show_keyboard {
+            self.keyboard.ui(ctx);
         }
 
         ctx.request_repaint();

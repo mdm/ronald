@@ -12,6 +12,7 @@ eframe = { version = "0.31.1", default-features = false, features = [
   "wgpu",
   "x11",
 ] }
+egui_extras = { version = "0.31.1", features = ["svg"] }
 serde = "1.0.219"
 cpal = "0.16.0"
 log = "0.4.27"
