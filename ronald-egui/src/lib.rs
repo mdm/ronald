@@ -16,8 +16,6 @@ pub struct RonaldApp {
     #[serde(skip)]
     frontend: Option<Frontend<CPC464>>,
     #[serde(skip)]
-    show_keyboard: bool,
-    #[serde(skip)]
     keyboard: Keyboard,
 }
 
@@ -52,7 +50,7 @@ impl eframe::App for RonaldApp {
                 });
                 ui.menu_button("Settings", |ui| {
                     if ui.button("Key Bindings").clicked() {
-                        self.show_keyboard = true;
+                        self.keyboard.show = true;
                     }
                 });
             });
@@ -78,9 +76,7 @@ impl eframe::App for RonaldApp {
             }
         }
 
-        if self.show_keyboard {
-            self.keyboard.ui(ctx);
-        }
+        self.keyboard.ui(ctx);
 
         ctx.request_repaint();
     }
