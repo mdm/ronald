@@ -8,5 +8,4 @@ keyconfig*.yml
 # Local Netlify folder
 .netlify
 
-/ronald-egui/scripts/key-labels/*.svg
 /ronald-egui/assets/keys/examples
