@@ -1,3 +1,4 @@
+#!/usr/bin/env -S uv run --script
 from dataclasses import dataclass
 import os
 
@@ -296,12 +297,11 @@ keys = [
 
 
 def main():
-    for key in keys:
-        print(f"Processing key: {key.name}")
+    for i, key in enumerate(keys):
+        print(f"Processing key: {key.name} ({i + 1}/{len(keys)})")
+        output_filename = f"../assets/keys/{key.name}.partial.svg"
         try:
-            os.remove("temp_in.svg")
-            os.remove("temp_out.svg")
-            os.remove(f"../../assets/keys/{key.name}.partial.svg")
+            os.remove(output_filename)
         except FileNotFoundError:
             pass
 
@@ -334,7 +334,7 @@ def main():
         )
 
         with open("temp_out.svg", "rb") as file_in:
-            with open(f"../../assets/keys/{key.name}.partial.svg", "wb") as file_out:
+            with open(output_filename, "wb") as file_out:
                 extract = False
                 for line in file_in:
                     if b"<path" in line:
@@ -344,6 +344,12 @@ def main():
 
                     if extract:
                         file_out.write(line)
+
+        try:
+            os.remove("temp_in.svg")
+            os.remove("temp_out.svg")
+        except FileNotFoundError:
+            pass
 
 
 if __name__ == "__main__":
