@@ -15,6 +15,38 @@ struct GuestKey {
     label: &'static str,
 }
 
+impl GuestKey {
+    fn contains_pos(&self, pos: egui::Pos2) -> bool {
+        let x = (self.x + PADDING) as f32;
+        let y = (self.y + PADDING) as f32;
+        let width = (self.width - 2 * PADDING) as f32;
+        let height = if self.name == "Enter" {
+            (2 * SIZE - 2 * PADDING) as f32
+        } else {
+            (SIZE - 2 * PADDING) as f32
+        };
+
+        if pos.x < x || pos.x > x + width || pos.y < y || pos.y > y + height {
+            return false;
+        }
+
+        if self.name == "Enter" {
+            let wide_section_height = (SIZE - 2 * PADDING) as f32;
+            if pos.y >= y && pos.y <= y + wide_section_height && pos.x >= x && pos.x <= x + width {
+                return true;
+            }
+
+            let narrow_section_x = (self.x + PADDING + SIZE / 4) as f32;
+            let narrow_section_width = (self.width - 2 * PADDING - SIZE / 4) as f32;
+            if pos.x < narrow_section_x || pos.x > narrow_section_x + narrow_section_width {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
 impl Display for GuestKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.name == "Enter" {
@@ -32,7 +64,7 @@ impl Display for GuestKey {
                 h -{}
                 q -{CORNER_RADIUS} 0 -{CORNER_RADIUS} -{CORNER_RADIUS}
                 v -{}
-                q 0 -{CORNER_RADIUS} {CORNER_RADIUS} -{CORNER_RADIUS}" fill="transparent" stroke="white" stroke-width="{STROKE_WIDTH}"/>"#,
+                q 0 -{CORNER_RADIUS} {CORNER_RADIUS} -{CORNER_RADIUS}" stroke-width="{STROKE_WIDTH}"/>"#,
                 self.x + PADDING + CORNER_RADIUS,
                 self.y + PADDING,
                 self.width - 2 * PADDING - 2 * CORNER_RADIUS,
@@ -45,7 +77,7 @@ impl Display for GuestKey {
         } else {
             write!(
                 f,
-                r#"<rect x="{}" y="{}" width="{}" height="{}" rx="{}" fill="transparent" stroke="white" stroke-width="{STROKE_WIDTH}"/>"#,
+                r#"<rect x="{}" y="{}" width="{}" height="{}" rx="{}" stroke-width="{STROKE_WIDTH}"/>"#,
                 self.x + PADDING,
                 self.y + PADDING,
                 self.width - 2 * PADDING,
@@ -58,6 +90,7 @@ impl Display for GuestKey {
 
 pub struct Keyboard {
     pub show: bool,
+    hovered_key: Option<&'static str>,
     keys: Vec<GuestKey>,
 }
 
@@ -73,23 +106,65 @@ impl Keyboard {
             let mut svg = String::new();
             svg.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2200 500">"#);
             for key in &self.keys {
-                svg.push_str(key.to_string().as_str());
-                svg.push_str(r#"<g stroke="white" fill="white">"#);
-                svg.push_str(key.label);
-                svg.push_str(r#"</g>"#);
+                match self.hovered_key {
+                    Some(hovered_key) if hovered_key == key.name => {
+                        svg.push_str(r#"<g stroke="white" fill="white">"#);
+                        svg.push_str(key.to_string().as_str());
+                        svg.push_str(r#"</g>"#);
+                        svg.push_str(r#"<g stroke=""#);
+                        svg.push_str(&egui::style::Widgets::dark().noninteractive.bg_fill.to_hex());
+                        svg.push_str(r#"" fill=""#);
+                        svg.push_str(&egui::style::Widgets::dark().noninteractive.bg_fill.to_hex());
+                        svg.push_str(r#"">"#);
+                        svg.push_str(key.label);
+                        svg.push_str(r#"</g>"#);
+                    }
+                    _ => {
+                        svg.push_str(r#"<g stroke="white" fill="transparent">"#);
+                        svg.push_str(key.to_string().as_str());
+                        svg.push_str(r#"</g>"#);
+                        svg.push_str(r#"<g stroke="white" fill="white">"#);
+                        svg.push_str(key.label);
+                        svg.push_str(r#"</g>"#);
+                    }
+                }
             }
             svg.push_str(r#"<g stroke="white" fill="white">"#);
             svg.push_str(include_str!("../assets/keys/JoystickIcon.partial.svg"));
             svg.push_str(r#"</g>"#);
 
             svg.push_str(r#"</svg>"#);
-            ui.add(
+            let response = ui.add(
                 egui::Image::new(egui::ImageSource::Bytes {
                     uri: "bytes://keyboard_layout.svg".into(),
                     bytes: svg.into_bytes().into(),
                 })
                 .fit_to_exact_size(egui::vec2(1100.0, 250.0)),
             );
+            if let Some(pos) = ctx.pointer_hover_pos() {
+                let pos = pos - response.rect.left_top();
+                let pos = egui::Pos2::new(2.0 * pos.x, 2.0 * pos.y);
+                let mut hovering = false;
+                for key in &self.keys {
+                    if key.contains_pos(pos) {
+                        hovering = true;
+                        match self.hovered_key {
+                            Some(hovered_key) if hovered_key == key.name => {
+                                // Already hovered, do nothing
+                            }
+                            _ => {
+                                self.hovered_key = Some(key.name);
+                                ctx.forget_image("bytes://keyboard_layout.svg");
+                            }
+                        }
+                    }
+                }
+
+                if !hovering {
+                    self.hovered_key = None;
+                    ctx.forget_image("bytes://keyboard_layout.svg");
+                }
+            };
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Close").clicked() {
@@ -104,6 +179,7 @@ impl Default for Keyboard {
     fn default() -> Self {
         Self {
             show: false,
+            hovered_key: None,
             keys: vec![
                 GuestKey {
                     name: "Escape",
