@@ -6,6 +6,8 @@ use ronald_core::system::CPC464;
 use frontend::Frontend;
 use keyboard::Keyboard;
 
+pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
+
 mod frontend;
 mod keyboard;
 
@@ -21,9 +23,9 @@ pub struct RonaldApp {
 
 impl RonaldApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
+        // if let Some(storage) = cc.storage {
+        //     return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        // }
 
         Default::default()
     }
@@ -40,17 +42,20 @@ impl eframe::App for RonaldApp {
                         .clicked()
                     {
                         self.screen_only = true;
+                        ui.close_menu();
                     }
                     if ui
                         .add(egui::Button::new("Workbench").selected(!self.screen_only))
                         .clicked()
                     {
                         self.screen_only = false;
+                        ui.close_menu();
                     }
                 });
                 ui.menu_button("Settings", |ui| {
                     if ui.button("Key Bindings").clicked() {
                         self.keyboard.show = true;
+                        ui.close_menu();
                     }
                 });
             });
@@ -59,7 +64,13 @@ impl eframe::App for RonaldApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(frontend) = &mut self.frontend {
                 if self.screen_only {
-                    frontend.ui(ctx, Some(ui));
+                    ui.with_layout(
+                        egui::Layout::centered_and_justified(egui::Direction::LeftToRight)
+                            .with_cross_align(egui::Align::TOP),
+                        |ui| {
+                            frontend.ui(ctx, Some(ui));
+                        },
+                    );
                 }
             }
         });

@@ -100,7 +100,7 @@ impl Keyboard {
             return;
         }
 
-        egui::Modal::new("key_bindings_modal".into()).show(ctx, |ui| {
+        let modal = egui::Modal::new("key_bindings_modal".into()).show(ctx, |ui| {
             ui.label("Key Bindings");
 
             let mut svg = String::new();
