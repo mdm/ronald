@@ -26,6 +26,7 @@ where
     frame_start: Instant,
     time_available: usize,
     input_test: String,
+    can_interact: bool,
 }
 
 impl<S> Frontend<S>
@@ -44,6 +45,7 @@ where
             frame_start: Instant::now(),
             time_available: 0,
             input_test: String::new(),
+            can_interact: true,
         }
     }
 
@@ -67,16 +69,15 @@ where
                         central_panel_size.y,
                     )
                 };
-                let can_interact = match ctx.pointer_interact_pos() {
-                    Some(pos) => ctx.layer_id_at(pos) == Some(egui::LayerId::background()),
-                    None => true,
-                };
+                if let Some(pos) = ctx.pointer_interact_pos() {
+                    self.can_interact = ctx.layer_id_at(pos) == Some(egui::LayerId::background());
+                }
 
-                if !ctx.wants_keyboard_input() && can_interact {
+                if !ctx.wants_keyboard_input() && self.can_interact {
                     ui.input(|input| self.handle_input(input));
                 }
 
-                self.step_emulation();
+                self.step_emulation(); // TODO: step only when accepting input (stop audio?)
                 self.draw_framebuffer(ctx, ui, size);
             }
             None => {
@@ -87,9 +88,9 @@ where
                     .resizable(false)
                     .default_size(size)
                     .show(ctx, |ui| {
-                        let can_interact = Some(ui.layer_id()) == ctx.top_layer_id();
+                        self.can_interact = Some(ui.layer_id()) == ctx.top_layer_id();
 
-                        if !ctx.wants_keyboard_input() && can_interact {
+                        if !ctx.wants_keyboard_input() && self.can_interact {
                             ui.input(|input| self.handle_input(input));
                         }
 
