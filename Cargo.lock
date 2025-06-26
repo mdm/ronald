@@ -3644,6 +3644,7 @@ dependencies = [
  "eframe",
  "egui",
  "env_logger",
+ "log",
  "ronald-egui",
 ]
 
