@@ -103,4 +103,17 @@ where
 
         ctx.request_repaint();
     }
+
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        // log::debug!("RawInput modifiers: {:?}", raw_input.modifiers);
+        for event in &raw_input.events {
+            if let egui::Event::Key {
+                physical_key: Some(key),
+                ..
+            } = event
+            {
+                log::debug!("Raw key event: {:?}", key,);
+            }
+        }
+    }
 }

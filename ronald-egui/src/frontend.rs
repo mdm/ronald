@@ -110,8 +110,12 @@ where
     fn handle_input(&mut self, input: &egui::InputState) {
         for event in self.key_mapper.map_keys(input) {
             match event {
-                KeyEvent::Pressed(key)  => {self.driver.press_key(key);            }
-                KeyEvent::Released(key)  => {self.driver.release_key(key);            }
+                KeyEvent::Pressed(key) => {
+                    self.driver.press_key(key);
+                }
+                KeyEvent::Released(key) => {
+                    self.driver.release_key(key);
+                }
             }
         }
     }
@@ -160,7 +164,11 @@ pub enum KeyEvent<'k> {
 }
 
 pub trait KeyMapper: Default {
-    fn bind_key(&mut self, key: &str, input: &egui::InputState) -> Result<(), Box<dyn std::error::Error>>;
+    fn bind_key(
+        &mut self,
+        guest_key: &str,
+        input: &egui::InputState,
+    ) -> Result<bool, Box<dyn std::error::Error>>;
     fn reset_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>>;
     fn map_keys(&mut self, input: &egui::InputState) -> impl Iterator<Item = KeyEvent<'_>>;
 }
