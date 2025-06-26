@@ -50,11 +50,32 @@ where
     pub fn ui(&mut self, ctx: &egui::Context, ui: Option<&mut egui::Ui>) {
         match ui {
             Some(ui) => {
-                let size = ui.min_rect().size();
+                let central_panel_size = ui.max_rect().size();
+                let size = if central_panel_size.x
+                    * (SCREEN_BUFFER_HEIGHT as f32 / SCREEN_BUFFER_WIDTH as f32)
+                    < central_panel_size.y
+                {
+                    egui::Vec2::new(
+                        central_panel_size.x,
+                        central_panel_size.x
+                            * (SCREEN_BUFFER_HEIGHT as f32 / SCREEN_BUFFER_WIDTH as f32),
+                    )
+                } else {
+                    egui::Vec2::new(
+                        central_panel_size.y
+                            * (SCREEN_BUFFER_WIDTH as f32 / SCREEN_BUFFER_HEIGHT as f32),
+                        central_panel_size.y,
+                    )
+                };
+                let can_interact = match ctx.pointer_interact_pos() {
+                    Some(pos) => ctx.layer_id_at(pos) == Some(egui::LayerId::background()),
+                    None => true,
+                };
 
-                if !ctx.wants_keyboard_input() {
+                if !ctx.wants_keyboard_input() && can_interact {
                     ui.input(|input| self.handle_input(input));
                 }
+
                 self.step_emulation();
                 self.draw_framebuffer(ctx, ui, size);
             }
@@ -66,10 +87,13 @@ where
                     .resizable(false)
                     .default_size(size)
                     .show(ctx, |ui| {
-                        if !ctx.wants_keyboard_input() {
+                        let can_interact = Some(ui.layer_id()) == ctx.top_layer_id();
+
+                        if !ctx.wants_keyboard_input() && can_interact {
                             ui.input(|input| self.handle_input(input));
                         }
-                        self.step_emulation();
+
+                        self.step_emulation(); // TODO: step only when accepting input (stop audio?)
                         self.draw_framebuffer(ctx, ui, size);
                     });
 
@@ -108,9 +132,14 @@ where
         }
     }
 
-    fn draw_framebuffer(&mut self, _ctx: &egui::Context, ui: &mut egui::Ui, size: egui::Vec2) {
+    fn draw_framebuffer(
+        &mut self,
+        _ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        size: egui::Vec2,
+    ) -> egui::Response {
         let texture = egui::load::SizedTexture::new(self.video.framebuffer(), size);
-        ui.image(texture);
+        ui.image(texture)
     }
 
     fn step_emulation(&mut self) {
