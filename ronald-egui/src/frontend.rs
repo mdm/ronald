@@ -1,7 +1,4 @@
-use std::{
-    thread::sleep,
-    time::{Duration, Instant},
-};
+use std::time::Instant;
 
 use eframe::{egui, egui_wgpu};
 
@@ -16,27 +13,31 @@ use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
 mod audio;
 mod video;
 
-pub struct Frontend<S>
+pub struct Frontend<S, K>
 where
     S: System<'static> + 'static,
+    K: KeyMapper,
 {
     driver: Driver<S>,
     audio: CpalAudio,
     video: EguiWgpuVideo,
     frame_start: Instant,
     time_available: usize,
+    key_mapper: K,
     input_test: String,
     can_interact: bool,
 }
 
-impl<S> Frontend<S>
+impl<S, K> Frontend<S, K>
 where
     S: System<'static> + 'static,
+    K: KeyMapper,
 {
     pub fn new(render_state: &egui_wgpu::RenderState) -> Self {
         let driver = Driver::new();
         let audio = CpalAudio::new();
         let video = EguiWgpuVideo::new(render_state);
+        let key_mapper = K::default();
 
         Self {
             driver,
@@ -44,6 +45,7 @@ where
             video,
             frame_start: Instant::now(),
             time_available: 0,
+            key_mapper,
             input_test: String::new(),
             can_interact: true,
         }
@@ -106,29 +108,10 @@ where
     }
 
     fn handle_input(&mut self, input: &egui::InputState) {
-        for event in &input.raw.events {
-            if let egui::Event::Key {
-                key,
-                pressed,
-                modifiers,
-                ..
-            } = event
-            {
-                if *pressed {
-                    log::debug!("Key pressed: {:?} with modifiers: {:?}", key, modifiers);
-                    if key.name() == "Backspace" {
-                        self.driver.press_key("Delete");
-                    } else {
-                        self.driver.press_key(key.name());
-                    }
-                } else {
-                    log::debug!("Key released: {:?}", key);
-                    if key.name() == "Backspace" {
-                        self.driver.release_key("Delete");
-                    } else {
-                        self.driver.release_key(key.name());
-                    }
-                }
+        for event in self.key_mapper.map_keys(input) {
+            match event {
+                KeyEvent::Pressed(key)  => {self.driver.press_key(key);            }
+                KeyEvent::Released(key)  => {self.driver.release_key(key);            }
             }
         }
     }
@@ -169,4 +152,15 @@ where
             start.elapsed().as_micros()
         );
     }
+}
+
+pub enum KeyEvent<'k> {
+    Pressed(&'k str),
+    Released(&'k str),
+}
+
+pub trait KeyMapper: Default {
+    fn bind_key(&mut self, key: &str, input: &egui::InputState) -> Result<(), Box<dyn std::error::Error>>;
+    fn reset_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn map_keys(&mut self, input: &egui::InputState) -> impl Iterator<Item = KeyEvent<'_>>;
 }
