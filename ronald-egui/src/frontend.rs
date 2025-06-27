@@ -108,16 +108,14 @@ where
     }
 
     fn handle_input(&mut self, input: &egui::InputState) {
-        for event in self.key_mapper.map_keys(input) {
-            match event {
-                KeyEvent::Pressed(key) => {
-                    self.driver.press_key(key);
-                }
-                KeyEvent::Released(key) => {
-                    self.driver.release_key(key);
-                }
+        self.key_mapper.map_keys(input, |event| match event {
+            KeyEvent::Pressed(key) => {
+                self.driver.press_key(key);
             }
-        }
+            KeyEvent::Released(key) => {
+                self.driver.release_key(key);
+            }
+        });
     }
 
     fn draw_framebuffer(
@@ -170,5 +168,5 @@ pub trait KeyMapper: Default {
         input: &egui::InputState,
     ) -> Result<bool, Box<dyn std::error::Error>>;
     fn reset_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    fn map_keys(&mut self, input: &egui::InputState) -> impl Iterator<Item = KeyEvent<'_>>;
+    fn map_keys(&mut self, input: &egui::InputState, callback: impl FnMut(KeyEvent));
 }
