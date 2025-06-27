@@ -10,7 +10,8 @@ struct HostKey {
 
 #[derive(Default)]
 pub struct DesktopKeyMapper {
-    keymap: HashMap<HostKey, Vec<String>>,
+    key_map: HashMap<HostKey, Vec<String>>,
+    pressed_keys: HashMap<egui::Key, HostKey>,
 }
 
 impl KeyMapper for DesktopKeyMapper {
@@ -33,7 +34,7 @@ impl KeyMapper for DesktopKeyMapper {
                     modifiers: *modifiers,
                 };
                 if *pressed {
-                    self.keymap
+                    self.key_map
                         .entry(host_key)
                         .or_default()
                         .push(guest_key.to_string());
@@ -48,8 +49,8 @@ impl KeyMapper for DesktopKeyMapper {
         todo!()
     }
 
-    fn map_keys(&mut self, input: &egui::InputState) -> impl Iterator<Item = KeyEvent<'_>> {
-        input.raw.events.iter().flat_map(|event| {
+    fn map_keys(&mut self, input: &egui::InputState, mut callback: impl FnMut(KeyEvent)) {
+        for event in &input.raw.events {
             if let egui::Event::Key {
                 key,
                 pressed,
@@ -62,28 +63,34 @@ impl KeyMapper for DesktopKeyMapper {
                     modifiers: *modifiers,
                 };
                 if *pressed {
-                    if key.name() == "Backspace" {
-                        vec![KeyEvent::Pressed("Delete")]
-                    } else {
-                        // let guest_keys = self.keymap.get(&host_key).unwrap_or(&vec![]);
-                        // log::debug!("Mapping host key {:?} to guest key {:?}", key, guest_keys);
-                        // guest_keys
-                        //     .iter()
-                        //     .map(|guest_key| KeyEvent::Pressed(guest_key.as_str()))
-                        //     .collect()
-                        vec![KeyEvent::Pressed(key.name())]
+                    if let Some(guest_keys) = self.key_map.get(&host_key) {
+                        log::debug!("Mapping host key {:?} to guest key {:?}", key, guest_keys);
+                        self.pressed_keys.insert(*key, host_key);
+                        for guest_key in guest_keys {
+                            callback(KeyEvent::Pressed(guest_key));
+                        }
                     }
+                    // if key.name() == "Backspace" {
+                    //     callback(KeyEvent::Pressed("Delete"))
+                    // } else {
+                    //     callback(KeyEvent::Pressed(key.name()))
+                    // }
                 } else {
                     log::debug!("Key released: {:?} ({:?})", key, modifiers);
-                    if key.name() == "Backspace" {
-                        vec![KeyEvent::Released("Delete")]
-                    } else {
-                        vec![KeyEvent::Released(key.name())]
+                    if let Some(host_key) = self.pressed_keys.get(key) {
+                        if let Some(keys) = self.key_map.get(host_key) {
+                            for key in keys {
+                                callback(KeyEvent::Released(key))
+                            }
+                        }
                     }
+                    // if key.name() == "Backspace" {
+                    //     callback(KeyEvent::Released("Delete"))
+                    // } else {
+                    //     callback(KeyEvent::Released(key.name()))
+                    // }
                 }
-            } else {
-                vec![]
             }
-        })
+        }
     }
 }
