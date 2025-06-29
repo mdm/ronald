@@ -162,9 +162,11 @@ pub enum KeyEvent<'k> {
 }
 
 pub trait KeyMapper: Default {
-    fn bind_key(
+    fn binding(&self, guest_key: &str, shifted: bool) -> Option<&str>;
+    fn try_set_binding(
         &mut self,
         guest_key: &str,
+        shifted: bool,
         input: &egui::InputState,
     ) -> Result<bool, Box<dyn std::error::Error>>;
     fn reset_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>>;
