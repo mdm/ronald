@@ -4,7 +4,7 @@ use key_mapper::DesktopKeyMapper;
 
 mod key_mapper;
 
-const SCALE_FACTOR: f32 = 2.0;
+const SCALE_FACTOR: f32 = 1.5;
 
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
