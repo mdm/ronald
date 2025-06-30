@@ -3,7 +3,6 @@ use std::{
     fmt::Display,
     fs::File,
     io::{BufReader, BufWriter},
-    path::Path,
 };
 
 use serde::{Deserialize, Serialize};
@@ -38,15 +37,29 @@ impl Display for HostKey {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct DesktopKeyMapper {
-    key_map: HashMap<HostKey, Vec<String>>,
-    reverse_key_map: HashMap<String, (Option<String>, Option<String>)>,
-    #[serde(skip)]
-    pressed_keys: HashMap<egui::Key, HostKey>,
+struct KeyMapConfig<'c> {
+    key_map_path: &'c str,
+    key_map_default_path: &'c str,
+    key_map_backup_path: &'c str,
 }
 
-impl DesktopKeyMapper {
+impl<'c> Default for KeyMapConfig<'c> {
+    fn default() -> Self {
+        Self {
+            key_map_path: "keymap.json",
+            key_map_default_path: "keymap.default.json",
+            key_map_backup_path: "keymap.old.json",
+        }
+    }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct KeyMap {
+    host_to_guest: HashMap<HostKey, Vec<String>>,
+    guest_to_description: HashMap<String, (Option<String>, Option<String>)>,
+}
+
+impl KeyMap {
     fn try_from_file<P>(path: P) -> Result<Self, Box<dyn std::error::Error>>
     where
         P: AsRef<std::path::Path>,
@@ -57,38 +70,11 @@ impl DesktopKeyMapper {
         Ok(serde_json::from_reader(reader)?)
     }
 
-    fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let backup = match std::fs::rename("keymap.json", "keymap.old.json") {
-            Ok(()) => true,
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::NotFound {
-                    false
-                } else {
-                    Err(err)?
-                }
-            }
-        };
-
-        self.write_key_map()
-            .inspect(|_| {
-                log::info!("Key map saved successfully.");
-                if backup {
-                    let _ = std::fs::remove_file("keymap.old.json");
-                }
-            })
-            .inspect_err(|err| {
-                log::error!("Failed to save key map: {}", &err);
-                if !backup {
-                    return;
-                }
-                if let Ok(()) = std::fs::rename("keymap.old.json", "keymap.json") {
-                    log::info!("Old key map restored successfully.");
-                };
-            })
-    }
-
-    fn write_key_map(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let file = File::create("keymap.json")?;
+    fn to_file<P>(&self, path: P) -> Result<(), Box<dyn std::error::Error>>
+    where
+        P: AsRef<std::path::Path>,
+    {
+        let file = File::create(path)?;
         let writer = BufWriter::new(file);
 
         serde_json::to_writer(writer, &self)?;
@@ -97,35 +83,90 @@ impl DesktopKeyMapper {
     }
 }
 
-impl Default for DesktopKeyMapper {
+pub struct DesktopKeyMapper<'c> {
+    config: KeyMapConfig<'c>,
+    key_map: KeyMap,
+    pressed_keys: HashMap<egui::Key, HostKey>,
+}
+
+impl<'c> DesktopKeyMapper<'c> {
+    fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let backup =
+            match std::fs::rename(self.config.key_map_path, self.config.key_map_default_path) {
+                Ok(()) => true,
+                Err(err) => {
+                    if err.kind() == std::io::ErrorKind::NotFound {
+                        false
+                    } else {
+                        Err(err)?
+                    }
+                }
+            };
+
+        self.key_map
+            .to_file(self.config.key_map_path)
+            .inspect(|_| {
+                log::info!("Key map saved successfully.");
+                if backup {
+                    let _ = std::fs::remove_file(self.config.key_map_backup_path);
+                }
+            })
+            .inspect_err(|err| {
+                log::error!("Failed to save key map: {}", &err);
+                if !backup {
+                    return;
+                }
+                if let Ok(()) = std::fs::rename(
+                    self.config.key_map_backup_path,
+                    self.config.key_map_default_path,
+                ) {
+                    log::info!("Old key map restored successfully.");
+                };
+            })
+    }
+}
+
+impl<'c> Default for DesktopKeyMapper<'c> {
     fn default() -> Self {
-        if let Ok(loaded) = Self::try_from_file("keymap.json") {
+        let config = KeyMapConfig::default();
+        if let Ok(key_map) = KeyMap::try_from_file(config.key_map_path) {
             log::info!("Loaded key map from file.");
-            return loaded;
+            return Self {
+                config,
+                key_map,
+                pressed_keys: HashMap::new(),
+            };
         }
-        if let Ok(loaded) = Self::try_from_file("keymap.default.json") {
+        if let Ok(key_map) = KeyMap::try_from_file(config.key_map_default_path) {
             log::info!("Loaded default key map from file.");
-            return loaded;
+            return Self {
+                config,
+                key_map,
+                pressed_keys: HashMap::new(),
+            };
         }
 
         log::warn!("No key map found.");
         Self {
-            key_map: HashMap::new(),
-            reverse_key_map: HashMap::new(),
+            config,
+            key_map: KeyMap::default(),
             pressed_keys: HashMap::new(),
         }
     }
 }
 
-impl KeyMapper for DesktopKeyMapper {
+impl<'c> KeyMapper for DesktopKeyMapper<'c> {
     fn binding(&self, guest_key: &str, shifted: bool) -> Option<&str> {
-        self.reverse_key_map.get(guest_key).and_then(|bindings| {
-            if shifted {
-                bindings.1.as_deref()
-            } else {
-                bindings.0.as_deref()
-            }
-        })
+        self.key_map
+            .guest_to_description
+            .get(guest_key)
+            .and_then(|bindings| {
+                if shifted {
+                    bindings.1.as_deref()
+                } else {
+                    bindings.0.as_deref()
+                }
+            })
     }
 
     fn try_set_binding(
@@ -153,6 +194,7 @@ impl KeyMapper for DesktopKeyMapper {
                     // cursor keys both to the guest's cursor keys and the joystick.
                     if shifted {
                         self.key_map
+                            .host_to_guest
                             .entry(host_key)
                             .or_default()
                             .retain(|old_binding| {
@@ -160,26 +202,31 @@ impl KeyMapper for DesktopKeyMapper {
                             });
 
                         self.key_map
+                            .host_to_guest
                             .entry(host_key)
                             .or_default()
                             .extend_from_slice(&[guest_key.to_string(), "Shift".to_string()]);
 
-                        self.reverse_key_map
+                        self.key_map
+                            .guest_to_description
                             .entry(guest_key.to_string())
                             .or_default()
                             .1 = Some(host_key.to_string());
                     } else {
                         self.key_map
+                            .host_to_guest
                             .entry(host_key)
                             .or_default()
                             .retain(|old_binding| guest_key != old_binding.as_str());
 
                         self.key_map
+                            .host_to_guest
                             .entry(host_key)
                             .or_default()
                             .push(guest_key.to_string());
 
-                        self.reverse_key_map
+                        self.key_map
+                            .guest_to_description
                             .entry(guest_key.to_string())
                             .or_default()
                             .0 = Some(host_key.to_string());
@@ -199,10 +246,9 @@ impl KeyMapper for DesktopKeyMapper {
     }
 
     fn reset_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let loaded = Self::try_from_file("keymap.default.json")?;
+        let key_map = KeyMap::try_from_file("keymap.default.json")?;
 
-        self.key_map = loaded.key_map;
-        self.reverse_key_map = loaded.reverse_key_map;
+        self.key_map = key_map;
         self.save()?;
 
         Ok(())
@@ -222,7 +268,7 @@ impl KeyMapper for DesktopKeyMapper {
                     modifiers: *modifiers,
                 };
                 if *pressed {
-                    if let Some(guest_keys) = self.key_map.get(&host_key) {
+                    if let Some(guest_keys) = self.key_map.host_to_guest.get(&host_key) {
                         log::debug!("Mapping host key {:?} to guest keys {:?}", key, guest_keys);
                         self.pressed_keys.insert(*key, host_key);
                         for guest_key in guest_keys {
@@ -231,7 +277,7 @@ impl KeyMapper for DesktopKeyMapper {
                     }
                     log::debug!("Key released: {:?} ({:?})", key, modifiers);
                     if let Some(host_key) = self.pressed_keys.get(key) {
-                        if let Some(keys) = self.key_map.get(host_key) {
+                        if let Some(keys) = self.key_map.host_to_guest.get(host_key) {
                             for key in keys {
                                 callback(KeyEvent::Released(key))
                             }
