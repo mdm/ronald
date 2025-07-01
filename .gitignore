@@ -4,6 +4,8 @@
 /data
 
 keyconfig*.yml
+keymap.json
+keymap.backup.json
 
 # Local Netlify folder
 .netlify

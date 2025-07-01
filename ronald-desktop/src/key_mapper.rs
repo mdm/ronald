@@ -55,6 +55,7 @@ impl<'c> Default for KeyMapConfig<'c> {
 
 #[derive(Default, Serialize, Deserialize)]
 struct KeyMap {
+    #[serde(with = "vectorize")]
     host_to_guest: HashMap<HostKey, Vec<String>>,
     guest_to_description: HashMap<String, (Option<String>, Option<String>)>,
 }
@@ -92,7 +93,7 @@ pub struct DesktopKeyMapper<'c> {
 impl<'c> DesktopKeyMapper<'c> {
     fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let backup =
-            match std::fs::rename(self.config.key_map_path, self.config.key_map_default_path) {
+            match std::fs::rename(self.config.key_map_path, self.config.key_map_backup_path) {
                 Ok(()) => true,
                 Err(err) => {
                     if err.kind() == std::io::ErrorKind::NotFound {
@@ -116,10 +117,9 @@ impl<'c> DesktopKeyMapper<'c> {
                 if !backup {
                     return;
                 }
-                if let Ok(()) = std::fs::rename(
-                    self.config.key_map_backup_path,
-                    self.config.key_map_default_path,
-                ) {
+                if let Ok(()) =
+                    std::fs::rename(self.config.key_map_backup_path, self.config.key_map_path)
+                {
                     log::info!("Old key map restored successfully.");
                 };
             })
@@ -198,14 +198,14 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                             .entry(host_key)
                             .or_default()
                             .retain(|old_binding| {
-                                ![guest_key, "Shift"].contains(&old_binding.as_str())
+                                !["Shift", guest_key].contains(&old_binding.as_str())
                             });
 
                         self.key_map
                             .host_to_guest
                             .entry(host_key)
                             .or_default()
-                            .extend_from_slice(&[guest_key.to_string(), "Shift".to_string()]);
+                            .extend_from_slice(&["Shift".to_string(), guest_key.to_string()]);
 
                         self.key_map
                             .guest_to_description
@@ -275,6 +275,7 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                             callback(KeyEvent::Pressed(guest_key));
                         }
                     }
+                } else {
                     log::debug!("Key released: {:?} ({:?})", key, modifiers);
                     if let Some(host_key) = self.pressed_keys.get(key) {
                         if let Some(keys) = self.key_map.host_to_guest.get(host_key) {
@@ -289,6 +290,33 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
 
         // TODO: handle modifier-only input
         // TODO: handle gamepad input
+    }
+}
+
+mod vectorize {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::iter::FromIterator;
+
+    pub fn serialize<'a, T, K, V, S>(target: T, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: IntoIterator<Item = (&'a K, &'a V)>,
+        K: Serialize + 'a,
+        V: Serialize + 'a,
+    {
+        let container: Vec<_> = target.into_iter().collect();
+        serde::Serialize::serialize(&container, ser)
+    }
+
+    pub fn deserialize<'de, T, K, V, D>(des: D) -> Result<T, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromIterator<(K, V)>,
+        K: Deserialize<'de>,
+        V: Deserialize<'de>,
+    {
+        let container: Vec<_> = serde::Deserialize::deserialize(des)?;
+        Ok(T::from_iter(container))
     }
 }
 

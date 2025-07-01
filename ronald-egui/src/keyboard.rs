@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
 use eframe::egui;
+use ronald_core::constants::KEYS;
+
+use crate::KeyMapper;
 
 const SIZE: usize = 100; // TODO: use this in GuestKey definitions
 const PADDING: usize = 8;
@@ -92,10 +95,11 @@ pub struct Keyboard {
     pub show: bool,
     hovered_key: Option<&'static str>,
     keys: Vec<GuestKey>,
+    listening: Option<bool>,
 }
 
 impl Keyboard {
-    pub fn ui(&mut self, ctx: &egui::Context) {
+    pub fn ui(&mut self, ctx: &egui::Context, key_mapper: &mut impl KeyMapper) {
         if !self.show {
             return;
         }
@@ -139,32 +143,97 @@ impl Keyboard {
                     uri: "bytes://keyboard_layout.svg".into(),
                     bytes: svg.into_bytes().into(),
                 })
-                .fit_to_exact_size(egui::vec2(1100.0, 250.0)),
+                .fit_to_exact_size(egui::vec2(1100.0, 250.0))
+                .sense(egui::Sense::click()),
             );
-            if let Some(pos) = ctx.pointer_hover_pos() {
-                let pos = pos - response.rect.left_top();
-                let pos = egui::Pos2::new(2.0 * pos.x, 2.0 * pos.y);
-                let mut hovering = false;
-                for key in &self.keys {
-                    if key.contains_pos(pos) {
-                        hovering = true;
-                        match self.hovered_key {
-                            Some(hovered_key) if hovered_key == key.name => {
-                                // Already hovered, do nothing
-                            }
-                            _ => {
-                                self.hovered_key = Some(key.name);
-                                ctx.forget_image("bytes://keyboard_layout.svg");
+
+            if self.listening.is_none() {
+                if let Some(pos) = ctx.pointer_hover_pos() {
+                    let pos = pos - response.rect.left_top();
+                    let pos = egui::Pos2::new(2.0 * pos.x, 2.0 * pos.y);
+                    let mut hovering = false;
+                    for key in &self.keys {
+                        if key.contains_pos(pos) {
+                            hovering = true;
+                            match self.hovered_key {
+                                Some(hovered_key) if hovered_key == key.name => {
+                                    // Already hovered, do nothing
+                                }
+                                _ => {
+                                    self.hovered_key = Some(key.name);
+                                    ctx.forget_image("bytes://keyboard_layout.svg");
+                                }
                             }
                         }
                     }
-                }
 
-                if !hovering {
-                    self.hovered_key = None;
-                    ctx.forget_image("bytes://keyboard_layout.svg");
+                    if !hovering {
+                        self.hovered_key = None;
+                        ctx.forget_image("bytes://keyboard_layout.svg");
+                    }
+                };
+
+                if response.clicked() {
+                    log::debug!("Clicked on keyboard layout, starting key binding listener");
+                    let shift_held =
+                        ui.input(|input| input.modifiers.contains(egui::Modifiers::SHIFT));
+                    self.listening = Some(shift_held);
                 }
-            };
+            }
+
+            if let Some(shift_held) = self.listening {
+                if let Some(hovered_key) = self.hovered_key {
+                    egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
+                        let shiftable = KEYS
+                            .iter()
+                            .find_map(|key| {
+                                if key.0 == hovered_key {
+                                    Some(key.1.shiftable)
+                                } else {
+                                    None
+                                }
+                            })
+                            .expect("Key not found in KEYS");
+
+                        let shifted = shiftable && shift_held;
+
+                        if shifted {
+                            ui.label(format!(
+                                "Press a key to bind to \"Shift + {}\" on the guest system.",
+                                hovered_key
+                            ));
+                        } else {
+                            ui.label(format!(
+                                "Press a key to bind to \"{}\" on the guest system.",
+                                hovered_key
+                            ));
+                        }
+
+                        match key_mapper.binding(hovered_key, shifted) {
+                            Some(host_key) => {
+                                ui.label(format!("Currently bound to {}", host_key));
+                            }
+                            None => {
+                                ui.label("No binding set yet.");
+                            }
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("Cancel").clicked() {
+                                self.listening = None;
+                            }
+                        });
+
+                        ui.input(|input| {
+                            if let Ok(true) =
+                                key_mapper.try_set_binding(hovered_key, shifted, input)
+                            {
+                                self.listening = None;
+                            }
+                        });
+                    });
+                }
+            }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Close").clicked() {
@@ -180,6 +249,7 @@ impl Default for Keyboard {
         Self {
             show: false,
             hovered_key: None,
+            listening: None,
             keys: vec![
                 GuestKey {
                     name: "Escape",

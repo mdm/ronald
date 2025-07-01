@@ -13,31 +13,27 @@ use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
 mod audio;
 mod video;
 
-pub struct Frontend<S, K>
+pub struct Frontend<S>
 where
     S: System<'static> + 'static,
-    K: KeyMapper,
 {
     driver: Driver<S>,
     audio: CpalAudio,
     video: EguiWgpuVideo,
     frame_start: Instant,
     time_available: usize,
-    key_mapper: K,
     input_test: String,
     can_interact: bool,
 }
 
-impl<S, K> Frontend<S, K>
+impl<S> Frontend<S>
 where
     S: System<'static> + 'static,
-    K: KeyMapper,
 {
     pub fn new(render_state: &egui_wgpu::RenderState) -> Self {
         let driver = Driver::new();
         let audio = CpalAudio::new();
         let video = EguiWgpuVideo::new(render_state);
-        let key_mapper = K::default();
 
         Self {
             driver,
@@ -45,13 +41,17 @@ where
             video,
             frame_start: Instant::now(),
             time_available: 0,
-            key_mapper,
             input_test: String::new(),
             can_interact: true,
         }
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, ui: Option<&mut egui::Ui>) {
+    pub fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        ui: Option<&mut egui::Ui>,
+        key_mapper: &mut impl KeyMapper,
+    ) {
         match ui {
             Some(ui) => {
                 let central_panel_size = ui.max_rect().size();
@@ -76,7 +76,7 @@ where
                 }
 
                 if !ctx.wants_keyboard_input() && self.can_interact {
-                    ui.input(|input| self.handle_input(input));
+                    ui.input(|input| self.handle_input(input, key_mapper));
                 }
 
                 self.step_emulation(); // TODO: step only when accepting input (stop audio?)
@@ -93,7 +93,7 @@ where
                         self.can_interact = Some(ui.layer_id()) == ctx.top_layer_id();
 
                         if !ctx.wants_keyboard_input() && self.can_interact {
-                            ui.input(|input| self.handle_input(input));
+                            ui.input(|input| self.handle_input(input, key_mapper));
                         }
 
                         self.step_emulation(); // TODO: step only when accepting input (stop audio?)
@@ -107,8 +107,8 @@ where
         }
     }
 
-    fn handle_input(&mut self, input: &egui::InputState) {
-        self.key_mapper.map_keys(input, |event| match event {
+    fn handle_input(&mut self, input: &egui::InputState, key_mapper: &mut impl KeyMapper) {
+        key_mapper.map_keys(input, |event| match event {
             KeyEvent::Pressed(key) => {
                 self.driver.press_key(key);
             }
