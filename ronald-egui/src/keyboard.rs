@@ -208,6 +208,9 @@ impl Keyboard {
                         match key_mapper.binding(hovered_key, shifted) {
                             Some(host_key) => {
                                 ui.label(format!("Currently bound to {}", host_key));
+                                if ui.button("Clear Binding").clicked() {
+                                    let _ = key_mapper.clear_binding(hovered_key, shifted);
+                                }
                             }
                             None => {
                                 ui.label("No binding set yet.");
