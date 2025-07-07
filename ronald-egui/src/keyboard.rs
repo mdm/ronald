@@ -1,7 +1,7 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use eframe::egui;
-use ronald_core::constants::KEYS;
+use ronald_core::constants::{KEYS, KeyDefinition};
 
 use crate::KeyMapper;
 
@@ -10,7 +10,7 @@ const PADDING: usize = 8;
 const CORNER_RADIUS: usize = 10;
 const STROKE_WIDTH: usize = 3;
 
-struct GuestKey {
+struct KeyLayout {
     name: &'static str,
     x: usize,
     y: usize,
@@ -18,7 +18,7 @@ struct GuestKey {
     label: &'static str,
 }
 
-impl GuestKey {
+impl KeyLayout {
     fn contains_pos(&self, pos: egui::Pos2) -> bool {
         let x = (self.x + PADDING) as f32;
         let y = (self.y + PADDING) as f32;
@@ -50,7 +50,7 @@ impl GuestKey {
     }
 }
 
-impl Display for GuestKey {
+impl Display for KeyLayout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.name == "Enter" {
             // draw return key
@@ -94,7 +94,8 @@ impl Display for GuestKey {
 pub struct Keyboard {
     pub show: bool,
     hovered_key: Option<&'static str>,
-    keys: Vec<GuestKey>,
+    key_definitions: HashMap<&'static str, KeyDefinition>,
+    key_layouts: Vec<KeyLayout>,
     listening: Option<bool>,
 }
 
@@ -109,7 +110,7 @@ impl Keyboard {
 
             let mut svg = String::new();
             svg.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2200 500">"#);
-            for key in &self.keys {
+            for key in &self.key_layouts {
                 match self.hovered_key {
                     Some(hovered_key) if hovered_key == key.name => {
                         svg.push_str(r#"<g stroke="white" fill="white">"#);
@@ -152,7 +153,7 @@ impl Keyboard {
                     let pos = pos - response.rect.left_top();
                     let pos = egui::Pos2::new(2.0 * pos.x, 2.0 * pos.y);
                     let mut hovering = false;
-                    for key in &self.keys {
+                    for key in &self.key_layouts {
                         if key.contains_pos(pos) {
                             hovering = true;
                             match self.hovered_key {
@@ -184,16 +185,11 @@ impl Keyboard {
             if let Some(shift_held) = self.listening {
                 if let Some(hovered_key) = self.hovered_key {
                     egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
-                        let shiftable = KEYS
-                            .iter()
-                            .find_map(|key| {
-                                if key.0 == hovered_key {
-                                    Some(key.1.shiftable)
-                                } else {
-                                    None
-                                }
-                            })
-                            .expect("Key not found in KEYS");
+                        let shiftable = self
+                            .key_definitions
+                            .get(hovered_key)
+                            .expect("Key not found in KEYS")
+                            .shiftable;
 
                         let shifted = shiftable && shift_held;
 
@@ -250,568 +246,569 @@ impl Default for Keyboard {
             show: false,
             hovered_key: None,
             listening: None,
-            keys: vec![
-                GuestKey {
+            key_definitions: HashMap::from(KEYS),
+            key_layouts: vec![
+                KeyLayout {
                     name: "Escape",
                     x: 0,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Escape.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key1",
                     x: 100,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key1.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key2",
                     x: 200,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key2.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key3",
                     x: 300,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key3.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key4",
                     x: 400,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key4.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key5",
                     x: 500,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key5.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key6",
                     x: 600,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key6.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key7",
                     x: 700,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key7.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key8",
                     x: 800,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key8.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key9",
                     x: 900,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key9.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Key0",
                     x: 1000,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Key0.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Minus",
                     x: 1100,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Minus.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Caret",
                     x: 1200,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Caret.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Clear",
                     x: 1300,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Clear.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Delete",
                     x: 1400,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Delete.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad7",
                     x: 1500,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad7.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad8",
                     x: 1600,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad8.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad9",
                     x: 1700,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad9.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "JoystickUp",
                     x: 2000,
                     y: 0,
                     width: 100,
                     label: include_str!("../assets/keys/JoystickUp.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Tab",
                     x: 0,
                     y: 100,
                     width: 125,
                     label: include_str!("../assets/keys/Tab.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Q",
                     x: 125,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/Q.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "W",
                     x: 225,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/W.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "E",
                     x: 325,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/E.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "R",
                     x: 425,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/R.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "T",
                     x: 525,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/T.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Y",
                     x: 625,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/Y.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "U",
                     x: 725,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/U.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "I",
                     x: 825,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/I.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "O",
                     x: 925,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/O.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "P",
                     x: 1025,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/P.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "At",
                     x: 1125,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/At.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "BracketLeft",
                     x: 1225,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/BracketLeft.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Enter",
                     x: 1325,
                     y: 100,
                     width: 175,
                     label: include_str!("../assets/keys/Enter.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad4",
                     x: 1500,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad4.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad5",
                     x: 1600,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad5.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad6",
                     x: 1700,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad6.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "JoystickLeft",
                     x: 1900,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/JoystickLeft.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "JoystickRight",
                     x: 2100,
                     y: 100,
                     width: 100,
                     label: include_str!("../assets/keys/JoystickRight.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "CapsLock",
                     x: 0,
                     y: 200,
                     width: 150,
                     label: include_str!("../assets/keys/CapsLock.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "A",
                     x: 150,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/A.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "S",
                     x: 250,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/S.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "D",
                     x: 350,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/D.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "F",
                     x: 450,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/F.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "G",
                     x: 550,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/G.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "H",
                     x: 650,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/H.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "J",
                     x: 750,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/J.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "K",
                     x: 850,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/K.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "L",
                     x: 950,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/L.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Colon",
                     x: 1050,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/Colon.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Semicolon",
                     x: 1150,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/Semicolon.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "BracketRight",
                     x: 1250,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/BracketRight.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad1",
                     x: 1500,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad1.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad2",
                     x: 1600,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad2.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad3",
                     x: 1700,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad3.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "JoystickDown",
                     x: 2000,
                     y: 200,
                     width: 100,
                     label: include_str!("../assets/keys/JoystickDown.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Shift",
                     x: 0,
                     y: 300,
                     width: 200,
                     label: include_str!("../assets/keys/ShiftLeft.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Z",
                     x: 200,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/Z.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "X",
                     x: 300,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/X.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "C",
                     x: 400,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/C.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "V",
                     x: 500,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/V.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "B",
                     x: 600,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/B.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "N",
                     x: 700,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/N.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "M",
                     x: 800,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/M.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Comma",
                     x: 900,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/Comma.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Period",
                     x: 1000,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/Period.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Slash",
                     x: 1100,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/Slash.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Backslash",
                     x: 1200,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/Backslash.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Shift",
                     x: 1300,
                     y: 300,
                     width: 200,
                     label: include_str!("../assets/keys/ShiftRight.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Numpad0",
                     x: 1500,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/Numpad0.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "ArrowUp",
                     x: 1600,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/ArrowUp.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "NumpadPeriod",
                     x: 1700,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/NumpadPeriod.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "JoystickFire1",
                     x: 1900,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/JoystickFire1.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "JoystickFire2",
                     x: 2000,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/JoystickFire2.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "JoystickFire3",
                     x: 2100,
                     y: 300,
                     width: 100,
                     label: include_str!("../assets/keys/JoystickFire3.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Control",
                     x: 0,
                     y: 400,
                     width: 200,
                     label: include_str!("../assets/keys/Control.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Copy",
                     x: 200,
                     y: 400,
                     width: 175,
                     label: include_str!("../assets/keys/Copy.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "Space",
                     x: 375,
                     y: 400,
                     width: 800,
                     label: "",
                 },
-                GuestKey {
+                KeyLayout {
                     name: "NumpadEnter",
                     x: 1175,
                     y: 400,
                     width: 325,
                     label: include_str!("../assets/keys/NumpadEnter.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "ArrowLeft",
                     x: 1500,
                     y: 400,
                     width: 100,
                     label: include_str!("../assets/keys/ArrowLeft.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "ArrowDown",
                     x: 1600,
                     y: 400,
                     width: 100,
                     label: include_str!("../assets/keys/ArrowDown.partial.svg"),
                 },
-                GuestKey {
+                KeyLayout {
                     name: "ArrowRight",
                     x: 1700,
                     y: 400,
