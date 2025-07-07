@@ -239,7 +239,38 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
         Ok(false)
     }
 
-    fn reset_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn clear_binding(
+        &mut self,
+        guest_key: &str,
+        shifted: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for (_, guest_keys) in self.key_map.host_to_guest.iter_mut() {
+            guest_keys
+                .retain(|old_binding| !(old_binding.iter().any(|old_key| old_key == guest_key)));
+        }
+
+        if shifted {
+            self.key_map
+                .guest_to_description
+                .entry(guest_key.to_string())
+                .and_modify(|bindings| {
+                    bindings.1 = None;
+                });
+        } else {
+            self.key_map
+                .guest_to_description
+                .entry(guest_key.to_string())
+                .and_modify(|bindings| {
+                    bindings.0 = None;
+                });
+        }
+
+        self.save()?;
+
+        Ok(())
+    }
+
+    fn reset_all_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let key_map = KeyMap::try_from_file("keymap.default.json")?;
 
         self.key_map = key_map;

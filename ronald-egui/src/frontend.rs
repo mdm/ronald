@@ -169,6 +169,11 @@ pub trait KeyMapper: Default {
         shifted: bool,
         input: &egui::InputState,
     ) -> Result<bool, Box<dyn std::error::Error>>;
-    fn reset_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn clear_binding(
+        &mut self,
+        guest_key: &str,
+        shifted: bool,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn reset_all_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>>;
     fn map_keys(&mut self, input: &egui::InputState, callback: impl FnMut(KeyEvent));
 }
