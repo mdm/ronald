@@ -106,11 +106,15 @@ impl Keyboard {
         }
 
         let modal = egui::Modal::new("key_bindings_modal".into()).show(ctx, |ui| {
-            ui.label("Key Bindings");
+            ui.label("Click keys to set bindings. Shift-click to set bindings for shifted keys. The guest system's Shift keys themselves cannot be bound.");
 
             let mut svg = String::new();
             svg.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2200 500">"#);
             for key in &self.key_layouts {
+                if key.name == "Shift" {
+                    continue;
+                }
+
                 match self.hovered_key {
                     Some(hovered_key) if hovered_key == key.name => {
                         svg.push_str(r#"<g stroke="white" fill="white">"#);
