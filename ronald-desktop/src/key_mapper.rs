@@ -56,7 +56,7 @@ impl<'c> Default for KeyMapConfig<'c> {
 #[derive(Default, Serialize, Deserialize)]
 struct KeyMap {
     #[serde(with = "vectorize")]
-    host_to_guest: HashMap<HostKey, Vec<String>>,
+    host_to_guest: HashMap<HostKey, Vec<Vec<String>>>,
     guest_to_description: HashMap<String, (Option<String>, Option<String>)>,
 }
 
@@ -192,20 +192,20 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                     // We don't simply insert the key binding here, because we want to allow
                     // binding multiple guest keys to the same host key, e.g. map the host's
                     // cursor keys both to the guest's cursor keys and the joystick.
+                    self.key_map
+                        .host_to_guest
+                        .entry(host_key)
+                        .or_default()
+                        .retain(|old_binding| {
+                            !(old_binding.iter().any(|old_key| old_key == guest_key))
+                        });
+
                     if shifted {
                         self.key_map
                             .host_to_guest
                             .entry(host_key)
                             .or_default()
-                            .retain(|old_binding| {
-                                !["Shift", guest_key].contains(&old_binding.as_str())
-                            });
-
-                        self.key_map
-                            .host_to_guest
-                            .entry(host_key)
-                            .or_default()
-                            .extend_from_slice(&["Shift".to_string(), guest_key.to_string()]);
+                            .push(vec![guest_key.to_string(), "Shift".to_string()]);
 
                         self.key_map
                             .guest_to_description
@@ -217,13 +217,7 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                             .host_to_guest
                             .entry(host_key)
                             .or_default()
-                            .retain(|old_binding| guest_key != old_binding.as_str());
-
-                        self.key_map
-                            .host_to_guest
-                            .entry(host_key)
-                            .or_default()
-                            .push(guest_key.to_string());
+                            .push(vec![guest_key.to_string()]);
 
                         self.key_map
                             .guest_to_description
@@ -255,13 +249,13 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
     }
 
     fn map_keys(&mut self, input: &egui::InputState, mut callback: impl FnMut(KeyEvent)) {
-        for event in &input.raw.events {
+        for host_event in &input.raw.events {
             if let egui::Event::Key {
                 key,
                 pressed,
                 modifiers,
                 ..
-            } = event
+            } = host_event
             {
                 let host_key = HostKey {
                     key: *key,
@@ -272,15 +266,19 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                         log::debug!("Mapping host key {:?} to guest keys {:?}", key, guest_keys);
                         self.pressed_keys.insert(*key, host_key);
                         for guest_key in guest_keys {
-                            callback(KeyEvent::Pressed(guest_key));
+                            for guest_event in guest_key {
+                                callback(KeyEvent::Pressed(guest_event));
+                            }
                         }
                     }
                 } else {
                     log::debug!("Key released: {:?} ({:?})", key, modifiers);
                     if let Some(host_key) = self.pressed_keys.get(key) {
-                        if let Some(keys) = self.key_map.host_to_guest.get(host_key) {
-                            for key in keys {
-                                callback(KeyEvent::Released(key))
+                        if let Some(guest_keys) = self.key_map.host_to_guest.get(host_key) {
+                            for guest_key in guest_keys {
+                                for guest_event in guest_key {
+                                    callback(KeyEvent::Released(guest_event))
+                                }
                             }
                         }
                     }
