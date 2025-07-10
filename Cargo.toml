@@ -9,3 +9,9 @@ members = [
   "ronald-web",
 ]
 default-members = ["ronald-cli"]
+
+[patch.crates-io]
+eframe = { path = "../egui/crates/eframe" }
+egui = { path = "../egui/crates/egui" }
+egui-winit = { path = "../egui/crates/egui-winit" }
+egui_extras = { path = "../egui/crates/egui_extras" }
