@@ -83,8 +83,7 @@ fn main() {
         }
         unknown_system => {
             println!(
-                "Unknown system \"{}\". Valid systems are:\n\n\tcpc464\n\tzexdoc\n\tkeyconfig\n",
-                unknown_system
+                "Unknown system \"{unknown_system}\". Valid systems are:\n\n\tcpc464\n\tzexdoc\n\tkeyconfig\n"
             );
         }
     }

@@ -198,20 +198,14 @@ impl Keyboard {
                         let shifted = shiftable && shift_held;
 
                         if shifted {
-                            ui.label(format!(
-                                "Press a key to bind to \"Shift + {}\" on the guest system.",
-                                hovered_key
-                            ));
+                            ui.label(format!("Press a key to bind to \"Shift + {hovered_key}\" on the guest system."));
                         } else {
-                            ui.label(format!(
-                                "Press a key to bind to \"{}\" on the guest system.",
-                                hovered_key
-                            ));
+                            ui.label(format!("Press a key to bind to \"{hovered_key}\" on the guest system."));
                         }
 
                         match key_mapper.binding(hovered_key, shifted) {
                             Some(host_key) => {
-                                ui.label(format!("Currently bound to {}", host_key));
+                                ui.label(format!("Currently bound to {host_key}"));
                                 if ui.button("Clear Binding").clicked() {
                                     let _ = key_mapper.clear_binding(hovered_key, shifted);
                                 }

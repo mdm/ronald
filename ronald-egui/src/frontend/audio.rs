@@ -30,7 +30,7 @@ impl CpalAudio {
         match host.default_output_device() {
             Some(device) => match device.default_output_config() {
                 Ok(config) => {
-                    log::debug!("Default audio output config: {:?}", config);
+                    log::debug!("Default audio output config: {config:?}");
 
                     match config.sample_format() {
                         cpal::SampleFormat::F32 => {
@@ -43,12 +43,12 @@ impl CpalAudio {
                             self.run_audio_stream::<u16>(&device, &config.into(), sample_queue)
                         }
                         sample_format => {
-                            log::error!("Unsupported sample format: {:?}", sample_format);
+                            log::error!("Unsupported sample format: {sample_format:?}");
                         }
                     }
                 }
                 Err(err) => {
-                    log::error!("Error finding audio output config: {}", err);
+                    log::error!("Error finding audio output config: {err}");
                 }
             },
             None => {
@@ -70,7 +70,7 @@ impl CpalAudio {
 
         let mut last_sample = 0.0;
 
-        let err_fn = |err| log::error!("An error occurred on audio output stream: {}", err);
+        let err_fn = |err| log::error!("An error occurred on audio output stream: {err}");
 
         match device.build_output_stream(
             config,
@@ -79,7 +79,7 @@ impl CpalAudio {
                     let next_sample = match sample_queue.try_recv() {
                         Ok(sample) => sample,
                         Err(err) => {
-                            log::trace!("Error fetching next audio sample batch: {}", err);
+                            log::trace!("Error fetching next audio sample batch: {err}");
                             last_sample
                         }
                     };
@@ -100,7 +100,7 @@ impl CpalAudio {
                 self.sample_rate = Some(sample_rate);
             }
             Err(err) => {
-                log::error!("Error initializing audio stream: {}", err);
+                log::error!("Error initializing audio stream: {err}");
             }
         }
     }
@@ -118,7 +118,7 @@ impl AudioSink for CpalAudio {
                     log::trace!("Playing audio");
                 }
                 Err(err) => {
-                    log::error!("Error starting audio stream: {}", err)
+                    log::error!("Error starting audio stream: {err}")
                 }
             },
             None => {
@@ -134,7 +134,7 @@ impl AudioSink for CpalAudio {
                     log::trace!("Pausing audio");
                 }
                 Err(err) => {
-                    log::error!("Error stopping audio stream: {}", err)
+                    log::error!("Error stopping audio stream: {err}")
                 }
             },
             None => {
@@ -145,7 +145,7 @@ impl AudioSink for CpalAudio {
 
     fn add_sample(&self, sample: f32) {
         if let Err(err) = self.sample_queue.send(sample) {
-            log::debug!("Error sending sample to audio thread: {}", err);
+            log::debug!("Error sending sample to audio thread: {err}");
         }
     }
 }

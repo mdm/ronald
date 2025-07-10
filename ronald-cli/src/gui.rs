@@ -168,7 +168,7 @@ where
                         event.physical_key
                     {
                         if let Ok(Some(pathbuf)) = native_dialog::DialogBuilder::file()
-                            .add_filter("DSK file", &["dsk"])
+                            .add_filter("DSK file", ["dsk"])
                             .open_single_file()
                             .show()
                         {
