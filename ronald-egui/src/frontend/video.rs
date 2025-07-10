@@ -71,7 +71,7 @@ impl VideoSink for EguiWgpuVideo {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &buffer,
+            buffer,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(bytes_per_row),
