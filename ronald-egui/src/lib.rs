@@ -114,7 +114,7 @@ where
                 ..
             } = event
             {
-                log::debug!("Raw key event: {:?}", key,);
+                log::debug!("Raw key event: {key:?}");
             }
         }
     }

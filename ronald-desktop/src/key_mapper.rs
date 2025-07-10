@@ -12,25 +12,18 @@ use ronald_egui::{KeyEvent, KeyMapper};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct HostKey {
     key: egui::Key,
-    modifiers: egui::Modifiers,
+    shift: bool,
+    alt_gr: bool,
 }
 
 impl Display for HostKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.modifiers.contains(egui::Modifiers::SHIFT) {
-            write!(f, "Shift + ")?;
+        if self.shift {
+            return write!(f, "Shift + {}", self.key.name());
         }
 
-        if self.modifiers.contains(egui::Modifiers::CTRL) {
-            write!(f, "Ctrl + ")?;
-        }
-
-        if self.modifiers.contains(egui::Modifiers::MAC_CMD) {
-            write!(f, "Command + ")?;
-        }
-
-        if self.modifiers.contains(egui::Modifiers::ALT) {
-            write!(f, "Alt + ")?;
+        if self.alt_gr {
+            return write!(f, "AltGr + {}", self.key.name());
         }
 
         write!(f, "{}", self.key.name())
@@ -124,6 +117,24 @@ impl<'c> DesktopKeyMapper<'c> {
                 };
             })
     }
+
+    /// We only treat Shift and AltGr as modifiers as these are commonly used to compose alternate
+    /// characters on the host system. All other modifiers are treated as key presses and should be
+    /// handled by the guest system.
+    fn record_host_key(
+        &mut self,
+        physical_key: egui::Key,
+        modifiers: egui::Modifiers,
+    ) -> Option<HostKey> {
+        match physical_key {
+            egui::Key::ShiftLeft | egui::Key::ShiftRight | egui::Key::AltRight => None,
+            key => Some(HostKey {
+                key,
+                shift: modifiers.contains(egui::Modifiers::SHIFT),
+                alt_gr: self.pressed_keys.contains_key(&egui::Key::AltRight),
+            }),
+        }
+    }
 }
 
 impl<'c> Default for DesktopKeyMapper<'c> {
@@ -177,58 +188,59 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         for event in &input.raw.events {
             if let egui::Event::Key {
-                key,
+                physical_key: Some(physical_key),
                 pressed,
                 modifiers,
                 ..
             } = event
             {
-                // TODO: handle AltGr modifier
-                let host_key = HostKey {
-                    key: *key,
-                    modifiers: *modifiers,
-                };
                 if *pressed {
-                    // We don't simply insert the key binding here, because we want to allow
-                    // binding multiple guest keys to the same host key, e.g. map the host's
-                    // cursor keys both to the guest's cursor keys and the joystick.
-                    self.key_map
-                        .host_to_guest
-                        .entry(host_key)
-                        .or_default()
-                        .retain(|old_binding| {
-                            !(old_binding.iter().any(|old_key| old_key == guest_key))
-                        });
+                    if let Some(host_key) = self.record_host_key(*physical_key, *modifiers) {
+                        self.pressed_keys.insert(*physical_key, host_key);
 
-                    if shifted {
+                        // We don't simply insert the key binding here, because we want to allow
+                        // binding multiple guest keys to the same host key, e.g. map the host's
+                        // cursor keys both to the guest's cursor keys and the joystick.
                         self.key_map
                             .host_to_guest
                             .entry(host_key)
                             .or_default()
-                            .push(vec![guest_key.to_string(), "Shift".to_string()]);
+                            .retain(|old_binding| {
+                                !(old_binding.iter().any(|old_key| old_key == guest_key))
+                            });
 
-                        self.key_map
-                            .guest_to_description
-                            .entry(guest_key.to_string())
-                            .or_default()
-                            .1 = Some(host_key.to_string());
-                    } else {
-                        self.key_map
-                            .host_to_guest
-                            .entry(host_key)
-                            .or_default()
-                            .push(vec![guest_key.to_string()]);
+                        if shifted {
+                            self.key_map
+                                .host_to_guest
+                                .entry(host_key)
+                                .or_default()
+                                .push(vec![guest_key.to_string(), "Shift".to_string()]);
 
-                        self.key_map
-                            .guest_to_description
-                            .entry(guest_key.to_string())
-                            .or_default()
-                            .0 = Some(host_key.to_string());
+                            self.key_map
+                                .guest_to_description
+                                .entry(guest_key.to_string())
+                                .or_default()
+                                .1 = Some(host_key.to_string());
+                        } else {
+                            self.key_map
+                                .host_to_guest
+                                .entry(host_key)
+                                .or_default()
+                                .push(vec![guest_key.to_string()]);
+
+                            self.key_map
+                                .guest_to_description
+                                .entry(guest_key.to_string())
+                                .or_default()
+                                .0 = Some(host_key.to_string());
+                        }
+
+                        self.save()?;
+
+                        return Ok(true);
                     }
-
-                    self.save()?;
-
-                    return Ok(true);
+                } else {
+                    self.pressed_keys.remove(physical_key);
                 }
             }
         }
@@ -282,33 +294,33 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
     fn map_keys(&mut self, input: &egui::InputState, mut callback: impl FnMut(KeyEvent)) {
         for host_event in &input.raw.events {
             if let egui::Event::Key {
-                key,
+                physical_key: Some(physical_key),
                 pressed,
                 modifiers,
                 ..
             } = host_event
             {
-                let host_key = HostKey {
-                    key: *key,
-                    modifiers: *modifiers,
-                };
-                if *pressed {
-                    if let Some(guest_keys) = self.key_map.host_to_guest.get(&host_key) {
-                        log::debug!("Mapping host key {:?} to guest keys {:?}", key, guest_keys);
-                        self.pressed_keys.insert(*key, host_key);
-                        for guest_key in guest_keys {
-                            for guest_event in guest_key {
-                                callback(KeyEvent::Pressed(guest_event));
-                            }
-                        }
-                    }
-                } else {
-                    log::debug!("Key released: {:?} ({:?})", key, modifiers);
-                    if let Some(host_key) = self.pressed_keys.get(key) {
-                        if let Some(guest_keys) = self.key_map.host_to_guest.get(host_key) {
+                if let Some(host_key) = self.record_host_key(*physical_key, *modifiers) {
+                    if *pressed {
+                        if let Some(guest_keys) = self.key_map.host_to_guest.get(&host_key) {
+                            log::debug!(
+                                "Mapping host key {physical_key:?} to guest keys {guest_keys:?}",
+                            );
+                            self.pressed_keys.insert(*physical_key, host_key);
                             for guest_key in guest_keys {
                                 for guest_event in guest_key {
-                                    callback(KeyEvent::Released(guest_event))
+                                    callback(KeyEvent::Pressed(guest_event));
+                                }
+                            }
+                        }
+                    } else {
+                        log::debug!("Host key released: {physical_key:?}");
+                        if let Some(host_key) = self.pressed_keys.remove(physical_key) {
+                            if let Some(guest_keys) = self.key_map.host_to_guest.get(&host_key) {
+                                for guest_key in guest_keys {
+                                    for guest_event in guest_key {
+                                        callback(KeyEvent::Released(guest_event))
+                                    }
                                 }
                             }
                         }
