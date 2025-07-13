@@ -72,6 +72,7 @@ impl CpalAudio {
 
         let mut start = std::time::Instant::now();
         let mut frames = 0;
+        let mut repeated_frames = 0;
 
         let err_fn = |err| log::error!("An error occurred on audio output stream: {err}");
 
@@ -83,6 +84,7 @@ impl CpalAudio {
                         Ok(sample) => sample,
                         Err(err) => {
                             log::trace!("Error fetching next audio sample batch: {err}");
+                            repeated_frames += 1;
                             last_sample
                         }
                     };
@@ -95,11 +97,15 @@ impl CpalAudio {
                     last_sample = next_sample;
 
                     frames += 1;
-                    if start.elapsed().as_micros() >= 1_000_000 {
-                        log::trace!("Rendered {frames} audio samples per second");
-                        frames = 0;
-                        start = std::time::Instant::now();
-                    }
+                }
+
+                if start.elapsed().as_micros() >= 1_000_000 {
+                    log::debug!(
+                        "Rendered {frames} audio samples per second ({repeated_frames} repeated)"
+                    );
+                    start = std::time::Instant::now();
+                    frames = 0;
+                    repeated_frames = 0;
                 }
             },
             err_fn,

@@ -329,7 +329,6 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
             }
         }
 
-        // TODO: handle modifier-only input
         // TODO: handle gamepad input
     }
 }
