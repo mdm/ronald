@@ -256,8 +256,8 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
     ) -> Result<(), Box<dyn std::error::Error>> {
         for (_, guest_keys) in self.key_map.host_to_guest.iter_mut() {
             guest_keys.retain(|old_binding| {
-                !(old_binding.iter().any(|old_key| old_key == guest_key))
-                    && !(shifted && old_binding.iter().any(|old_key| old_key == "Shift"))
+                !(old_binding.iter().any(|old_key| old_key == guest_key)
+                    && (!shifted || old_binding.iter().any(|old_key| old_key == "Shift")))
             });
         }
 
