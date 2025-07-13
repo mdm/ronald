@@ -67,7 +67,7 @@ impl GateArray {
             3 => {
                 // ROM banking (only available in CPC 6128)
                 // TODO: show error message to user
-                log::error!("Gate Array ROM banking not supported: {:#010b}", value);
+                log::error!("Gate Array ROM banking not supported: {value:#010b}");
                 unimplemented!();
             }
             _ => {
