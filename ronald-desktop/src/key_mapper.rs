@@ -19,11 +19,11 @@ struct HostKey {
 impl Display for HostKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.shift {
-            return write!(f, "Shift + {}", self.key.name());
+            write!(f, "Shift + ")?;
         }
 
         if self.alt_gr {
-            return write!(f, "AltGr + {}", self.key.name());
+            write!(f, "AltGr + ")?;
         }
 
         write!(f, "{}", self.key.name())
@@ -81,6 +81,7 @@ pub struct DesktopKeyMapper<'c> {
     config: KeyMapConfig<'c>,
     key_map: KeyMap,
     pressed_keys: HashMap<egui::Key, HostKey>,
+    alt_gr_pressed: bool,
 }
 
 impl<'c> DesktopKeyMapper<'c> {
@@ -124,14 +125,19 @@ impl<'c> DesktopKeyMapper<'c> {
     fn record_host_key(
         &mut self,
         physical_key: egui::Key,
+        pressed: bool,
         modifiers: egui::Modifiers,
     ) -> Option<HostKey> {
         match physical_key {
-            egui::Key::ShiftLeft | egui::Key::ShiftRight | egui::Key::AltRight => None,
+            egui::Key::ShiftLeft | egui::Key::ShiftRight => None,
+            egui::Key::AltRight => {
+                self.alt_gr_pressed = pressed;
+                None
+            }
             key => Some(HostKey {
                 key,
                 shift: modifiers.contains(egui::Modifiers::SHIFT),
-                alt_gr: self.pressed_keys.contains_key(&egui::Key::AltRight),
+                alt_gr: self.alt_gr_pressed,
             }),
         }
     }
@@ -146,6 +152,7 @@ impl<'c> Default for DesktopKeyMapper<'c> {
                 config,
                 key_map,
                 pressed_keys: HashMap::new(),
+                alt_gr_pressed: false,
             };
         }
         if let Ok(key_map) = KeyMap::try_from_file(config.key_map_default_path) {
@@ -154,6 +161,7 @@ impl<'c> Default for DesktopKeyMapper<'c> {
                 config,
                 key_map,
                 pressed_keys: HashMap::new(),
+                alt_gr_pressed: false,
             };
         }
 
@@ -162,6 +170,7 @@ impl<'c> Default for DesktopKeyMapper<'c> {
             config,
             key_map: KeyMap::default(),
             pressed_keys: HashMap::new(),
+            alt_gr_pressed: false,
         }
     }
 }
@@ -194,20 +203,10 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                 ..
             } = event
             {
-                if *pressed {
-                    if let Some(host_key) = self.record_host_key(*physical_key, *modifiers) {
-                        self.pressed_keys.insert(*physical_key, host_key);
-
-                        // We don't simply insert the key binding here, because we want to allow
-                        // binding multiple guest keys to the same host key, e.g. map the host's
-                        // cursor keys both to the guest's cursor keys and the joystick.
-                        self.key_map
-                            .host_to_guest
-                            .entry(host_key)
-                            .or_default()
-                            .retain(|old_binding| {
-                                !(old_binding.iter().any(|old_key| old_key == guest_key))
-                            });
+                if let Some(host_key) = self.record_host_key(*physical_key, *pressed, *modifiers) {
+                    if *pressed {
+                        // Clear any existing binding for the guest key.
+                        self.clear_binding(guest_key, shifted)?;
 
                         if shifted {
                             self.key_map
@@ -222,6 +221,7 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                                 .or_default()
                                 .1 = Some(host_key.to_string());
                         } else {
+                            dbg!(host_key, guest_key);
                             self.key_map
                                 .host_to_guest
                                 .entry(host_key)
@@ -239,8 +239,6 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
 
                         return Ok(true);
                     }
-                } else {
-                    self.pressed_keys.remove(physical_key);
                 }
             }
         }
@@ -257,8 +255,10 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
         shifted: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         for (_, guest_keys) in self.key_map.host_to_guest.iter_mut() {
-            guest_keys
-                .retain(|old_binding| !(old_binding.iter().any(|old_key| old_key == guest_key)));
+            guest_keys.retain(|old_binding| {
+                !(old_binding.iter().any(|old_key| old_key == guest_key))
+                    && !(shifted && old_binding.iter().any(|old_key| old_key == "Shift"))
+            });
         }
 
         if shifted {
@@ -300,11 +300,11 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                 ..
             } = host_event
             {
-                if let Some(host_key) = self.record_host_key(*physical_key, *modifiers) {
+                if let Some(host_key) = self.record_host_key(*physical_key, *pressed, *modifiers) {
                     if *pressed {
                         if let Some(guest_keys) = self.key_map.host_to_guest.get(&host_key) {
                             log::debug!(
-                                "Mapping host key {physical_key:?} to guest keys {guest_keys:?}",
+                                "Mapping host key {physical_key:?} to guest keys {guest_keys:?}"
                             );
                             self.pressed_keys.insert(*physical_key, host_key);
                             for guest_key in guest_keys {

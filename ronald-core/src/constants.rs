@@ -227,7 +227,7 @@ pub const KEYS: [(&str, KeyDefinition); 80] = [
         (KeyDefinition {
             line: 2,
             bit: 1,
-            shiftable: false,
+            shiftable: true,
         }),
     ),
     (
@@ -339,7 +339,7 @@ pub const KEYS: [(&str, KeyDefinition); 80] = [
         (KeyDefinition {
             line: 2,
             bit: 3,
-            shiftable: false,
+            shiftable: true,
         }),
     ),
     (
@@ -435,7 +435,7 @@ pub const KEYS: [(&str, KeyDefinition); 80] = [
         (KeyDefinition {
             line: 2,
             bit: 6,
-            shiftable: false,
+            shiftable: true,
         }),
     ),
     (
