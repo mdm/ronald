@@ -96,7 +96,7 @@ pub struct Keyboard {
     hovered_key: Option<&'static str>,
     key_definitions: HashMap<&'static str, KeyDefinition>,
     key_layouts: Vec<KeyLayout>,
-    listening: Option<bool>,
+    listening: Option<(&'static str, bool)>,
 }
 
 impl Keyboard {
@@ -178,58 +178,57 @@ impl Keyboard {
                     }
                 };
 
-                if response.clicked() {
+                if let Some(hovered_key) = self.hovered_key && response.clicked() {
                     log::debug!("Clicked on keyboard layout, starting key binding listener");
+                    let shiftable = self
+                        .key_definitions
+                        .get(hovered_key)
+                        .expect("Key not found in KEYS")
+                        .shiftable;
                     let shift_held =
                         ui.input(|input| input.modifiers.contains(egui::Modifiers::SHIFT));
-                    self.listening = Some(shift_held);
+                    if shiftable && shift_held {
+                        self.listening = Some((hovered_key, true));
+                    } else if !shift_held {
+                        self.listening = Some((hovered_key, false));
+                    }
                 }
             }
 
-            if let Some(shift_held) = self.listening {
-                if let Some(hovered_key) = self.hovered_key {
-                    egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
-                        let shiftable = self
-                            .key_definitions
-                            .get(hovered_key)
-                            .expect("Key not found in KEYS")
-                            .shiftable;
+            if let Some((hovered_key, shifted)) = self.listening {
+                egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
+                    if shifted {
+                        ui.label(format!("Press a key to bind to \"Shift + {hovered_key}\" on the guest system."));
+                    } else {
+                        ui.label(format!("Press a key to bind to \"{hovered_key}\" on the guest system."));
+                    }
 
-                        let shifted = shiftable && shift_held;
-
-                        if shifted {
-                            ui.label(format!("Press a key to bind to \"Shift + {hovered_key}\" on the guest system."));
-                        } else {
-                            ui.label(format!("Press a key to bind to \"{hovered_key}\" on the guest system."));
-                        }
-
-                        match key_mapper.binding(hovered_key, shifted) {
-                            Some(host_key) => {
-                                ui.label(format!("Currently bound to {host_key}"));
-                                if ui.button("Clear Binding").clicked() {
-                                    let _ = key_mapper.clear_binding(hovered_key, shifted);
-                                }
-                            }
-                            None => {
-                                ui.label("No binding set yet.");
+                    match key_mapper.binding(hovered_key, shifted) {
+                        Some(host_key) => {
+                            ui.label(format!("Currently bound to {host_key}"));
+                            if ui.button("Clear Binding").clicked() {
+                                let _ = key_mapper.clear_binding(hovered_key, shifted);
                             }
                         }
+                        None => {
+                            ui.label("No binding set yet.");
+                        }
+                    }
 
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("Cancel").clicked() {
-                                self.listening = None;
-                            }
-                        });
-
-                        ui.input(|input| {
-                            if let Ok(true) =
-                                key_mapper.try_set_binding(hovered_key, shifted, input)
-                            {
-                                self.listening = None;
-                            }
-                        });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.listening = None;
+                        }
                     });
-                }
+
+                    ui.input(|input| {
+                        if let Ok(true) =
+                            key_mapper.try_set_binding(hovered_key, shifted, input)
+                        {
+                            self.listening = None;
+                        }
+                    });
+                });
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

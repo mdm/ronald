@@ -90,7 +90,9 @@ where
                     .resizable(false)
                     .default_size(size)
                     .show(ctx, |ui| {
-                        self.can_interact = Some(ui.layer_id()) == ctx.top_layer_id();
+                        if let Some(pos) = ctx.pointer_interact_pos() {
+                            self.can_interact = ctx.layer_id_at(pos) == Some(ui.layer_id());
+                        }
 
                         if !ctx.wants_keyboard_input() && self.can_interact {
                             ui.input(|input| self.handle_input(input, key_mapper));
@@ -135,7 +137,7 @@ where
         self.time_available += self.frame_start.elapsed().as_micros() as usize;
         self.frame_start = Instant::now();
 
-        // TODO: Allow running at 60Hz
+        // TODO: Allow running at 60Hz??? Does CPC really support that?
         while self.time_available >= 20_000 {
             log::trace!("Stepping emulator for 20_000 microseconds");
             self.driver.step(20_000, &mut self.video, &mut self.audio);
