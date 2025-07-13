@@ -35,10 +35,7 @@ impl Disk {
             ));
         };
 
-        let creator = match String::from_utf8(contents[0x22..0x30].to_vec()) {
-            Ok(creator) => creator,
-            _ => String::new(),
-        };
+        let creator = String::from_utf8(contents[0x22..0x30].to_vec()).unwrap_or_default();
 
         let num_tracks = contents[0x30];
         let num_sides = contents[0x31];

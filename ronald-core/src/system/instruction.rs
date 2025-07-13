@@ -20,8 +20,8 @@ pub enum Operand {
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Operand::Immediate8(value) => write!(f, "{:#04x}", value),
-            Operand::Immediate16(value) => write!(f, "{:#06x}", value),
+            Operand::Immediate8(value) => write!(f, "{value:#04x}"),
+            Operand::Immediate16(value) => write!(f, "{value:#06x}"),
             Operand::Register8(register) => match register {
                 cpu::Register8::A => write!(f, "a"),
                 cpu::Register8::F => write!(f, "f"),
@@ -59,14 +59,14 @@ impl fmt::Display for Operand {
                 cpu::Register16::SP => write!(f, "(sp)"),
                 cpu::Register16::PC => write!(f, "(pc)"),
             },
-            Operand::Direct8(address) => write!(f, "({:#04x})", address),
-            Operand::Direct16(address) => write!(f, "({:#06x})", address),
+            Operand::Direct8(address) => write!(f, "({address:#04x})"),
+            Operand::Direct16(address) => write!(f, "({address:#06x})"),
             Operand::Indexed(register, displacement) => match register {
-                cpu::Register16::IX => write!(f, "(ix{:+})", displacement),
-                cpu::Register16::IY => write!(f, "(iy{:+})", displacement),
+                cpu::Register16::IX => write!(f, "(ix{displacement:+})"),
+                cpu::Register16::IY => write!(f, "(iy{displacement:+})"),
                 _ => unreachable!(),
             },
-            Operand::Bit(bit) => write!(f, "{}", bit),
+            Operand::Bit(bit) => write!(f, "{bit}"),
         }
     }
 }
@@ -228,7 +228,7 @@ impl Instruction {
             Instruction::Adc(Operand::Register8(cpu::Register8::A), Operand::Indexed(_, _)) => 5,
             Instruction::Adc(Operand::Register16(cpu::Register16::HL), Operand::Register16(_)) => 4,
             Instruction::Adc(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Add(Operand::Register8(cpu::Register8::A), Operand::Register8(_)) => 1,
@@ -242,7 +242,7 @@ impl Instruction {
             Instruction::Add(Operand::Register16(cpu::Register16::IX), Operand::Register16(_)) => 4,
             Instruction::Add(Operand::Register16(cpu::Register16::IY), Operand::Register16(_)) => 4,
             Instruction::Add(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::And(Operand::Register8(cpu::Register8::IXH)) => 2,
@@ -254,14 +254,14 @@ impl Instruction {
             Instruction::And(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
             Instruction::And(Operand::Indexed(_, _)) => 5,
             Instruction::And(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Bit(_, Operand::Register8(_)) => 2,
             Instruction::Bit(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 3,
             Instruction::Bit(_, Operand::Indexed(_, _)) => 6, // TODO: check why this is not 5 as per official docs
             Instruction::Bit(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Call(JumpTest::Unconditional, _) => 5,
@@ -279,7 +279,7 @@ impl Instruction {
             Instruction::Cp(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
             Instruction::Cp(Operand::Indexed(_, _)) => 5,
             Instruction::Cp(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Cpd => 5,
@@ -295,7 +295,7 @@ impl Instruction {
             Instruction::Dec(Operand::Register16(cpu::Register16::IY)) => 3,
             Instruction::Dec(Operand::Register16(_)) => 2,
             Instruction::Dec(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Defb(_) => 1,
@@ -324,7 +324,7 @@ impl Instruction {
                 Operand::Register16(cpu::Register16::IY),
             ) => 7,
             Instruction::Ex(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Exx => 1,
@@ -333,7 +333,7 @@ impl Instruction {
             Instruction::In(_, Operand::RegisterIndirect(cpu::Register16::BC)) => 4,
             Instruction::In(Operand::Register8(_), _) => 3,
             Instruction::In(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Inc(Operand::Register8(_)) => 1,
@@ -343,7 +343,7 @@ impl Instruction {
             Instruction::Inc(Operand::Register16(cpu::Register16::IY)) => 3,
             Instruction::Inc(Operand::Register16(_)) => 2,
             Instruction::Inc(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Ind => 5,
@@ -364,7 +364,7 @@ impl Instruction {
             ) => 2,
             Instruction::Jp(_, Operand::Immediate16(_)) => 3,
             Instruction::Jp(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Jr(JumpTest::Unconditional, _) => 3,
@@ -373,7 +373,7 @@ impl Instruction {
             Instruction::Jr(JumpTest::NoCarry, _) => 3,
             Instruction::Jr(JumpTest::Carry, _) => 3,
             Instruction::Jr(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Ld(
@@ -453,7 +453,7 @@ impl Instruction {
                 Operand::Register16(cpu::Register16::HL),
             ) => 2,
             Instruction::Ld(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::LdDirect16(
@@ -475,7 +475,7 @@ impl Instruction {
             Instruction::LdDirect16(Operand::Register16(_), Operand::Direct16(_)) => 6,
             Instruction::LdDirect16(Operand::Direct16(_), Operand::Register16(_)) => 6,
             Instruction::LdDirect16(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Ldd => 5,
@@ -493,7 +493,7 @@ impl Instruction {
             Instruction::Or(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
             Instruction::Or(Operand::Indexed(_, _)) => 5,
             Instruction::Or(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Out(Operand::Direct8(_), Operand::Register8(cpu::Register8::A)) => 3,
@@ -506,7 +506,7 @@ impl Instruction {
                 Operand::Immediate8(_),
             ) => 4,
             Instruction::Out(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Otdr => 6,
@@ -517,21 +517,21 @@ impl Instruction {
             Instruction::Pop(Operand::Register16(cpu::Register16::IY)) => 5,
             Instruction::Pop(Operand::Register16(_)) => 3,
             Instruction::Pop(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Push(Operand::Register16(cpu::Register16::IX)) => 5,
             Instruction::Push(Operand::Register16(cpu::Register16::IY)) => 5,
             Instruction::Push(Operand::Register16(_)) => 4,
             Instruction::Push(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Res(_, _, Operand::Register8(_)) => 2,
             Instruction::Res(_, _, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Res(_, _, Operand::Indexed(_, _)) => 7,
             Instruction::Res(_, _, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Ret(JumpTest::Unconditional) => 3,
@@ -549,7 +549,7 @@ impl Instruction {
             Instruction::Rl(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Rl(_, Operand::Indexed(_, _)) => 7,
             Instruction::Rl(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Rla => 1,
@@ -557,7 +557,7 @@ impl Instruction {
             Instruction::Rlc(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Rlc(_, Operand::Indexed(_, _)) => 7,
             Instruction::Rlc(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Rlca => 1,
@@ -566,7 +566,7 @@ impl Instruction {
             Instruction::Rr(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Rr(_, Operand::Indexed(_, _)) => 7,
             Instruction::Rr(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Rra => 1,
@@ -574,14 +574,14 @@ impl Instruction {
             Instruction::Rrc(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Rrc(_, Operand::Indexed(_, _)) => 7,
             Instruction::Rrc(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Rrca => 1,
             Instruction::Rrd => 5,
             Instruction::Rst(Operand::Immediate8(_)) => 4,
             Instruction::Rst(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Sbc(
@@ -609,7 +609,7 @@ impl Instruction {
             Instruction::Sbc(Operand::Register8(cpu::Register8::A), Operand::Indexed(_, _)) => 5,
             Instruction::Sbc(Operand::Register16(cpu::Register16::HL), Operand::Register16(_)) => 4,
             Instruction::Sbc(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Scf => 1,
@@ -617,35 +617,35 @@ impl Instruction {
             Instruction::Set(_, _, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Set(_, _, Operand::Indexed(_, _)) => 7,
             Instruction::Set(_, _, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Sla(_, Operand::Register8(_)) => 2,
             Instruction::Sla(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Sla(_, Operand::Indexed(_, _)) => 7,
             Instruction::Sla(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Sll(_, Operand::Register8(_)) => 2,
             Instruction::Sll(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Sll(_, Operand::Indexed(_, _)) => 7,
             Instruction::Sll(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Sra(_, Operand::Register8(_)) => 2,
             Instruction::Sra(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Sra(_, Operand::Indexed(_, _)) => 7,
             Instruction::Sra(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Srl(_, Operand::Register8(_)) => 2,
             Instruction::Srl(_, Operand::RegisterIndirect(cpu::Register16::HL)) => 4,
             Instruction::Srl(_, Operand::Indexed(_, _)) => 7,
             Instruction::Srl(_, _) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Sub(Operand::Register8(cpu::Register8::IXH)) => 2,
@@ -657,7 +657,7 @@ impl Instruction {
             Instruction::Sub(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
             Instruction::Sub(Operand::Indexed(_, _)) => 5,
             Instruction::Sub(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
             Instruction::Xor(Operand::Register8(cpu::Register8::IXH)) => 2,
@@ -669,7 +669,7 @@ impl Instruction {
             Instruction::Xor(Operand::RegisterIndirect(cpu::Register16::HL)) => 2,
             Instruction::Xor(Operand::Indexed(_, _)) => 5,
             Instruction::Xor(_) => {
-                log::error!("No timing for {}", self);
+                log::error!("No timing for {self}");
                 unimplemented!()
             }
         }
@@ -679,30 +679,30 @@ impl Instruction {
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Instruction::Adc(destination, value) => write!(f, "adc {},{}", destination, value),
-            Instruction::Add(destination, value) => write!(f, "add {},{}", destination, value),
-            Instruction::And(value) => write!(f, "and {}", value),
-            Instruction::Bit(bit, operand) => write!(f, "bit {},{}", bit, operand),
+            Instruction::Adc(destination, value) => write!(f, "adc {destination},{value}"),
+            Instruction::Add(destination, value) => write!(f, "add {destination},{value}"),
+            Instruction::And(value) => write!(f, "and {value}"),
+            Instruction::Bit(bit, operand) => write!(f, "bit {bit},{operand}"),
             Instruction::Call(jump_test, target) => match jump_test {
-                JumpTest::Unconditional => write!(f, "call {}", target),
-                _ => write!(f, "call {},{}", jump_test, target),
+                JumpTest::Unconditional => write!(f, "call {target}"),
+                _ => write!(f, "call {jump_test},{target}"),
             },
             Instruction::Ccf => write!(f, "ccf"),
-            Instruction::Cp(value) => write!(f, "cp {}", value),
+            Instruction::Cp(value) => write!(f, "cp {value}"),
             Instruction::Cpd => write!(f, "cpd"),
             Instruction::Cpdr => write!(f, "cpdr"),
             Instruction::Cpi => write!(f, "cpi"),
             Instruction::Cpir => write!(f, "cpir"),
             Instruction::Cpl => write!(f, "cpl"),
             Instruction::Daa => write!(f, "daa"),
-            Instruction::Dec(destination) => write!(f, "dec {}", destination),
-            Instruction::Defb(value) => write!(f, "defb {}", value),
-            Instruction::Defw(value) => write!(f, "defw {}", value),
+            Instruction::Dec(destination) => write!(f, "dec {destination}"),
+            Instruction::Defb(value) => write!(f, "defb {value}"),
+            Instruction::Defw(value) => write!(f, "defw {value}"),
             Instruction::Di => write!(f, "di"),
-            Instruction::Djnz(target) => write!(f, "djnz {}", target),
+            Instruction::Djnz(target) => write!(f, "djnz {target}"),
             Instruction::Ei => write!(f, "ei"),
             Instruction::Ex(Operand::Register16(cpu::Register16::AF), _) => write!(f, "ex af,af'"),
-            Instruction::Ex(left, right) => write!(f, "ex {},{}", left, right),
+            Instruction::Ex(left, right) => write!(f, "ex {left},{right}"),
             Instruction::Exx => write!(f, "exx"),
             Instruction::Halt => write!(f, "halt"),
             Instruction::Im(mode) => match mode {
@@ -710,23 +710,23 @@ impl fmt::Display for Instruction {
                 InterruptMode::Mode1 => write!(f, "im 1"),
                 InterruptMode::Mode2 => write!(f, "im 2"),
             },
-            Instruction::In(destination, port) => write!(f, "in {},{}", destination, port), // TODO: account for special case where (BC) is printed as (C)
-            Instruction::Inc(destination) => write!(f, "inc {}", destination),
+            Instruction::In(destination, port) => write!(f, "in {destination},{port}"), // TODO: account for special case where (BC) is printed as (C)
+            Instruction::Inc(destination) => write!(f, "inc {destination}"),
             Instruction::Ind => write!(f, "ind"),
             Instruction::Indr => write!(f, "indr"),
             Instruction::Ini => write!(f, "ini"),
             Instruction::Inir => write!(f, "inir"),
             Instruction::Jp(jump_test, target) => match jump_test {
-                JumpTest::Unconditional => write!(f, "jp {}", target),
-                _ => write!(f, "jp {},{}", jump_test, target),
+                JumpTest::Unconditional => write!(f, "jp {target}"),
+                _ => write!(f, "jp {jump_test},{target}"),
             },
             Instruction::Jr(jump_test, target) => match jump_test {
-                JumpTest::Unconditional => write!(f, "jr {}", target),
-                _ => write!(f, "jr {},{}", jump_test, target),
+                JumpTest::Unconditional => write!(f, "jr {target}"),
+                _ => write!(f, "jr {jump_test},{target}"),
             },
-            Instruction::Ld(destination, source) => write!(f, "ld {},{}", destination, source),
+            Instruction::Ld(destination, source) => write!(f, "ld {destination},{source}"),
             Instruction::LdDirect16(destination, source) => {
-                write!(f, "ld {},{}", destination, source)
+                write!(f, "ld {destination},{source}")
             }
             Instruction::Ldd => write!(f, "ldd"),
             Instruction::Lddr => write!(f, "lddr"),
@@ -734,102 +734,102 @@ impl fmt::Display for Instruction {
             Instruction::Ldir => write!(f, "ldir"),
             Instruction::Neg => write!(f, "neg"),
             Instruction::Nop => write!(f, "nop"),
-            Instruction::Or(value) => write!(f, "or {}", value),
-            Instruction::Out(port, source) => write!(f, "out {},{}", port, source), // TODO: account for special case where (BC) is printed as (C)
+            Instruction::Or(value) => write!(f, "or {value}"),
+            Instruction::Out(port, source) => write!(f, "out {port},{source}"), // TODO: account for special case where (BC) is printed as (C)
             Instruction::Otdr => write!(f, "otdr"),
             Instruction::Otir => write!(f, "otir"),
             Instruction::Outd => write!(f, "outd"),
             Instruction::Outi => write!(f, "outi"),
-            Instruction::Pop(destination) => write!(f, "pop {}", destination),
-            Instruction::Push(source) => write!(f, "push {}", source),
+            Instruction::Pop(destination) => write!(f, "pop {destination}"),
+            Instruction::Push(source) => write!(f, "push {source}"),
             Instruction::Res(destination, bit, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "res {},{}", bit, operand),
-                    _ => write!(f, "res {},{}->{}", bit, operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "res {bit},{operand}"),
+                    _ => write!(f, "res {bit},{operand}->{destination}"),
                 },
-                _ => write!(f, "res {},{}", bit, operand),
+                _ => write!(f, "res {bit},{operand}"),
             },
             Instruction::Ret(jump_test) => match jump_test {
                 JumpTest::Unconditional => write!(f, "ret"),
-                _ => write!(f, "ret {}", jump_test),
+                _ => write!(f, "ret {jump_test}"),
             },
             Instruction::Reti => write!(f, "reti"),
             Instruction::Retn => write!(f, "retn"),
             Instruction::Rl(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "rl {}", operand),
-                    _ => write!(f, "rl {}->{}", operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "rl {operand}"),
+                    _ => write!(f, "rl {operand}->{destination}"),
                 },
-                _ => write!(f, "rl {}", operand),
+                _ => write!(f, "rl {operand}"),
             },
             Instruction::Rla => write!(f, "rla"),
             Instruction::Rlc(destination, operand) => match operand {
                 // TODO: extract this into reusable method. how to handle helpers in traits?
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "rlc {}", operand),
-                    _ => write!(f, "rlc {}->{}", operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "rlc {operand}"),
+                    _ => write!(f, "rlc {operand}->{destination}"),
                 },
-                _ => write!(f, "rlc {}", operand),
+                _ => write!(f, "rlc {operand}"),
             },
             Instruction::Rlca => write!(f, "rlca"),
             Instruction::Rld => write!(f, "rld"),
             Instruction::Rr(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "rr {}", operand),
-                    _ => write!(f, "rr {}->{}", operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "rr {operand}"),
+                    _ => write!(f, "rr {operand}->{destination}"),
                 },
-                _ => write!(f, "rr {}", operand),
+                _ => write!(f, "rr {operand}"),
             },
             Instruction::Rrc(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "rrc {}", operand),
-                    _ => write!(f, "rrc {}->{}", operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "rrc {operand}"),
+                    _ => write!(f, "rrc {operand}->{destination}"),
                 },
-                _ => write!(f, "rrc {}", operand),
+                _ => write!(f, "rrc {operand}"),
             },
             Instruction::Rra => write!(f, "rra"),
             Instruction::Rrca => write!(f, "rrca"),
             Instruction::Rrd => write!(f, "rrd"),
-            Instruction::Rst(target) => write!(f, "rst {}", target),
-            Instruction::Sbc(destination, value) => write!(f, "sbc {},{}", destination, value),
+            Instruction::Rst(target) => write!(f, "rst {target}"),
+            Instruction::Sbc(destination, value) => write!(f, "sbc {destination},{value}"),
             Instruction::Scf => write!(f, "scf"),
             Instruction::Set(destination, bit, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "set {},{}", bit, operand),
-                    _ => write!(f, "set {},{}->{}", bit, operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "set {bit},{operand}"),
+                    _ => write!(f, "set {bit},{operand}->{destination}"),
                 },
-                _ => write!(f, "set {},{}", bit, operand),
+                _ => write!(f, "set {bit},{operand}"),
             },
             Instruction::Sla(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "sla {}", operand),
-                    _ => write!(f, "sla {}->{}", operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "sla {operand}"),
+                    _ => write!(f, "sla {operand}->{destination}"),
                 },
-                _ => write!(f, "sla {}", operand),
+                _ => write!(f, "sla {operand}"),
             },
             Instruction::Sll(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "sll {}", operand),
-                    _ => write!(f, "sll {}->{}", operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "sll {operand}"),
+                    _ => write!(f, "sll {operand}->{destination}"),
                 },
-                _ => write!(f, "sll {}", operand),
+                _ => write!(f, "sll {operand}"),
             },
             Instruction::Sra(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "sra {}", operand),
-                    _ => write!(f, "sra {}->{}", operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "sra {operand}"),
+                    _ => write!(f, "sra {operand}->{destination}"),
                 },
-                _ => write!(f, "sra {}", operand),
+                _ => write!(f, "sra {operand}"),
             },
             Instruction::Srl(destination, operand) => match operand {
                 Operand::Indexed(_, _) => match destination {
-                    Operand::Indexed(_, _) => write!(f, "srl {}", operand),
-                    _ => write!(f, "srl {}->{}", operand, destination),
+                    Operand::Indexed(_, _) => write!(f, "srl {operand}"),
+                    _ => write!(f, "srl {operand}->{destination}"),
                 },
-                _ => write!(f, "srl {}", operand),
+                _ => write!(f, "srl {operand}"),
             },
-            Instruction::Sub(value) => write!(f, "sub {}", value),
-            Instruction::Xor(value) => write!(f, "xor {}", value),
+            Instruction::Sub(value) => write!(f, "sub {value}"),
+            Instruction::Xor(value) => write!(f, "xor {value}"),
         }
     }
 }
@@ -1511,7 +1511,7 @@ impl Decoder {
                 self.decode_alu(opcode_y, value)
             }
             (3, _, 7) => Instruction::Rst(Operand::Immediate8(opcode_y * 8)),
-            _ => panic!("Illegal instruction: {:x}", opcode), // TODO: id instruction more accurately
+            _ => panic!("Illegal instruction: {opcode:x}"), // TODO: id instruction more accurately
         }
     }
 

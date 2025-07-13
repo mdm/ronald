@@ -51,7 +51,7 @@ impl ZexHarness {
                                 if character == '$' {
                                     break;
                                 } else {
-                                    print!("{}", character);
+                                    print!("{character}");
                                 }
                                 address += 1;
                             }
