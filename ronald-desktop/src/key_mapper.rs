@@ -221,7 +221,6 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                                 .or_default()
                                 .1 = Some(host_key.to_string());
                         } else {
-                            dbg!(host_key, guest_key);
                             self.key_map
                                 .host_to_guest
                                 .entry(host_key)
