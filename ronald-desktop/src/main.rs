@@ -22,7 +22,8 @@ fn main() -> eframe::Result {
             .with_icon(
                 eframe::icon_data::from_png_bytes(&include_bytes!("../icon.png")[..])
                     .expect("Failed to load icon"),
-            ),
+            )
+            .with_drag_and_drop(true),
         ..Default::default()
     };
     eframe::run_native(
