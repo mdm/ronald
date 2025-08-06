@@ -66,6 +66,14 @@ where
                         ui.close_menu();
                     }
                 });
+                ui.menu_button("Media", |ui| {
+                    if ui.button("Drive A: Load DSK").clicked() {
+                        ui.close_menu();
+                        if let Some(frontend) = &mut self.frontend {
+                            frontend.load_disk_image_drive_a();
+                        }
+                    }
+                });
                 ui.menu_button("Settings", |ui| {
                     if ui.button("Key Bindings").clicked() {
                         self.keyboard.show = true;

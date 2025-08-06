@@ -1,9 +1,10 @@
 use std::time::Instant;
 
 use eframe::{egui, egui_wgpu};
+use pollster::FutureExt as _;
 
 use ronald_core::{
-    Driver,
+    AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
     system::System,
 };
@@ -44,6 +45,22 @@ where
             input_test: String::new(),
             can_interact: true,
         }
+    }
+
+    pub fn load_disk_image_drive_a(&mut self) {
+        let saved_frame_start = self.frame_start;
+        self.audio.pause_audio();
+        if let Some(file) = rfd::AsyncFileDialog::new()
+            .set_title("Load DSK into Drive A:")
+            .add_filter("DSK Disk Image", &["dsk"])
+            .pick_file()
+            .block_on()
+        {
+            self.driver
+                .load_disk(0, file.read().block_on(), file.path().to_path_buf());
+        }
+        self.frame_start = saved_frame_start; // prevent audio delay
+        self.audio.play_audio();
     }
 
     pub fn ui(
