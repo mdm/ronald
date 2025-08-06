@@ -151,7 +151,11 @@ where
             #[cfg(not(target_arch = "wasm32"))]
             if let Some(path_buf) = dropped_file.path.as_ref() {
                 if let Ok(image) = std::fs::read(path_buf) {
-                    match path_buf.extension().and_then(|s| s.to_str()) {
+                    let extension = path_buf
+                        .extension()
+                        .map(|s| s.to_ascii_lowercase())
+                        .and_then(|s| s.into_string().ok());
+                    match extension.as_deref() {
                         Some("dsk") => {
                             log::debug!("Loading DSK image into Drive A: {}", path_buf.display());
                             self.driver.load_disk(0, image, path_buf.to_path_buf());
@@ -164,7 +168,11 @@ where
             #[cfg(target_arch = "wasm32")]
             if let Some(image) = dropped_file.bytes.as_ref() {
                 let path_buf = PathBuf::from(dropped_file.name.clone());
-                match path_buf.extension().and_then(|s| s.to_str()) {
+                let extension = path_buf
+                    .extension()
+                    .map(|s| s.to_ascii_lowercase())
+                    .and_then(|s| s.into_string().ok());
+                match extension.as_deref() {
                     Some("dsk") => {
                         log::debug!("Loading DSK image into Drive A: {}", path_buf.display());
                         self.driver
