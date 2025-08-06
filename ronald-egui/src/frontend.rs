@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{path::PathBuf, time::Instant};
 
 use eframe::{egui, egui_wgpu};
 use pollster::FutureExt as _;
@@ -96,6 +96,10 @@ where
                     ui.input(|input| self.handle_input(input, key_mapper));
                 }
 
+                ui.input(|input| {
+                    self.handle_dropped_files(input);
+                });
+
                 self.step_emulation(); // TODO: step only when accepting input (stop audio?)
                 self.draw_framebuffer(ctx, ui, size);
             }
@@ -114,6 +118,10 @@ where
                         if !ctx.wants_keyboard_input() && self.can_interact {
                             ui.input(|input| self.handle_input(input, key_mapper));
                         }
+
+                        ui.input(|input| {
+                            self.handle_dropped_files(input);
+                        });
 
                         self.step_emulation(); // TODO: step only when accepting input (stop audio?)
                         self.draw_framebuffer(ctx, ui, size);
@@ -135,6 +143,38 @@ where
                 self.driver.release_key(key);
             }
         });
+    }
+
+    fn handle_dropped_files(&mut self, input: &egui::InputState) {
+        for dropped_file in input.raw.dropped_files.iter() {
+            log::debug!("Dropped file: {dropped_file:?}");
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(path_buf) = dropped_file.path.as_ref() {
+                if let Ok(image) = std::fs::read(path_buf) {
+                    match path_buf.extension().and_then(|s| s.to_str()) {
+                        Some("dsk") => {
+                            log::debug!("Loading DSK image into Drive A: {}", path_buf.display());
+                            self.driver.load_disk(0, image, path_buf.to_path_buf());
+                        }
+                        Some("cdt") => {}
+                        _ => {}
+                    }
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            if let Some(image) = dropped_file.bytes.as_ref() {
+                let path_buf = PathBuf::from(dropped_file.name.clone());
+                match path_buf.extension().and_then(|s| s.to_str()) {
+                    Some("dsk") => {
+                        log::debug!("Loading DSK image into Drive A: {}", path_buf.display());
+                        self.driver
+                            .load_disk(0, image.to_vec(), path_buf.to_path_buf());
+                    }
+                    Some("cdt") => {}
+                    _ => {}
+                }
+            }
+        }
     }
 
     fn draw_framebuffer(
