@@ -19,7 +19,8 @@ use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
 mod audio;
 mod video;
 
-struct PickedFile {
+#[derive(Debug)]
+struct File {
     path_buf: PathBuf,
     image: Vec<u8>,
 }
@@ -35,7 +36,10 @@ where
     time_available: usize,
     input_test: String,
     can_interact: bool,
-    picked_file_disk_a: Arc<Mutex<Option<PickedFile>>>,
+    picked_file_disk_a: Arc<Mutex<Option<File>>>,
+    picked_file_disk_b: Arc<Mutex<Option<File>>>,
+    picked_file_tape: Arc<Mutex<Option<File>>>,
+    dropped_files: Vec<File>,
 }
 
 impl<S> Frontend<S>
@@ -56,6 +60,9 @@ where
             input_test: String::new(),
             can_interact: true,
             picked_file_disk_a: Arc::new(Mutex::new(None)),
+            picked_file_disk_b: Arc::new(Mutex::new(None)),
+            picked_file_tape: Arc::new(Mutex::new(None)),
+            dropped_files: Vec::new(),
         }
     }
 
@@ -69,7 +76,7 @@ where
                 .block_on()
                 && let Ok(mut picked_file) = picked_file.lock()
             {
-                *picked_file = Some(PickedFile {
+                *picked_file = Some(File {
                     path_buf: file.path().to_path_buf(),
                     image: file.read().block_on(),
                 });
@@ -106,13 +113,12 @@ where
                     self.can_interact = ctx.layer_id_at(pos) == Some(egui::LayerId::background());
                 }
 
-                if !ctx.wants_keyboard_input() && self.can_interact {
+                if !ctx.wants_keyboard_input() {
                     ui.input(|input| self.handle_input(input, key_mapper));
                 }
 
-                ui.input(|input| {
-                    self.handle_files(input);
-                });
+                self.handle_dropped_files(ctx);
+                self.handle_picked_files();
 
                 self.step_emulation(); // TODO: step only when accepting input (stop audio?)
                 self.draw_framebuffer(ctx, ui, size);
@@ -129,13 +135,12 @@ where
                             self.can_interact = ctx.layer_id_at(pos) == Some(ui.layer_id());
                         }
 
-                        if !ctx.wants_keyboard_input() && self.can_interact {
+                        if !ctx.wants_keyboard_input() {
                             ui.input(|input| self.handle_input(input, key_mapper));
                         }
 
-                        ui.input(|input| {
-                            self.handle_files(input);
-                        });
+                        self.handle_dropped_files(ctx);
+                        self.handle_picked_files();
 
                         self.step_emulation(); // TODO: step only when accepting input (stop audio?)
                         self.draw_framebuffer(ctx, ui, size);
@@ -149,22 +154,15 @@ where
     }
 
     fn handle_input(&mut self, input: &egui::InputState, key_mapper: &mut impl KeyMapper) {
-        key_mapper.map_keys(input, |event| match event {
-            KeyEvent::Pressed(key) => {
-                self.driver.press_key(key);
-            }
-            KeyEvent::Released(key) => {
-                self.driver.release_key(key);
-            }
-        });
-    }
-
-    fn handle_files(&mut self, input: &egui::InputState) {
-        if let Ok(mut picked_file) = self.picked_file_disk_a.try_lock()
-            && let Some(picked_file) = picked_file.take()
-        {
-            self.driver
-                .load_disk(0, picked_file.image, picked_file.path_buf);
+        if self.can_interact {
+            key_mapper.map_keys(input, |event| match event {
+                KeyEvent::Pressed(key) => {
+                    self.driver.press_key(key);
+                }
+                KeyEvent::Released(key) => {
+                    self.driver.release_key(key);
+                }
+            });
         }
 
         for dropped_file in input.raw.dropped_files.iter() {
@@ -173,36 +171,87 @@ where
             if let Some(path_buf) = dropped_file.path.as_ref()
                 && let Ok(image) = std::fs::read(path_buf)
             {
-                let extension = path_buf
-                    .extension()
-                    .map(|s| s.to_ascii_lowercase())
-                    .and_then(|s| s.into_string().ok());
-                match extension.as_deref() {
-                    Some("dsk") => {
-                        log::debug!("Loading DSK image into Drive A: {}", path_buf.display());
-                        self.driver.load_disk(0, image, path_buf.to_path_buf());
-                    }
-                    Some("cdt") => {}
-                    _ => {}
-                }
+                self.dropped_files.push(File {
+                    path_buf: path_buf.to_path_buf(),
+                    image,
+                });
             }
             #[cfg(target_arch = "wasm32")]
             if let Some(image) = dropped_file.bytes.as_ref() {
                 let path_buf = PathBuf::from(dropped_file.name.clone());
-                let extension = path_buf
-                    .extension()
-                    .map(|s| s.to_ascii_lowercase())
-                    .and_then(|s| s.into_string().ok());
-                match extension.as_deref() {
-                    Some("dsk") => {
-                        log::debug!("Loading DSK image into Drive A: {}", path_buf.display());
-                        self.driver
-                            .load_disk(0, image.to_vec(), path_buf.to_path_buf());
-                    }
-                    Some("cdt") => {}
-                    _ => {}
-                }
+
+                self.dropped_files.push(File {
+                    path_buf: path_buf.to_path_buf(),
+                    image: image.to_vec(),
+                });
             }
+        }
+    }
+
+    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
+        if let Some(dropped_file) = self.dropped_files.last() {
+            let extension = dropped_file
+                .path_buf
+                .extension()
+                .map(|s| s.to_ascii_lowercase())
+                .and_then(|s| s.into_string().ok());
+            match extension.as_deref() {
+                Some("dsk") => {
+                    egui::Modal::new("drive_selection_modal".into()).show(ctx, |ui| {
+                        let filename = self
+                            .dropped_files
+                            .last()
+                            .and_then(|f| f.path_buf.file_name())
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_string())
+                            .unwrap_or("unknown file".into());
+
+                        ui.label(format!("Choose disk drive to load \"{filename}\" into:"));
+
+                        ui.horizontal(|ui| {
+                            if ui.button("Drive A").clicked()
+                                && let Ok(mut picked_file) = self.picked_file_disk_a.lock()
+                            {
+                                *picked_file = self.dropped_files.pop();
+                            }
+
+                            if ui.button("Drive B").clicked()
+                                && let Ok(mut picked_file) = self.picked_file_disk_b.lock()
+                            {
+                                *picked_file = self.dropped_files.pop();
+                            }
+                        });
+                    });
+                }
+                Some("cdt") => {
+                    if let Ok(mut picked_file) = self.picked_file_tape.try_lock() {
+                        *picked_file = self.dropped_files.pop();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn handle_picked_files(&mut self) {
+        if let Ok(mut picked_file) = self.picked_file_disk_a.try_lock()
+            && let Some(picked_file) = picked_file.take()
+        {
+            self.driver
+                .load_disk(0, picked_file.image, picked_file.path_buf);
+        }
+
+        if let Ok(mut picked_file) = self.picked_file_disk_b.try_lock()
+            && let Some(picked_file) = picked_file.take()
+        {
+            self.driver
+                .load_disk(1, picked_file.image, picked_file.path_buf);
+        }
+
+        if let Ok(mut picked_file) = self.picked_file_tape.try_lock()
+            && let Some(picked_file) = picked_file.take()
+        {
+            todo!("handle tape loading");
         }
     }
 
