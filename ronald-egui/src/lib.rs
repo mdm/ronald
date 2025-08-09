@@ -70,7 +70,7 @@ where
                     if ui.button("Drive A: Load DSK").clicked() {
                         ui.close_menu();
                         if let Some(frontend) = &mut self.frontend {
-                            frontend.load_disk_image_drive_a();
+                            frontend.pick_file_disk_a();
                         }
                     }
                 });

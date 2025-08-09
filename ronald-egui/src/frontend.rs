@@ -1,4 +1,9 @@
-use std::{path::PathBuf, time::Instant};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread::spawn,
+    time::Instant,
+};
 
 use eframe::{egui, egui_wgpu};
 use pollster::FutureExt as _;
@@ -14,6 +19,11 @@ use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
 mod audio;
 mod video;
 
+struct PickedFile {
+    path_buf: PathBuf,
+    image: Vec<u8>,
+}
+
 pub struct Frontend<S>
 where
     S: System<'static> + 'static,
@@ -25,6 +35,7 @@ where
     time_available: usize,
     input_test: String,
     can_interact: bool,
+    picked_file_disk_a: Arc<Mutex<Option<PickedFile>>>,
 }
 
 impl<S> Frontend<S>
@@ -44,23 +55,26 @@ where
             time_available: 0,
             input_test: String::new(),
             can_interact: true,
+            picked_file_disk_a: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub fn load_disk_image_drive_a(&mut self) {
-        let saved_frame_start = self.frame_start;
-        self.audio.pause_audio();
-        if let Some(file) = rfd::AsyncFileDialog::new()
-            .set_title("Load DSK into Drive A:")
-            .add_filter("DSK Disk Image", &["dsk"])
-            .pick_file()
-            .block_on()
-        {
-            self.driver
-                .load_disk(0, file.read().block_on(), file.path().to_path_buf());
-        }
-        self.frame_start = saved_frame_start; // prevent audio delay
-        self.audio.play_audio();
+    pub fn pick_file_disk_a(&mut self) {
+        let picked_file = Arc::clone(&self.picked_file_disk_a);
+        spawn(move || {
+            if let Some(file) = rfd::AsyncFileDialog::new()
+                .set_title("Load DSK into Drive A:")
+                .add_filter("DSK Disk Image", &["dsk"])
+                .pick_file()
+                .block_on()
+                && let Ok(mut picked_file) = picked_file.lock()
+            {
+                *picked_file = Some(PickedFile {
+                    path_buf: file.path().to_path_buf(),
+                    image: file.read().block_on(),
+                });
+            }
+        });
     }
 
     pub fn ui(
@@ -97,7 +111,7 @@ where
                 }
 
                 ui.input(|input| {
-                    self.handle_dropped_files(input);
+                    self.handle_files(input);
                 });
 
                 self.step_emulation(); // TODO: step only when accepting input (stop audio?)
@@ -120,7 +134,7 @@ where
                         }
 
                         ui.input(|input| {
-                            self.handle_dropped_files(input);
+                            self.handle_files(input);
                         });
 
                         self.step_emulation(); // TODO: step only when accepting input (stop audio?)
@@ -145,24 +159,31 @@ where
         });
     }
 
-    fn handle_dropped_files(&mut self, input: &egui::InputState) {
+    fn handle_files(&mut self, input: &egui::InputState) {
+        if let Ok(mut picked_file) = self.picked_file_disk_a.try_lock()
+            && let Some(picked_file) = picked_file.take()
+        {
+            self.driver
+                .load_disk(0, picked_file.image, picked_file.path_buf);
+        }
+
         for dropped_file in input.raw.dropped_files.iter() {
             log::debug!("Dropped file: {dropped_file:?}");
             #[cfg(not(target_arch = "wasm32"))]
-            if let Some(path_buf) = dropped_file.path.as_ref() {
-                if let Ok(image) = std::fs::read(path_buf) {
-                    let extension = path_buf
-                        .extension()
-                        .map(|s| s.to_ascii_lowercase())
-                        .and_then(|s| s.into_string().ok());
-                    match extension.as_deref() {
-                        Some("dsk") => {
-                            log::debug!("Loading DSK image into Drive A: {}", path_buf.display());
-                            self.driver.load_disk(0, image, path_buf.to_path_buf());
-                        }
-                        Some("cdt") => {}
-                        _ => {}
+            if let Some(path_buf) = dropped_file.path.as_ref()
+                && let Ok(image) = std::fs::read(path_buf)
+            {
+                let extension = path_buf
+                    .extension()
+                    .map(|s| s.to_ascii_lowercase())
+                    .and_then(|s| s.into_string().ok());
+                match extension.as_deref() {
+                    Some("dsk") => {
+                        log::debug!("Loading DSK image into Drive A: {}", path_buf.display());
+                        self.driver.load_disk(0, image, path_buf.to_path_buf());
                     }
+                    Some("cdt") => {}
+                    _ => {}
                 }
             }
             #[cfg(target_arch = "wasm32")]
