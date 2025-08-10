@@ -205,9 +205,18 @@ impl FloppyDiskController {
                     }
                     None => {
                         self.command = Some(Command::from_byte(value));
-                        self.end_of_track = false;
-                        self.seek_end = false;
-                        self.drive_not_ready = false;
+                        match self.command {
+                            Some(Command::SenseInterruptState) => {
+                                // reuse state from last command
+                            }
+                            _ => {
+                                // TODO: verify which commands require this reset. Can we set these in
+                                // the commands themselves?
+                                self.end_of_track = false;
+                                self.seek_end = false;
+                                self.drive_not_ready = false;
+                            }
+                        };
                         // TODO: do we need to reset anything else?
                         self.floppy_controller_busy = true;
 
@@ -314,6 +323,7 @@ impl FloppyDiskController {
                             self.drive_not_ready = true;
                             self.status1 = 1 << 2; // sector not found
                             self.status2 = 0;
+                            self.data_input_output = true;
                             self.write_standard_result();
                             self.phase = Phase::Result;
                         }
@@ -338,6 +348,7 @@ impl FloppyDiskController {
                         .push_back(self.report_status_register_0());
                     self.result_buffer
                         .push_back(self.drives[self.selected_drive].track as u8);
+                    log::debug!("RESULTS {:?}", &self.result_buffer);
                     self.data_input_output = true;
                     self.phase = Phase::Result;
                 }
@@ -376,6 +387,7 @@ impl FloppyDiskController {
                         }
                         None => {
                             self.drive_not_ready = true;
+                            self.seek_end = true;
                         }
                     }
                     self.phase = Phase::Command;
