@@ -202,43 +202,41 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
                 modifiers,
                 ..
             } = event
+                && let Some(host_key) = self.record_host_key(*physical_key, *pressed, *modifiers)
+                && *pressed
             {
-                if let Some(host_key) = self.record_host_key(*physical_key, *pressed, *modifiers) {
-                    if *pressed {
-                        // Clear any existing binding for the guest key.
-                        self.clear_binding(guest_key, shifted)?;
+                // Clear any existing binding for the guest key.
+                self.clear_binding(guest_key, shifted)?;
 
-                        if shifted {
-                            self.key_map
-                                .host_to_guest
-                                .entry(host_key)
-                                .or_default()
-                                .push(vec![guest_key.to_string(), "Shift".to_string()]);
+                if shifted {
+                    self.key_map
+                        .host_to_guest
+                        .entry(host_key)
+                        .or_default()
+                        .push(vec![guest_key.to_string(), "Shift".to_string()]);
 
-                            self.key_map
-                                .guest_to_description
-                                .entry(guest_key.to_string())
-                                .or_default()
-                                .1 = Some(host_key.to_string());
-                        } else {
-                            self.key_map
-                                .host_to_guest
-                                .entry(host_key)
-                                .or_default()
-                                .push(vec![guest_key.to_string()]);
+                    self.key_map
+                        .guest_to_description
+                        .entry(guest_key.to_string())
+                        .or_default()
+                        .1 = Some(host_key.to_string());
+                } else {
+                    self.key_map
+                        .host_to_guest
+                        .entry(host_key)
+                        .or_default()
+                        .push(vec![guest_key.to_string()]);
 
-                            self.key_map
-                                .guest_to_description
-                                .entry(guest_key.to_string())
-                                .or_default()
-                                .0 = Some(host_key.to_string());
-                        }
-
-                        self.save()?;
-
-                        return Ok(true);
-                    }
+                    self.key_map
+                        .guest_to_description
+                        .entry(guest_key.to_string())
+                        .or_default()
+                        .0 = Some(host_key.to_string());
                 }
+
+                self.save()?;
+
+                return Ok(true);
             }
         }
 
