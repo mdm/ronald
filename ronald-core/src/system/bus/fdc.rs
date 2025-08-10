@@ -15,7 +15,7 @@ struct Drive {
     disk: Option<Disk>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 enum Command {
     ReadTrack,
     Specify,
@@ -227,9 +227,7 @@ impl FloppyDiskController {
                 }
             },
             _ => {
-                log::error!(
-                    "Unexpected FDC write using port {port:#06x}: {value:#010b}"
-                );
+                log::error!("Unexpected FDC write using port {port:#06x}: {value:#010b}");
                 unreachable!();
             }
         }
@@ -503,7 +501,7 @@ impl FloppyDiskController {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 enum Phase {
     Command,
     Execution,
