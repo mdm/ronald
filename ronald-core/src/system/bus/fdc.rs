@@ -160,7 +160,6 @@ impl FloppyDiskController {
                             log::debug!("Reading result from FDC: {result:#04x}");
                             result
                         } else {
-                            // TODO: we hit this if no disk is loaded and CAT is executed
                             unreachable!()
                         };
 
@@ -313,6 +312,9 @@ impl FloppyDiskController {
                         }
                         None => {
                             self.drive_not_ready = true;
+                            self.status1 = 1 << 2; // sector not found
+                            self.status2 = 0;
+                            self.write_standard_result();
                             self.phase = Phase::Result;
                         }
                     }
@@ -350,6 +352,9 @@ impl FloppyDiskController {
                         }
                         None => {
                             self.drive_not_ready = true;
+                            self.status1 = 1 << 2; // sector not found
+                            self.status2 = 0;
+                            self.write_standard_result();
                         }
                     }
                     self.data_input_output = true;
@@ -496,7 +501,9 @@ impl FloppyDiskController {
                 self.result_buffer.push_back(sector_info.sector_id);
                 self.result_buffer.push_back(sector_info.sector_size);
             }
-            None => unreachable!(),
+            None => {
+                self.result_buffer.extend([0; 4]);
+            }
         }
     }
 }
