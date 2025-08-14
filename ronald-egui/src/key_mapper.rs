@@ -6,8 +6,9 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use eframe::egui;
 
-use ronald_egui::{KeyEvent, KeyMapper};
+use crate::frontend::KeyEvent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct HostKey {
@@ -141,42 +142,8 @@ impl<'c> DesktopKeyMapper<'c> {
             }),
         }
     }
-}
 
-impl<'c> Default for DesktopKeyMapper<'c> {
-    fn default() -> Self {
-        let config = KeyMapConfig::default();
-        if let Ok(key_map) = KeyMap::try_from_file(config.key_map_path) {
-            log::info!("Loaded key map from file.");
-            return Self {
-                config,
-                key_map,
-                pressed_keys: HashMap::new(),
-                alt_gr_pressed: false,
-            };
-        }
-        if let Ok(key_map) = KeyMap::try_from_file(config.key_map_default_path) {
-            log::info!("Loaded default key map from file.");
-            return Self {
-                config,
-                key_map,
-                pressed_keys: HashMap::new(),
-                alt_gr_pressed: false,
-            };
-        }
-
-        log::warn!("No key map found.");
-        Self {
-            config,
-            key_map: KeyMap::default(),
-            pressed_keys: HashMap::new(),
-            alt_gr_pressed: false,
-        }
-    }
-}
-
-impl<'c> KeyMapper for DesktopKeyMapper<'c> {
-    fn binding(&self, guest_key: &str, shifted: bool) -> Option<&str> {
+    pub fn binding(&self, guest_key: &str, shifted: bool) -> Option<&str> {
         self.key_map
             .guest_to_description
             .get(guest_key)
@@ -189,7 +156,7 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
             })
     }
 
-    fn try_set_binding(
+    pub fn try_set_binding(
         &mut self,
         guest_key: &str,
         shifted: bool,
@@ -246,7 +213,7 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
         Ok(false)
     }
 
-    fn clear_binding(
+    pub fn clear_binding(
         &mut self,
         guest_key: &str,
         shifted: bool,
@@ -279,7 +246,7 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
         Ok(())
     }
 
-    fn reset_all_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn reset_all_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let key_map = KeyMap::try_from_file("keymap.default.json")?;
 
         self.key_map = key_map;
@@ -288,7 +255,7 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
         Ok(())
     }
 
-    fn map_keys(&mut self, input: &egui::InputState, mut callback: impl FnMut(KeyEvent)) {
+    pub fn map_keys(&mut self, input: &egui::InputState, mut callback: impl FnMut(KeyEvent)) {
         for host_event in &input.raw.events {
             if let egui::Event::Key {
                 physical_key: Some(physical_key),
@@ -326,6 +293,38 @@ impl<'c> KeyMapper for DesktopKeyMapper<'c> {
         }
 
         // TODO: handle gamepad input
+    }
+}
+
+impl<'c> Default for DesktopKeyMapper<'c> {
+    fn default() -> Self {
+        let config = KeyMapConfig::default();
+        if let Ok(key_map) = KeyMap::try_from_file(config.key_map_path) {
+            log::info!("Loaded key map from file.");
+            return Self {
+                config,
+                key_map,
+                pressed_keys: HashMap::new(),
+                alt_gr_pressed: false,
+            };
+        }
+        if let Ok(key_map) = KeyMap::try_from_file(config.key_map_default_path) {
+            log::info!("Loaded default key map from file.");
+            return Self {
+                config,
+                key_map,
+                pressed_keys: HashMap::new(),
+                alt_gr_pressed: false,
+            };
+        }
+
+        log::warn!("No key map found.");
+        Self {
+            config,
+            key_map: KeyMap::default(),
+            pressed_keys: HashMap::new(),
+            alt_gr_pressed: false,
+        }
     }
 }
 

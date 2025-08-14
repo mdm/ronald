@@ -5,33 +5,27 @@ use ronald_core::system::CPC464;
 
 use frontend::Frontend;
 use keyboard::Keyboard;
+use key_mapper::DesktopKeyMapper;
 
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 
-pub use crate::frontend::{KeyEvent, KeyMapper};
-
 mod frontend;
 mod keyboard;
+mod key_mapper;
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default)]
-pub struct RonaldApp<K>
-where
-    K: KeyMapper,
-{
+pub struct RonaldApp<'km> {
     screen_only: bool,
     #[serde(skip)]
     frontend: Option<Frontend<CPC464>>,
     #[serde(skip)]
     keyboard: Keyboard,
     #[serde(skip)]
-    key_mapper: K,
+    key_mapper: DesktopKeyMapper<'km>,
 }
 
-impl<K> RonaldApp<K>
-where
-    K: KeyMapper,
-{
+impl<'km> RonaldApp<'km> {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // TODO: figure out how to skip inital window size and store screen_only
         // if let Some(storage) = cc.storage {
@@ -41,10 +35,7 @@ where
         Default::default()
     }
 }
-impl<K> eframe::App for RonaldApp<K>
-where
-    K: KeyMapper,
-{
+impl<'km> eframe::App for RonaldApp<'km> {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui_extras::install_image_loaders(ctx);
 

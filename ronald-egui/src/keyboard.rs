@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 use eframe::egui;
 use ronald_core::constants::{KEYS, KeyDefinition};
 
-use crate::KeyMapper;
+use crate::key_mapper::DesktopKeyMapper;
 
 const SIZE: usize = 100; // TODO: use this in GuestKey definitions
 const PADDING: usize = 8;
@@ -100,7 +100,7 @@ pub struct Keyboard {
 }
 
 impl Keyboard {
-    pub fn ui(&mut self, ctx: &egui::Context, key_mapper: &mut impl KeyMapper) {
+    pub fn ui(&mut self, ctx: &egui::Context, key_mapper: &mut DesktopKeyMapper) {
         if !self.show {
             return;
         }
