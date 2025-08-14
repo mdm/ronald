@@ -15,6 +15,7 @@ use ronald_core::{
 };
 
 use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
+use crate::key_mapper::DesktopKeyMapper;
 
 mod audio;
 mod video;
@@ -88,7 +89,7 @@ where
         &mut self,
         ctx: &egui::Context,
         ui: Option<&mut egui::Ui>,
-        key_mapper: &mut impl KeyMapper,
+        key_mapper: &mut DesktopKeyMapper,
     ) {
         match ui {
             Some(ui) => {
@@ -153,7 +154,7 @@ where
         }
     }
 
-    fn handle_input(&mut self, input: &egui::InputState, key_mapper: &mut impl KeyMapper) {
+    fn handle_input(&mut self, input: &egui::InputState, key_mapper: &mut DesktopKeyMapper) {
         if self.can_interact {
             key_mapper.map_keys(input, |event| match event {
                 KeyEvent::Pressed(key) => {
@@ -298,19 +299,3 @@ pub enum KeyEvent<'k> {
     Released(&'k str),
 }
 
-pub trait KeyMapper: Default {
-    fn binding(&self, guest_key: &str, shifted: bool) -> Option<&str>;
-    fn try_set_binding(
-        &mut self,
-        guest_key: &str,
-        shifted: bool,
-        input: &egui::InputState,
-    ) -> Result<bool, Box<dyn std::error::Error>>;
-    fn clear_binding(
-        &mut self,
-        guest_key: &str,
-        shifted: bool,
-    ) -> Result<(), Box<dyn std::error::Error>>;
-    fn reset_all_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    fn map_keys(&mut self, input: &egui::InputState, callback: impl FnMut(KeyEvent));
-}

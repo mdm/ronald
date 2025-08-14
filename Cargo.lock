@@ -3744,6 +3744,7 @@ dependencies = [
  "rfd",
  "ronald-core",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
