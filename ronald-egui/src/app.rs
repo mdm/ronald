@@ -12,7 +12,7 @@ pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default)]
-pub struct RonaldApp<'km, S>
+pub struct RonaldApp<S>
 where
     S: KeyMapStore,
 {
@@ -22,10 +22,10 @@ where
     #[serde(skip)]
     keyboard: Keyboard,
     #[serde(skip)]
-    key_mapper: KeyMapper<'km, S>,
+    key_mapper: KeyMapper<S>,
 }
 
-impl<'km, S> RonaldApp<'km, S>
+impl<S> RonaldApp<S>
 where
     S: KeyMapStore,
 {
@@ -38,7 +38,7 @@ where
         Default::default()
     }
 }
-impl<'km, S> eframe::App for RonaldApp<'km, S>
+impl<S> eframe::App for RonaldApp<S>
 where
     S: KeyMapStore,
 {

@@ -89,7 +89,7 @@ where
         &mut self,
         ctx: &egui::Context,
         ui: Option<&mut egui::Ui>,
-        key_mapper: &mut KeyMapper<'_, K>,
+        key_mapper: &mut KeyMapper<K>,
     )
     where
         K: KeyMapStore,
@@ -157,7 +157,7 @@ where
         }
     }
 
-    fn handle_input<K>(&mut self, input: &egui::InputState, key_mapper: &mut KeyMapper<'_, K>)
+    fn handle_input<K>(&mut self, input: &egui::InputState, key_mapper: &mut KeyMapper<K>)
     where
         K: KeyMapStore,
     {

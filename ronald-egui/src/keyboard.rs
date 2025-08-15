@@ -100,7 +100,7 @@ pub struct Keyboard {
 }
 
 impl Keyboard {
-    pub fn ui<K>(&mut self, ctx: &egui::Context, key_mapper: &mut KeyMapper<'_, K>)
+    pub fn ui<K>(&mut self, ctx: &egui::Context, key_mapper: &mut KeyMapper<K>)
     where
         K: KeyMapStore,
     {
