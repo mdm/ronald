@@ -5,7 +5,7 @@ use ronald_core::system::CPC464;
 
 use crate::frontend::Frontend;
 use crate::key_mapper::KeyMapper;
-use crate::keyboard::Keyboard;
+use crate::key_map_editor::KeyMapEditor;
 
 pub use crate::key_mapper::{KeyMap, KeyMapStore};
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
@@ -20,7 +20,7 @@ where
     #[serde(skip)]
     frontend: Option<Frontend<CPC464>>,
     #[serde(skip)]
-    keyboard: Keyboard,
+    key_map_editor: KeyMapEditor,
     #[serde(skip)]
     key_mapper: KeyMapper<S>,
 }
@@ -73,7 +73,7 @@ where
                 });
                 ui.menu_button("Settings", |ui| {
                     if ui.button("Key Bindings").clicked() {
-                        self.keyboard.show = true;
+                        self.key_map_editor.show = true;
                         ui.close_menu();
                     }
                 });
@@ -106,7 +106,7 @@ where
             }
         }
 
-        self.keyboard.ui(ctx, &mut self.key_mapper);
+        self.key_map_editor.ui(ctx, &mut self.key_mapper);
 
         ctx.request_repaint();
     }
