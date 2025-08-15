@@ -281,12 +281,18 @@ mod vectorize {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct NativeKeyMapStore<'a> {
     key_map_path: &'a str,
     key_map_default_path: &'a str,
     key_map_backup_path: &'a str,
 }
 
+#[cfg(target_arch = "wasm32")]
+#[derive(Default)]
+pub struct WebKeyMapStore;
+
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> Default for NativeKeyMapStore<'a> {
     fn default() -> Self {
         Self {
@@ -297,6 +303,7 @@ impl<'a> Default for NativeKeyMapStore<'a> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> NativeKeyMapStore<'a> {
     fn try_load_from_file(&self, path: &str) -> Result<KeyMap, Box<dyn std::error::Error>> {
         let file = File::open(path)?;
@@ -311,6 +318,7 @@ impl<'a> NativeKeyMapStore<'a> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> KeyMapStore for NativeKeyMapStore<'a> {
     fn load_key_map(&self) -> Result<KeyMap, Box<dyn std::error::Error>> {
         if let Ok(key_map) = self.try_load_from_file(self.key_map_path) {
@@ -357,6 +365,133 @@ impl<'a> KeyMapStore for NativeKeyMapStore<'a> {
 
     fn reset_key_map(&self) -> Result<KeyMap, Box<dyn std::error::Error>> {
         self.try_load_from_file(self.key_map_default_path)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl WebKeyMapStore {
+    fn load_from_server() -> Result<KeyMap, Box<dyn std::error::Error>> {
+        use std::sync::{Arc, Mutex};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        
+        // Create shared state for the async result
+        let result = Arc::new(Mutex::new(None));
+        let done = Arc::new(AtomicBool::new(false));
+        
+        let result_clone = Arc::clone(&result);
+        let done_clone = Arc::clone(&done);
+        
+        // Spawn the async task
+        wasm_bindgen_futures::spawn_local(async move {
+            let fetch_result: Result<KeyMap, Box<dyn std::error::Error>> = async {
+                let response = reqwest::get("./keymap.default.json").await?;
+                
+                if !response.status().is_success() {
+                    return Err(format!("HTTP error: {}", response.status()).into());
+                }
+                
+                let keymap: KeyMap = response.json().await?;
+                Ok(keymap)
+            }.await;
+            
+            // Store the result
+            if let Ok(mut guard) = result_clone.lock() {
+                *guard = Some(fetch_result);
+            }
+            done_clone.store(true, Ordering::Relaxed);
+        });
+        
+        // Busy wait for completion (not ideal but necessary for sync interface)
+        while !done.load(Ordering::Relaxed) {
+            // Give control back to the browser
+            std::thread::yield_now();
+        }
+        
+        // Get the result
+        match result.lock() {
+            Ok(mut guard) => match guard.take() {
+                Some(Ok(keymap)) => Ok(keymap),
+                Some(Err(e)) => Err(format!("Failed to load keymap: {}", e).into()),
+                None => Err("No result available".into()),
+            },
+            Err(_) => Err("Failed to get result".into()),
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl KeyMapStore for WebKeyMapStore {
+    fn load_key_map(&self) -> Result<KeyMap, Box<dyn std::error::Error>> {
+        use web_sys::window;
+
+        let window = window().ok_or("No window available")?;
+        let storage = window
+            .local_storage()
+            .map_err(|_| "Failed to get localStorage")?
+            .ok_or("localStorage not available")?;
+
+        if let Ok(Some(json)) = storage.get_item("ronald_keymap") {
+            match serde_json::from_str(&json) {
+                Ok(key_map) => {
+                    log::info!("Loaded key map from localStorage");
+                    return Ok(key_map);
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to parse stored key map: {}, loading default from server",
+                        e
+                    );
+                    // Fall through to load default from server
+                }
+            }
+        }
+
+        // Load default from server (either no stored keymap or parsing failed)
+        match Self::load_from_server() {
+            Ok(key_map) => {
+                log::info!("Loaded default key map from server");
+                Ok(key_map)
+            }
+            Err(e) => {
+                log::warn!("Failed to load default key map from server: {}", e);
+                log::info!("Using empty key map as fallback");
+                Ok(KeyMap::default())
+            }
+        }
+    }
+
+    fn save_key_map(&self, keymap: &KeyMap) -> Result<(), Box<dyn std::error::Error>> {
+        use web_sys::window;
+
+        let window = window().ok_or("No window available")?;
+        let storage = window
+            .local_storage()
+            .map_err(|_| "Failed to get localStorage")?
+            .ok_or("localStorage not available")?;
+
+        let json = serde_json::to_string(keymap)?;
+        storage
+            .set_item("ronald_keymap", &json)
+            .map_err(|_| "Failed to save to localStorage")?;
+
+        log::info!("Saved key map to localStorage");
+        Ok(())
+    }
+
+    fn reset_key_map(&self) -> Result<KeyMap, Box<dyn std::error::Error>> {
+        use web_sys::window;
+
+        let window = window().ok_or("No window available")?;
+        let storage = window
+            .local_storage()
+            .map_err(|_| "Failed to get localStorage")?
+            .ok_or("localStorage not available")?;
+
+        let _ = storage.remove_item("ronald_keymap");
+        log::info!("Reset key map, loading default from server");
+
+        // Load default from server
+        Self::load_from_server()
     }
 }
 

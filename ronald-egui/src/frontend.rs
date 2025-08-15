@@ -15,7 +15,7 @@ use ronald_core::{
 };
 
 use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
-use crate::key_mapper::{KeyMapper, KeyMapStore};
+use crate::key_mapper::{KeyMapStore, KeyMapper};
 
 mod audio;
 mod video;
@@ -67,6 +67,7 @@ where
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn pick_file_disk_a(&mut self) {
         let picked_file = Arc::clone(&self.picked_file_disk_a);
         spawn(move || {
@@ -85,13 +86,31 @@ where
         });
     }
 
+    #[cfg(target_arch = "wasm32")]
+    pub fn pick_file_disk_a(&mut self) {
+        let picked_file = Arc::clone(&self.picked_file_disk_a);
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Some(file) = rfd::AsyncFileDialog::new()
+                .set_title("Load DSK into Drive A:")
+                .add_filter("DSK Disk Image", &["dsk"])
+                .pick_file()
+                .await
+                && let Ok(mut picked_file) = picked_file.lock()
+            {
+                *picked_file = Some(File {
+                    path_buf: file.file_name().into(),
+                    image: file.read().block_on(),
+                });
+            }
+        });
+    }
+
     pub fn ui<K>(
         &mut self,
         ctx: &egui::Context,
         ui: Option<&mut egui::Ui>,
         key_mapper: &mut KeyMapper<K>,
-    )
-    where
+    ) where
         K: KeyMapStore,
     {
         match ui {

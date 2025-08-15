@@ -11,5 +11,6 @@ keymap.backup.json
 .netlify
 
 /ronald-egui/assets/keys/examples
+/ronald-egui/dist
 
 CLAUDE.md
