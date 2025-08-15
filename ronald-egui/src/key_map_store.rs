@@ -3,7 +3,7 @@ use std::{
     io::{BufReader, BufWriter},
 };
 
-use ronald_egui::{KeyMap, KeyMapStore};
+use crate::app::{KeyMap, KeyMapStore};
 
 pub struct DesktopKeyMapStore<'a> {
     key_map_path: &'a str,

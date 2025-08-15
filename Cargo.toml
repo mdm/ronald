@@ -4,9 +4,7 @@ members = [
   "ronald-core",
   "ronald-cli",
   "ronald-egui",
-  "ronald-desktop",
   "ronald-legacy-web/ronald-wasm",
-  "ronald-web",
 ]
-default-members = ["ronald-cli"]
+default-members = ["ronald-egui"]
 
