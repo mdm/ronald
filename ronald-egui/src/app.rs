@@ -3,16 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use ronald_core::system::CPC464;
 
-use frontend::Frontend;
-use key_mapper::KeyMapper;
-use keyboard::Keyboard;
+use crate::frontend::Frontend;
+use crate::key_mapper::KeyMapper;
+use crate::keyboard::Keyboard;
 
-pub use key_mapper::{KeyMap, KeyMapStore};
+pub use crate::key_mapper::{KeyMap, KeyMapStore};
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
-
-mod frontend;
-mod key_mapper;
-mod keyboard;
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(default)]

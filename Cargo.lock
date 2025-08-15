@@ -3729,26 +3729,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "ronald-desktop"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "eframe",
- "egui",
- "env_logger",
- "log",
- "ronald-egui",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "ronald-egui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "cpal 0.16.0",
  "eframe",
+ "egui",
  "egui_extras",
+ "env_logger",
  "log",
  "pollster 0.4.0",
  "rfd",
@@ -3770,10 +3759,6 @@ dependencies = [
  "wasm-logger",
  "web-sys",
 ]
-
-[[package]]
-name = "ronald-web"
-version = "0.1.0"
 
 [[package]]
 name = "roxmltree"

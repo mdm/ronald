@@ -12,6 +12,7 @@ eframe = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", d
   "wgpu",
   "x11",
 ] }
+egui = { git = "https://github.com/mdm/egui.git", branch = "latest-patched" }
 egui_extras = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", features = ["svg"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0"
@@ -19,3 +20,5 @@ cpal = "0.16.0"
 log = "0.4.27"
 rfd = "0.15.4"
 pollster = "0.4.0"
+env_logger = "0.11.8"
+anyhow = "1.0.98"
