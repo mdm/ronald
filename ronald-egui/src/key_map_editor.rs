@@ -91,7 +91,7 @@ impl Display for KeyLayout {
     }
 }
 
-pub struct Keyboard {
+pub struct KeyMapEditor {
     pub show: bool,
     hovered_key: Option<&'static str>,
     key_definitions: HashMap<&'static str, KeyDefinition>,
@@ -99,7 +99,7 @@ pub struct Keyboard {
     listening: Option<(&'static str, bool)>,
 }
 
-impl Keyboard {
+impl KeyMapEditor {
     pub fn ui<K>(&mut self, ctx: &egui::Context, key_mapper: &mut KeyMapper<K>)
     where
         K: KeyMapStore,
@@ -243,7 +243,7 @@ impl Keyboard {
     }
 }
 
-impl Default for Keyboard {
+impl Default for KeyMapEditor {
     fn default() -> Self {
         Self {
             show: false,

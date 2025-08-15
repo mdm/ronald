@@ -1,7 +1,7 @@
 mod app;
 mod frontend;
 mod key_mapper;
-mod keyboard;
+mod key_map_editor;
 
 use app::{RonaldApp, SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 use key_mapper::NativeKeyMapStore;
