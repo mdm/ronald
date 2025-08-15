@@ -2,10 +2,9 @@ mod app;
 mod frontend;
 mod key_mapper;
 mod keyboard;
-mod key_map_store;
 
 use app::{RonaldApp, SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
-use key_map_store::DesktopKeyMapStore;
+use key_mapper::NativeKeyMapStore;
 
 const SCALE_FACTOR: f32 = 1.5;
 
@@ -32,6 +31,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Ronald - An Amstrad CPC Emulator",
         native_options,
-        Box::new(|cc| Ok(Box::new(RonaldApp::<DesktopKeyMapStore>::new(cc)))),
+        Box::new(|cc| Ok(Box::new(RonaldApp::<NativeKeyMapStore>::new(cc)))),
     )
 }
