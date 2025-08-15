@@ -1,14 +1,18 @@
 use std::{
     collections::HashMap,
     fmt::Display,
-    fs::File,
-    io::{BufReader, BufWriter},
 };
 
-use serde::{Deserialize, Serialize};
 use eframe::egui;
+use serde::{Deserialize, Serialize};
 
 use crate::frontend::KeyEvent;
+
+pub trait KeyMapStore: Default {
+    fn load_key_map(&self) -> Result<KeyMap, Box<dyn std::error::Error>>;
+    fn save_key_map(&self, keymap: &KeyMap) -> Result<(), Box<dyn std::error::Error>>;
+    fn reset_key_map(&self) -> Result<KeyMap, Box<dyn std::error::Error>>;
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct HostKey {
@@ -48,77 +52,28 @@ impl<'c> Default for KeyMapConfig<'c> {
 }
 
 #[derive(Default, Serialize, Deserialize)]
-struct KeyMap {
+pub struct KeyMap {
     #[serde(with = "vectorize")]
     host_to_guest: HashMap<HostKey, Vec<Vec<String>>>,
     guest_to_description: HashMap<String, (Option<String>, Option<String>)>,
 }
 
-impl KeyMap {
-    fn try_from_file<P>(path: P) -> Result<Self, Box<dyn std::error::Error>>
-    where
-        P: AsRef<std::path::Path>,
-    {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
 
-        Ok(serde_json::from_reader(reader)?)
-    }
-
-    fn to_file<P>(&self, path: P) -> Result<(), Box<dyn std::error::Error>>
-    where
-        P: AsRef<std::path::Path>,
-    {
-        let file = File::create(path)?;
-        let writer = BufWriter::new(file);
-
-        serde_json::to_writer(writer, &self)?;
-
-        Ok(())
-    }
-}
-
-pub struct DesktopKeyMapper<'c> {
+pub struct KeyMapper<'c, S> 
+where
+    S: KeyMapStore,
+{
     config: KeyMapConfig<'c>,
     key_map: KeyMap,
+    key_map_store: S,
     pressed_keys: HashMap<egui::Key, HostKey>,
     alt_gr_pressed: bool,
 }
 
-impl<'c> DesktopKeyMapper<'c> {
-    fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let backup =
-            match std::fs::rename(self.config.key_map_path, self.config.key_map_backup_path) {
-                Ok(()) => true,
-                Err(err) => {
-                    if err.kind() == std::io::ErrorKind::NotFound {
-                        false
-                    } else {
-                        Err(err)?
-                    }
-                }
-            };
-
-        self.key_map
-            .to_file(self.config.key_map_path)
-            .inspect(|_| {
-                log::info!("Key map saved successfully.");
-                if backup {
-                    let _ = std::fs::remove_file(self.config.key_map_backup_path);
-                }
-            })
-            .inspect_err(|err| {
-                log::error!("Failed to save key map: {}", &err);
-                if !backup {
-                    return;
-                }
-                if let Ok(()) =
-                    std::fs::rename(self.config.key_map_backup_path, self.config.key_map_path)
-                {
-                    log::info!("Old key map restored successfully.");
-                };
-            })
-    }
+impl<'c, S> KeyMapper<'c, S>
+where
+    S: KeyMapStore,
+{
 
     /// We only treat Shift and AltGr as modifiers as these are commonly used to compose alternate
     /// characters on the host system. All other modifiers are treated as key presses and should be
@@ -201,7 +156,7 @@ impl<'c> DesktopKeyMapper<'c> {
                         .0 = Some(host_key.to_string());
                 }
 
-                self.save()?;
+                self.key_map_store.save_key_map(&self.key_map)?;
 
                 return Ok(true);
             }
@@ -241,16 +196,16 @@ impl<'c> DesktopKeyMapper<'c> {
                 });
         }
 
-        self.save()?;
+        self.key_map_store.save_key_map(&self.key_map)?;
 
         Ok(())
     }
 
     pub fn reset_all_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let key_map = KeyMap::try_from_file("keymap.default.json")?;
+        let key_map = self.key_map_store.reset_key_map()?;
 
         self.key_map = key_map;
-        self.save()?;
+        self.key_map_store.save_key_map(&self.key_map)?;
 
         Ok(())
     }
@@ -296,32 +251,22 @@ impl<'c> DesktopKeyMapper<'c> {
     }
 }
 
-impl<'c> Default for DesktopKeyMapper<'c> {
+impl<'c, S> Default for KeyMapper<'c, S>
+where
+    S: KeyMapStore,
+{
     fn default() -> Self {
         let config = KeyMapConfig::default();
-        if let Ok(key_map) = KeyMap::try_from_file(config.key_map_path) {
-            log::info!("Loaded key map from file.");
-            return Self {
-                config,
-                key_map,
-                pressed_keys: HashMap::new(),
-                alt_gr_pressed: false,
-            };
-        }
-        if let Ok(key_map) = KeyMap::try_from_file(config.key_map_default_path) {
-            log::info!("Loaded default key map from file.");
-            return Self {
-                config,
-                key_map,
-                pressed_keys: HashMap::new(),
-                alt_gr_pressed: false,
-            };
-        }
+        let key_map_store = S::default();
+        let key_map = key_map_store.load_key_map().unwrap_or_else(|_| {
+            log::warn!("No key map found.");
+            KeyMap::default()
+        });
 
-        log::warn!("No key map found.");
         Self {
             config,
-            key_map: KeyMap::default(),
+            key_map,
+            key_map_store,
             pressed_keys: HashMap::new(),
             alt_gr_pressed: false,
         }
@@ -359,3 +304,4 @@ mod vectorize {
 mod tests {
     use super::*;
 }
+
