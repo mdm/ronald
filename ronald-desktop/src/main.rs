@@ -1,5 +1,8 @@
 use ronald_egui::{RonaldApp, SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 
+mod key_map_store;
+use key_map_store::DesktopKeyMapStore;
+
 const SCALE_FACTOR: f32 = 1.5;
 
 fn main() -> eframe::Result {
@@ -25,6 +28,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Ronald - An Amstrad CPC Emulator",
         native_options,
-        Box::new(|cc| Ok(Box::new(RonaldApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(RonaldApp::<DesktopKeyMapStore>::new(cc)))),
     )
 }

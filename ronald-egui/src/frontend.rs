@@ -15,7 +15,7 @@ use ronald_core::{
 };
 
 use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
-use crate::key_mapper::DesktopKeyMapper;
+use crate::key_mapper::{KeyMapper, KeyMapStore};
 
 mod audio;
 mod video;
@@ -85,12 +85,15 @@ where
         });
     }
 
-    pub fn ui(
+    pub fn ui<K>(
         &mut self,
         ctx: &egui::Context,
         ui: Option<&mut egui::Ui>,
-        key_mapper: &mut DesktopKeyMapper,
-    ) {
+        key_mapper: &mut KeyMapper<'_, K>,
+    )
+    where
+        K: KeyMapStore,
+    {
         match ui {
             Some(ui) => {
                 let central_panel_size = ui.max_rect().size();
@@ -154,7 +157,10 @@ where
         }
     }
 
-    fn handle_input(&mut self, input: &egui::InputState, key_mapper: &mut DesktopKeyMapper) {
+    fn handle_input<K>(&mut self, input: &egui::InputState, key_mapper: &mut KeyMapper<'_, K>)
+    where
+        K: KeyMapStore,
+    {
         if self.can_interact {
             key_mapper.map_keys(input, |event| match event {
                 KeyEvent::Pressed(key) => {
@@ -298,4 +304,3 @@ pub enum KeyEvent<'k> {
     Pressed(&'k str),
     Released(&'k str),
 }
-
