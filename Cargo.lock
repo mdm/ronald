@@ -3701,22 +3701,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ronald-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "cpal 0.16.0",
- "env_logger",
- "log",
- "native-dialog",
- "pixels",
- "ronald-core",
- "serde",
- "serde_yaml",
- "winit",
-]
-
-[[package]]
 name = "ronald-core"
 version = "0.1.0"
 dependencies = [
@@ -3744,6 +3728,22 @@ dependencies = [
  "ronald-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "ronald-legacy-pixels"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "cpal 0.16.0",
+ "env_logger",
+ "log",
+ "native-dialog",
+ "pixels",
+ "ronald-core",
+ "serde",
+ "serde_yaml",
+ "winit",
 ]
 
 [[package]]
