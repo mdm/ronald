@@ -1,0 +1,5 @@
+[build]
+filehash = false
+
+[serve]
+port = 8000
