@@ -2,14 +2,14 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
     thread::spawn,
-    time::Instant,
 };
 
 use eframe::{egui, egui_wgpu};
 use pollster::FutureExt as _;
+use web_time::Instant;
 
 use ronald_core::{
-    AudioSink, Driver,
+    Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
     system::System,
 };

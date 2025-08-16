@@ -371,51 +371,24 @@ impl<'a> KeyMapStore for NativeKeyMapStore<'a> {
 #[cfg(target_arch = "wasm32")]
 impl WebKeyMapStore {
     fn load_from_server() -> Result<KeyMap, Box<dyn std::error::Error>> {
-        use std::sync::{Arc, Mutex};
-        use std::sync::atomic::{AtomicBool, Ordering};
+        // Use synchronous XMLHttpRequest since we need sync behavior
+        let xhr = web_sys::XmlHttpRequest::new().map_err(|_| "Failed to create XMLHttpRequest")?;
         
-        // Create shared state for the async result
-        let result = Arc::new(Mutex::new(None));
-        let done = Arc::new(AtomicBool::new(false));
+        xhr.open_with_async("GET", "./keymap.default.json", false)
+            .map_err(|_| "Failed to open request")?;
         
-        let result_clone = Arc::clone(&result);
-        let done_clone = Arc::clone(&done);
-        
-        // Spawn the async task
-        wasm_bindgen_futures::spawn_local(async move {
-            let fetch_result: Result<KeyMap, Box<dyn std::error::Error>> = async {
-                let response = reqwest::get("./keymap.default.json").await?;
-                
-                if !response.status().is_success() {
-                    return Err(format!("HTTP error: {}", response.status()).into());
-                }
-                
-                let keymap: KeyMap = response.json().await?;
-                Ok(keymap)
-            }.await;
-            
-            // Store the result
-            if let Ok(mut guard) = result_clone.lock() {
-                *guard = Some(fetch_result);
-            }
-            done_clone.store(true, Ordering::Relaxed);
-        });
-        
-        // Busy wait for completion (not ideal but necessary for sync interface)
-        while !done.load(Ordering::Relaxed) {
-            // Give control back to the browser
-            std::thread::yield_now();
+        xhr.send().map_err(|_| "Failed to send request")?;
+
+        if xhr.status().map_err(|_| "Failed to get status")? != 200 {
+            return Err(format!("HTTP error: {}", xhr.status().unwrap_or(0)).into());
         }
-        
-        // Get the result
-        match result.lock() {
-            Ok(mut guard) => match guard.take() {
-                Some(Ok(keymap)) => Ok(keymap),
-                Some(Err(e)) => Err(format!("Failed to load keymap: {}", e).into()),
-                None => Err("No result available".into()),
-            },
-            Err(_) => Err("Failed to get result".into()),
-        }
+
+        let response_text = xhr.response_text()
+            .map_err(|_| "Failed to get response text")?
+            .ok_or("No response text")?;
+
+        let keymap: KeyMap = serde_json::from_str(&response_text)?;
+        Ok(keymap)
     }
 }
 
