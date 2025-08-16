@@ -24,7 +24,7 @@ pollster = "0.4.0"
 rfd = "0.15.4"
 serde = { version = "1.0.219", features = ["derive"] }
 web-time = "1.1.0"
-wgpu = { version = "*", features = ["webgpu", "webgl"] }
+wgpu = { version = "24.0", features = ["webgpu", "webgl"] }
 
 # Native-only dependencies
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
