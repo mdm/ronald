@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use ronald_core::system::CPC464;
 
 use crate::frontend::Frontend;
-use crate::key_mapper::KeyMapper;
 use crate::key_map_editor::KeyMapEditor;
+use crate::key_mapper::KeyMapper;
 
 pub use crate::key_mapper::{KeyMap, KeyMapStore};
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(default)]
 pub struct RonaldApp<S>
 where
@@ -26,6 +26,21 @@ where
     key_mapper: KeyMapper<S>,
 }
 
+impl<S> Default for RonaldApp<S>
+where
+    S: KeyMapStore,
+{
+    fn default() -> Self {
+        Self {
+            screen_only: true,
+            dark_mode: true,
+            frontend: None,
+            key_map_editor: KeyMapEditor::default(),
+            key_mapper: KeyMapper::default(),
+        }
+    }
+}
+
 impl<S> RonaldApp<S>
 where
     S: KeyMapStore,
@@ -38,7 +53,8 @@ where
         };
 
         // Apply the saved theme preference
-        cc.egui_ctx.set_theme(egui::Theme::from_dark_mode(app.dark_mode));
+        cc.egui_ctx
+            .set_theme(egui::Theme::from_dark_mode(app.dark_mode));
 
         app
     }
