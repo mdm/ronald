@@ -94,9 +94,15 @@ where
             }
         });
 
+        #[cfg(not(target_arch = "wasm32"))]
         if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend) {
-            let frontend = Frontend::new(render_state);
+            let frontend = Frontend::new_wgpu(render_state);
+            self.frontend = Some(frontend);
+        }
 
+        #[cfg(target_arch = "wasm32")]
+        if self.frontend.is_none() {
+            let frontend = Frontend::new_glow(ctx);
             self.frontend = Some(frontend);
         }
 
