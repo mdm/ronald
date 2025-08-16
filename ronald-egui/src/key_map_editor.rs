@@ -150,9 +150,16 @@ impl KeyMapEditor {
             svg.push_str(r#"</g>"#);
 
             svg.push_str(r#"</svg>"#);
+            
+            // Use a unique URI based on hovered key to avoid texture conflicts
+            let uri = match self.hovered_key {
+                Some(key) => format!("bytes://keyboard_layout_{}.svg", key),
+                None => "bytes://keyboard_layout.svg".to_string(),
+            };
+            
             let response = ui.add(
                 egui::Image::new(egui::ImageSource::Bytes {
-                    uri: "bytes://keyboard_layout.svg".into(),
+                    uri: uri.into(),
                     bytes: svg.into_bytes().into(),
                 })
                 .fit_to_exact_size(egui::vec2(1100.0, 250.0))
@@ -173,7 +180,6 @@ impl KeyMapEditor {
                                 }
                                 _ => {
                                     self.hovered_key = Some(key.name);
-                                    ctx.forget_image("bytes://keyboard_layout.svg");
                                 }
                             }
                         }
@@ -181,7 +187,6 @@ impl KeyMapEditor {
 
                     if !hovering {
                         self.hovered_key = None;
-                        ctx.forget_image("bytes://keyboard_layout.svg");
                     }
                 };
 
