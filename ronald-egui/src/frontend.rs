@@ -4,7 +4,7 @@ use std::{
     thread::spawn,
 };
 
-use eframe::egui;
+use eframe::{egui, egui_wgpu};
 use pollster::FutureExt as _;
 use web_time::Instant;
 
@@ -14,7 +14,7 @@ use ronald_core::{
     system::System,
 };
 
-use crate::frontend::{audio::CpalAudio, video::EguiVideo};
+use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
 use crate::key_mapper::{KeyMapStore, KeyMapper};
 
 mod audio;
@@ -32,7 +32,7 @@ where
 {
     driver: Driver<S>,
     audio: CpalAudio,
-    video: EguiVideo,
+    video: EguiWgpuVideo,
     frame_start: Instant,
     time_available: usize,
     input_test: String,
@@ -47,32 +47,10 @@ impl<S> Frontend<S>
 where
     S: System<'static> + 'static,
 {
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn new_wgpu(render_state: &eframe::egui_wgpu::RenderState) -> Self {
+    pub fn new(render_state: &egui_wgpu::RenderState) -> Self {
         let driver = Driver::new();
         let audio = CpalAudio::new();
-        let video = EguiVideo::new_wgpu(render_state);
-
-        Self {
-            driver,
-            audio,
-            video,
-            frame_start: Instant::now(),
-            time_available: 0,
-            input_test: String::new(),
-            can_interact: true,
-            picked_file_disk_a: Arc::new(Mutex::new(None)),
-            picked_file_disk_b: Arc::new(Mutex::new(None)),
-            picked_file_tape: Arc::new(Mutex::new(None)),
-            dropped_files: Vec::new(),
-        }
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn new_glow(ctx: &egui::Context) -> Self {
-        let driver = Driver::new();
-        let audio = CpalAudio::new();
-        let video = EguiVideo::new_glow(ctx);
+        let video = EguiWgpuVideo::new(render_state);
 
         Self {
             driver,

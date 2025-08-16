@@ -36,7 +36,7 @@ eframe = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", d
   "accesskit",
   "default_fonts",
   "persistence",
-  "glow",
+  "wgpu",
 ] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
