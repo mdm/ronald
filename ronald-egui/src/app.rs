@@ -17,6 +17,7 @@ where
     S: KeyMapStore,
 {
     screen_only: bool,
+    dark_mode: bool,
     #[serde(skip)]
     frontend: Option<Frontend<CPC464>>,
     #[serde(skip)]
@@ -30,12 +31,16 @@ where
     S: KeyMapStore,
 {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // TODO: figure out how to skip inital window size and store screen_only
-        // if let Some(storage) = cc.storage {
-        //     return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        // }
+        let app: Self = if let Some(storage) = cc.storage {
+            eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
+        } else {
+            Default::default()
+        };
 
-        Default::default()
+        // Apply the saved theme preference
+        cc.egui_ctx.set_theme(egui::Theme::from_dark_mode(app.dark_mode));
+
+        app
     }
 }
 impl<S> eframe::App for RonaldApp<S>
@@ -72,6 +77,24 @@ where
                     }
                 });
                 ui.menu_button("Settings", |ui| {
+                    ui.menu_button("Theme", |ui| {
+                        if ui
+                            .add(egui::Button::new("Light").selected(!self.dark_mode))
+                            .clicked()
+                        {
+                            self.dark_mode = false;
+                            ui.ctx().set_theme(egui::Theme::Light);
+                            ui.close_menu();
+                        }
+                        if ui
+                            .add(egui::Button::new("Dark").selected(self.dark_mode))
+                            .clicked()
+                        {
+                            self.dark_mode = true;
+                            ui.ctx().set_theme(egui::Theme::Dark);
+                            ui.close_menu();
+                        }
+                    });
                     if ui.button("Key Bindings").clicked() {
                         self.key_map_editor.show = true;
                         ui.close_menu();
@@ -115,5 +138,9 @@ where
         self.key_map_editor.ui(ctx, &mut self.key_mapper);
 
         ctx.request_repaint();
+    }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
     }
 }
