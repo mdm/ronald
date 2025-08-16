@@ -111,6 +111,14 @@ impl KeyMapEditor {
         let modal = egui::Modal::new("key_bindings_modal".into()).show(ctx, |ui| {
             ui.label("Click keys to set bindings. Shift-click to set bindings for shifted keys. The guest system's Shift keys themselves cannot be bound.");
 
+            // Get theme-appropriate colors
+            let style = ui.style();
+            let stroke_color = style.visuals.text_color().to_hex();
+            let fill_color = style.visuals.text_color().to_hex();
+            let hover_stroke_color = style.visuals.strong_text_color().to_hex();
+            let hover_fill_color = style.visuals.selection.bg_fill.to_hex();
+            let hover_text_color = style.visuals.selection.stroke.color.to_hex();
+
             let mut svg = String::new();
             svg.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2200 500">"#);
             for key in &self.key_layouts {
@@ -120,28 +128,24 @@ impl KeyMapEditor {
 
                 match self.hovered_key {
                     Some(hovered_key) if hovered_key == key.name => {
-                        svg.push_str(r#"<g stroke="white" fill="white">"#);
+                        svg.push_str(&format!(r#"<g stroke="{}" fill="{}">"#, hover_stroke_color, hover_fill_color));
                         svg.push_str(key.to_string().as_str());
                         svg.push_str(r#"</g>"#);
-                        svg.push_str(r#"<g stroke=""#);
-                        svg.push_str(&egui::style::Widgets::dark().noninteractive.bg_fill.to_hex());
-                        svg.push_str(r#"" fill=""#);
-                        svg.push_str(&egui::style::Widgets::dark().noninteractive.bg_fill.to_hex());
-                        svg.push_str(r#"">"#);
+                        svg.push_str(&format!(r#"<g stroke="{}" fill="{}">"#, hover_text_color, hover_text_color));
                         svg.push_str(key.label);
                         svg.push_str(r#"</g>"#);
                     }
                     _ => {
-                        svg.push_str(r#"<g stroke="white" fill="transparent">"#);
+                        svg.push_str(&format!(r#"<g stroke="{}" fill="transparent">"#, stroke_color));
                         svg.push_str(key.to_string().as_str());
                         svg.push_str(r#"</g>"#);
-                        svg.push_str(r#"<g stroke="white" fill="white">"#);
+                        svg.push_str(&format!(r#"<g stroke="{}" fill="{}">"#, fill_color, fill_color));
                         svg.push_str(key.label);
                         svg.push_str(r#"</g>"#);
                     }
                 }
             }
-            svg.push_str(r#"<g stroke="white" fill="white">"#);
+            svg.push_str(&format!(r#"<g stroke="{}" fill="{}">"#, fill_color, fill_color));
             svg.push_str(include_str!("../assets/keys/JoystickIcon.partial.svg"));
             svg.push_str(r#"</g>"#);
 
