@@ -3921,6 +3921,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
+ "wgpu 0.19.4",
 ]
 
 [[package]]
