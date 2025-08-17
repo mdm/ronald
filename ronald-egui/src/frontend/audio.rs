@@ -1,6 +1,7 @@
 use std::sync::mpsc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use web_time::Instant;
 
 use ronald_core::AudioSink;
 
@@ -13,15 +14,15 @@ pub struct CpalAudio {
 impl CpalAudio {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
-        let mut web_audio = CpalAudio {
+        let mut audio = CpalAudio {
             sample_queue: tx,
             audio_stream: None,
             sample_rate: None,
         };
 
-        web_audio.init_audio_stream(rx);
+        audio.init_audio_stream(rx);
 
-        web_audio
+        audio
     }
 
     fn init_audio_stream(&mut self, sample_queue: mpsc::Receiver<f32>) {
@@ -70,7 +71,7 @@ impl CpalAudio {
 
         let mut last_sample = 0.0;
 
-        let mut start = std::time::Instant::now();
+        let mut start = Instant::now();
         let mut frames = 0;
         let mut repeated_frames = 0;
 
@@ -103,7 +104,7 @@ impl CpalAudio {
                     log::debug!(
                         "Rendered {frames} audio samples per second ({repeated_frames} repeated)"
                     );
-                    start = std::time::Instant::now();
+                    start = Instant::now();
                     frames = 0;
                     repeated_frames = 0;
                 }
