@@ -8,8 +8,11 @@ use eframe::{egui, egui_wgpu};
 use pollster::FutureExt as _;
 use web_time::Instant;
 
+#[cfg(target_arch = "wasm32")]
+use web_sys;
+
 use ronald_core::{
-    Driver,
+    AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
     system::System,
 };
@@ -37,6 +40,7 @@ where
     time_available: usize,
     input_test: String,
     can_interact: bool,
+    paused: bool,
     picked_file_disk_a: Arc<Mutex<Option<File>>>,
     picked_file_disk_b: Arc<Mutex<Option<File>>>,
     picked_file_tape: Arc<Mutex<Option<File>>>,
@@ -60,6 +64,7 @@ where
             time_available: 0,
             input_test: String::new(),
             can_interact: true,
+            paused: false,
             picked_file_disk_a: Arc::new(Mutex::new(None)),
             picked_file_disk_b: Arc::new(Mutex::new(None)),
             picked_file_tape: Arc::new(Mutex::new(None)),
@@ -143,7 +148,18 @@ where
                 self.handle_dropped_files(ctx);
                 self.handle_picked_files();
 
-                self.step_emulation(); // TODO: step only when accepting input (stop audio?)
+                // Focus-based pause/resume logic (only on web for tab switching)
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let has_focus = self.has_window_focus();
+                    if has_focus {
+                        self.resume();
+                    } else {
+                        self.pause();
+                    }
+                }
+
+                self.step_emulation();
                 self.draw_framebuffer(ctx, ui, size);
             }
             None => {
@@ -165,7 +181,18 @@ where
                         self.handle_dropped_files(ctx);
                         self.handle_picked_files();
 
-                        self.step_emulation(); // TODO: step only when accepting input (stop audio?)
+                        // Focus-based pause/resume logic (only on web for tab switching)
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            let has_focus = self.has_window_focus();
+                            if !has_focus && !self.paused {
+                                self.pause();
+                            } else if has_focus && self.paused {
+                                self.resume();
+                            }
+                        }
+
+                        self.step_emulation();
                         self.draw_framebuffer(ctx, ui, size);
                     });
 
@@ -292,6 +319,10 @@ where
     }
 
     fn step_emulation(&mut self) {
+        if self.paused {
+            return;
+        }
+
         log::trace!("Starting new frame");
         let start = Instant::now();
 
@@ -316,6 +347,40 @@ where
             "Frame emulated in {} microseconds",
             start.elapsed().as_micros()
         );
+    }
+
+    fn pause(&mut self) {
+        if !self.paused {
+            self.paused = true;
+            self.audio.pause_audio();
+            log::debug!("Emulation paused");
+        }
+    }
+
+    fn resume(&mut self) {
+        if self.paused {
+            self.paused = false;
+            self.audio.play_audio();
+            self.frame_start = Instant::now(); // Reset timing
+            log::debug!("Emulation resumed");
+        }
+    }
+
+    fn has_window_focus(&self) -> bool {
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(window) = web_sys::window() {
+                if let Some(document) = window.document() {
+                    return document.has_focus().unwrap_or(true);
+                }
+            }
+            true
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // On native, always consider window focused
+            true
+        }
     }
 }
 
