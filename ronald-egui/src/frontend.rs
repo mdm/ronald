@@ -384,6 +384,7 @@ where
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum KeyEvent<'k> {
     Pressed(&'k str),
     Released(&'k str),
