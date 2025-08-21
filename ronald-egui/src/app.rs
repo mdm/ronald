@@ -119,30 +119,35 @@ where
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(frontend) = &mut self.frontend {
-                if self.screen_only {
-                    ui.with_layout(
-                        egui::Layout::centered_and_justified(egui::Direction::LeftToRight)
-                            .with_cross_align(egui::Align::TOP),
-                        |ui| {
-                            frontend.ui(ctx, Some(ui), &mut self.key_mapper);
-                        },
-                    );
-                }
-            }
-        });
-
         if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend) {
             let frontend = Frontend::new(render_state);
 
             self.frontend = Some(frontend);
         }
 
-        if let Some(frontend) = &mut self.frontend {
-            if !self.screen_only {
-                frontend.ui(ctx, None, &mut self.key_mapper);
+        egui::CentralPanel::default().show(ctx, |ui| {
+            if let Some(frontend) = &mut self.frontend
+                && self.screen_only
+            {
+                ui.with_layout(
+                    egui::Layout::centered_and_justified(egui::Direction::LeftToRight)
+                        .with_cross_align(egui::Align::TOP),
+                    |ui| {
+                        frontend.ui(
+                            ctx,
+                            Some(ui),
+                            &mut self.key_mapper,
+                            !self.key_map_editor.show,
+                        );
+                    },
+                );
             }
+        });
+
+        if let Some(frontend) = &mut self.frontend
+            && !self.screen_only
+        {
+            frontend.ui(ctx, None, &mut self.key_mapper, !self.key_map_editor.show);
         }
 
         self.key_map_editor.ui(ctx, &mut self.key_mapper);

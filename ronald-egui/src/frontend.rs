@@ -115,6 +115,7 @@ where
         ctx: &egui::Context,
         ui: Option<&mut egui::Ui>,
         key_mapper: &mut KeyMapper<K>,
+        can_interact: bool,
     ) where
         K: KeyMapStore,
     {
@@ -137,9 +138,8 @@ where
                         central_panel_size.y,
                     )
                 };
-                if let Some(pos) = ctx.pointer_interact_pos() {
-                    self.can_interact = ctx.layer_id_at(pos) == Some(egui::LayerId::background());
-                }
+
+                self.can_interact = can_interact && self.dropped_files.is_empty();
 
                 if !ctx.wants_keyboard_input() {
                     ui.input(|input| self.handle_input(input, key_mapper));
@@ -151,12 +151,17 @@ where
                 // Focus-based pause/resume logic (only on web for tab switching)
                 #[cfg(target_arch = "wasm32")]
                 {
-                    let has_focus = self.has_window_focus();
-                    if has_focus {
+                    if self.has_window_focus() {
                         self.resume();
                     } else {
                         self.pause();
                     }
+                }
+
+                if self.can_interact {
+                    self.resume();
+                } else {
+                    self.pause();
                 }
 
                 self.step_emulation();
@@ -170,9 +175,9 @@ where
                     .resizable(false)
                     .default_size(size)
                     .show(ctx, |ui| {
-                        if let Some(pos) = ctx.pointer_interact_pos() {
-                            self.can_interact = ctx.layer_id_at(pos) == Some(ui.layer_id());
-                        }
+                        let is_active_window = ctx.top_layer_id() == Some(ui.layer_id());
+                        self.can_interact =
+                            is_active_window && can_interact && self.dropped_files.is_empty();
 
                         if !ctx.wants_keyboard_input() {
                             ui.input(|input| self.handle_input(input, key_mapper));
@@ -184,12 +189,17 @@ where
                         // Focus-based pause/resume logic (only on web for tab switching)
                         #[cfg(target_arch = "wasm32")]
                         {
-                            let has_focus = self.has_window_focus();
-                            if !has_focus && !self.paused {
-                                self.pause();
-                            } else if has_focus && self.paused {
+                            if self.has_window_focus() {
                                 self.resume();
+                            } else {
+                                self.pause();
                             }
+                        }
+
+                        if self.can_interact {
+                            self.resume();
+                        } else {
+                            self.pause();
                         }
 
                         self.step_emulation();
