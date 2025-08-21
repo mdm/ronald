@@ -282,6 +282,40 @@ mod vectorize {
         let container: Vec<_> = serde::Deserialize::deserialize(des)?;
         Ok(T::from_iter(container))
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::collections::HashMap;
+        use serde_json;
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+        struct TestKey {
+            id: u32,
+            flag: bool,
+        }
+
+        #[test]
+        fn test_serialize_empty_map() {
+            let map: HashMap<TestKey, i32> = HashMap::new();
+            let serialized = serde_json::to_string(&map).unwrap();
+            let expected = "[]";
+            assert_eq!(serialized, expected);
+        }
+
+        #[test]
+        fn test_round_trip_serialization() {
+            let mut original = HashMap::new();
+            original.insert(TestKey { id: 10, flag: true }, 999);
+            original.insert(TestKey { id: 20, flag: false }, -50);
+            original.insert(TestKey { id: 30, flag: true }, 0);
+            
+            let serialized = serde_json::to_string(&original).unwrap();
+            let deserialized: HashMap<TestKey, i32> = serde_json::from_str(&serialized).unwrap();
+            
+            assert_eq!(original, deserialized);
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
