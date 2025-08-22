@@ -120,9 +120,28 @@ where
         });
 
         if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend) {
-            let frontend = Frontend::new(render_state);
-
-            self.frontend = Some(frontend);
+            // On WASM, show a welcome modal to work around the fact that browser audio contexts
+            // cannot be started without user interaction.
+            #[cfg(target_arch = "wasm32")]
+            egui::Modal::new("welcome_modal".into()).show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(10.0);
+                    ui.label("Welcome to Ronald");
+                    ui.add_space(10.0);
+                    ui.label("This emulator recreates the classic Amstrad CPC.");
+                    ui.add_space(20.0);
+                    if ui.button("Start Emulator").clicked() {
+                        let frontend = Frontend::new(render_state);
+                        self.frontend = Some(frontend);
+                    }
+                    ui.add_space(10.0);
+                });
+            });
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let frontend = Frontend::new(render_state);
+                self.frontend = Some(frontend);
+            }
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {

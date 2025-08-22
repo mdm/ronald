@@ -54,6 +54,11 @@ where
     pub fn new(render_state: &egui_wgpu::RenderState) -> Self {
         let driver = Driver::new();
         let audio = CpalAudio::new();
+        #[cfg(target_arch = "wasm32")]
+        {
+            // On WASM we need to ensure audio is played immediately
+            audio.play_audio();
+        }
         let video = EguiWgpuVideo::new(render_state);
 
         Self {
