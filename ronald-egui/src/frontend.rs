@@ -148,16 +148,16 @@ where
                 self.handle_dropped_files(ctx);
                 self.handle_picked_files();
 
-                // Focus-based pause/resume logic (only on web for tab switching)
                 #[cfg(target_arch = "wasm32")]
                 {
-                    if self.has_window_focus() {
+                    if self.has_window_focus() && self.can_interact {
                         self.resume();
                     } else {
                         self.pause();
                     }
                 }
 
+                #[cfg(not(target_arch = "wasm32"))]
                 if self.can_interact {
                     self.resume();
                 } else {
@@ -186,16 +186,16 @@ where
                         self.handle_dropped_files(ctx);
                         self.handle_picked_files();
 
-                        // Focus-based pause/resume logic (only on web for tab switching)
                         #[cfg(target_arch = "wasm32")]
                         {
-                            if self.has_window_focus() {
+                            if self.has_window_focus() && self.can_interact {
                                 self.resume();
                             } else {
                                 self.pause();
                             }
                         }
 
+                        #[cfg(not(target_arch = "wasm32"))]
                         if self.can_interact {
                             self.resume();
                         } else {
