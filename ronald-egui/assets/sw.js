@@ -2,8 +2,8 @@ var cacheName = 'ronald-emulator-pwa';
 var filesToCache = [
   './',
   './index.html',
-  './ronald_egui.js',
-  './ronald_egui_bg.wasm',
+  './ronald-egui.js',
+  './ronald-egui_bg.wasm',
 ];
 
 /* Start the service worker and cache all of the app's content */
