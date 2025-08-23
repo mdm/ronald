@@ -1,6 +1,5 @@
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
     thread::spawn,
 };
 
@@ -19,6 +18,7 @@ use ronald_core::{
 
 use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
 use crate::key_mapper::{KeyMapStore, KeyMapper};
+use crate::utils::sync::{Shared, SharedExt, shared};
 
 mod audio;
 mod video;
@@ -41,9 +41,9 @@ where
     input_test: String,
     can_interact: bool,
     paused: bool,
-    picked_file_disk_a: Arc<Mutex<Option<File>>>,
-    picked_file_disk_b: Arc<Mutex<Option<File>>>,
-    picked_file_tape: Arc<Mutex<Option<File>>>,
+    picked_file_disk_a: Shared<Option<File>>,
+    picked_file_disk_b: Shared<Option<File>>,
+    picked_file_tape: Shared<Option<File>>,
     dropped_files: Vec<File>,
 }
 
@@ -70,27 +70,28 @@ where
             input_test: String::new(),
             can_interact: true,
             paused: false,
-            picked_file_disk_a: Arc::new(Mutex::new(None)),
-            picked_file_disk_b: Arc::new(Mutex::new(None)),
-            picked_file_tape: Arc::new(Mutex::new(None)),
+            picked_file_disk_a: shared(None),
+            picked_file_disk_b: shared(None),
+            picked_file_tape: shared(None),
             dropped_files: Vec::new(),
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn pick_file_disk_a(&mut self) {
-        let picked_file = Arc::clone(&self.picked_file_disk_a);
+        let picked_file = self.picked_file_disk_a.clone();
         spawn(move || {
             if let Some(file) = rfd::AsyncFileDialog::new()
                 .set_title("Load DSK into Drive A:")
                 .add_filter("DSK Disk Image", &["dsk"])
                 .pick_file()
                 .block_on()
-                && let Ok(mut picked_file) = picked_file.lock()
             {
-                *picked_file = Some(File {
-                    path_buf: file.path().to_path_buf(),
-                    image: file.read().block_on(),
+                picked_file.with_mut(|f| {
+                    *f = Some(File {
+                        path_buf: file.path().to_path_buf(),
+                        image: file.read().block_on(),
+                    });
                 });
             }
         });
@@ -98,18 +99,19 @@ where
 
     #[cfg(target_arch = "wasm32")]
     pub fn pick_file_disk_a(&mut self) {
-        let picked_file = Arc::clone(&self.picked_file_disk_a);
+        let picked_file = self.picked_file_disk_a.clone();
         wasm_bindgen_futures::spawn_local(async move {
             if let Some(file) = rfd::AsyncFileDialog::new()
                 .set_title("Load DSK into Drive A:")
                 .add_filter("DSK Disk Image", &["dsk"])
                 .pick_file()
                 .await
-                && let Ok(mut picked_file) = picked_file.lock()
             {
-                *picked_file = Some(File {
-                    path_buf: file.file_name().into(),
-                    image: file.read().block_on(),
+                picked_file.with_mut(|f| {
+                    *f = Some(File {
+                        path_buf: file.file_name().into(),
+                        image: file.read().block_on(),
+                    });
                 });
             }
         });
@@ -277,24 +279,24 @@ where
                         ui.label(format!("Choose disk drive to load \"{filename}\" into:"));
 
                         ui.horizontal(|ui| {
-                            if ui.button("Drive A").clicked()
-                                && let Ok(mut picked_file) = self.picked_file_disk_a.lock()
-                            {
-                                *picked_file = self.dropped_files.pop();
+                            if ui.button("Drive A").clicked() {
+                                self.picked_file_disk_a.with_mut(|f| {
+                                    *f = self.dropped_files.pop();
+                                });
                             }
 
-                            if ui.button("Drive B").clicked()
-                                && let Ok(mut picked_file) = self.picked_file_disk_b.lock()
-                            {
-                                *picked_file = self.dropped_files.pop();
+                            if ui.button("Drive B").clicked() {
+                                self.picked_file_disk_b.with_mut(|f| {
+                                    *f = self.dropped_files.pop();
+                                });
                             }
                         });
                     });
                 }
                 Some("cdt") => {
-                    if let Ok(mut picked_file) = self.picked_file_tape.try_lock() {
-                        *picked_file = self.dropped_files.pop();
-                    }
+                    self.picked_file_tape.try_with_mut(|f| {
+                        *f = self.dropped_files.pop();
+                    });
                 }
                 _ => {}
             }
@@ -302,23 +304,17 @@ where
     }
 
     fn handle_picked_files(&mut self) {
-        if let Ok(mut picked_file) = self.picked_file_disk_a.try_lock()
-            && let Some(picked_file) = picked_file.take()
-        {
+        if let Some(picked_file) = self.picked_file_disk_a.try_with_mut(|f| f.take()).flatten() {
             self.driver
                 .load_disk(0, picked_file.image, picked_file.path_buf);
         }
 
-        if let Ok(mut picked_file) = self.picked_file_disk_b.try_lock()
-            && let Some(picked_file) = picked_file.take()
-        {
+        if let Some(picked_file) = self.picked_file_disk_b.try_with_mut(|f| f.take()).flatten() {
             self.driver
                 .load_disk(1, picked_file.image, picked_file.path_buf);
         }
 
-        if let Ok(mut picked_file) = self.picked_file_tape.try_lock()
-            && let Some(picked_file) = picked_file.take()
-        {
+        if let Some(picked_file) = self.picked_file_tape.try_with_mut(|f| f.take()).flatten() {
             todo!("handle tape loading");
         }
     }
