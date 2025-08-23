@@ -43,3 +43,7 @@ web-sys = { version = "0.3", features = [
   "HtmlCanvasElement",
   "XmlHttpRequest",
 ] }
+
+[dev-dependencies]
+kittest = "0.2"
+egui_kittest = { git = "https://github.com/mdm/egui.git", branch = "latest-patched" }
