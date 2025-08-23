@@ -16,7 +16,7 @@ pub struct RonaldApp<S>
 where
     S: KeyMapStore,
 {
-    screen_only: bool,
+    workbench: bool,
     dark_mode: bool,
     #[serde(skip)]
     frontend: Option<Frontend<CPC464>>,
@@ -32,7 +32,7 @@ where
 {
     fn default() -> Self {
         Self {
-            screen_only: true,
+            workbench: false,
             dark_mode: true,
             frontend: None,
             key_map_editor: KeyMapEditor::default(),
@@ -70,18 +70,25 @@ where
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("View", |ui| {
                     if ui
-                        .add(egui::Button::new("Emulator Only").selected(self.screen_only))
+                        .add(egui::Button::new("Emulator Only").selected(!self.workbench))
                         .clicked()
                     {
-                        self.screen_only = true;
+                        self.workbench = false;
                         ui.close_menu();
                     }
                     if ui
-                        .add(egui::Button::new("Workbench").selected(!self.screen_only))
+                        .add(egui::Button::new("Workbench").selected(self.workbench))
                         .clicked()
                     {
-                        self.screen_only = false;
+                        self.workbench = true;
                         ui.close_menu();
+                    }
+                    if self.workbench {
+                        ui.separator();
+                        if ui.button("Organize Windows").clicked() {
+                            ui.ctx().memory_mut(|mem| mem.reset_areas());
+                            ui.close_menu();
+                        }
                     }
                 });
                 ui.menu_button("Media", |ui| {
@@ -158,7 +165,7 @@ where
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(frontend) = &mut self.frontend
-                && self.screen_only
+                && !self.workbench
             {
                 ui.with_layout(
                     egui::Layout::centered_and_justified(egui::Direction::LeftToRight)
@@ -176,7 +183,7 @@ where
         });
 
         if let Some(frontend) = &mut self.frontend
-            && !self.screen_only
+            && self.workbench
         {
             frontend.ui(ctx, None, &mut self.key_mapper, !self.key_map_editor.show);
         }
