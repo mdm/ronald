@@ -157,53 +157,95 @@ impl KeyMapEditor {
                 None => "bytes://keyboard_layout.svg".to_string(),
             };
             
-            let response = ui.add(
+            let image_response = ui.add(
                 egui::Image::new(egui::ImageSource::Bytes {
                     uri: uri.into(),
                     bytes: svg.into_bytes().into(),
                 })
                 .fit_to_exact_size(egui::vec2(1100.0, 250.0))
-                .sense(egui::Sense::click()),
             );
 
-            if self.listening.is_none() {
-                if let Some(pos) = ctx.pointer_hover_pos() {
-                    let pos = pos - response.rect.left_top();
-                    let pos = egui::Pos2::new(2.0 * pos.x, 2.0 * pos.y);
-                    let mut hovering = false;
-                    for key in &self.key_layouts {
-                        if key.contains_pos(pos) {
-                            hovering = true;
-                            match self.hovered_key {
-                                Some(hovered_key) if hovered_key == key.name => {
-                                    // Already hovered, do nothing
-                                }
-                                _ => {
-                                    self.hovered_key = Some(key.name);
-                                }
-                            }
-                        }
-                    }
-
-                    if !hovering {
-                        self.hovered_key = None;
-                    }
+            // Allocate individual key rectangles for accessibility and interaction
+            let image_rect = image_response.rect;
+            let scale_x = image_rect.width() / 2200.0; // SVG viewBox is 2200x500
+            let scale_y = image_rect.height() / 500.0;
+            
+            // Clear hover state at beginning of each frame
+            self.hovered_key = None;
+            
+            for key_layout in &self.key_layouts {
+                // Skip Shift keys as they cannot be bound
+                if key_layout.name == "Shift" {
+                    continue;
+                }
+                
+                // Calculate scaled position and size
+                let key_x = image_rect.left() + (key_layout.x as f32 + PADDING as f32) * scale_x;
+                let key_y = image_rect.top() + (key_layout.y as f32 + PADDING as f32) * scale_y;
+                
+                let (key_width, key_height) = if key_layout.name == "Enter" {
+                    // Enter key: full height, upper part width
+                    (
+                        (key_layout.width as f32 - 2.0 * PADDING as f32) * scale_x,
+                        (2.0 * SIZE as f32 - 2.0 * PADDING as f32) * scale_y,
+                    )
+                } else {
+                    // Regular keys
+                    (
+                        (key_layout.width as f32 - 2.0 * PADDING as f32) * scale_x,
+                        (SIZE as f32 - 2.0 * PADDING as f32) * scale_y,
+                    )
                 };
-
-                if let Some(hovered_key) = self.hovered_key && response.clicked() {
-                    log::debug!("Clicked on keyboard layout, starting key binding listener");
+                
+                let key_rect = egui::Rect::from_min_size(
+                    egui::pos2(key_x, key_y),
+                    egui::vec2(key_width, key_height),
+                );
+                
+                let key_response = ui.allocate_rect(key_rect, egui::Sense::hover().union(egui::Sense::click()));
+                
+                // Add accessibility label
+                key_response.widget_info(|| egui::WidgetInfo::labeled(
+                    egui::WidgetType::Button,
+                    true,
+                    format!("{} key", key_layout.name)
+                ));
+                
+                // For Enter key, use precise L-shaped hit detection
+                let is_valid_hit = if key_layout.name == "Enter" {
+                    if let Some(cursor_pos) = ctx.pointer_interact_pos() {
+                        // Convert cursor position back to SVG coordinates
+                        let svg_x = (cursor_pos.x - image_rect.left()) / scale_x;
+                        let svg_y = (cursor_pos.y - image_rect.top()) / scale_y;
+                        let svg_pos = egui::Pos2::new(svg_x, svg_y);
+                        key_layout.contains_pos(svg_pos)
+                    } else {
+                        false
+                    }
+                } else {
+                    true
+                };
+                
+                // Handle click events
+                if self.listening.is_none() && key_response.clicked() && is_valid_hit {
+                    log::debug!("Clicked on key: {}", key_layout.name);
                     let shiftable = self
                         .key_definitions
-                        .get(hovered_key)
+                        .get(key_layout.name)
                         .expect("Key not found in KEYS")
                         .shiftable;
-                    let shift_held =
-                        ui.input(|input| input.modifiers.contains(egui::Modifiers::SHIFT));
+                    let shift_held = ui.input(|input| input.modifiers.contains(egui::Modifiers::SHIFT));
+                    
                     if shiftable && shift_held {
-                        self.listening = Some((hovered_key, true));
+                        self.listening = Some((key_layout.name, true));
                     } else if !shift_held {
-                        self.listening = Some((hovered_key, false));
+                        self.listening = Some((key_layout.name, false));
                     }
+                }
+                
+                // Handle hover state
+                if key_response.hovered() && is_valid_hit {
+                    self.hovered_key = Some(key_layout.name);
                 }
             }
 
