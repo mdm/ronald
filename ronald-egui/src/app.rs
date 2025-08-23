@@ -91,6 +91,18 @@ where
                             frontend.pick_file_disk_a();
                         }
                     }
+                    if ui.button("Drive B: Load DSK").clicked() {
+                        ui.close_menu();
+                        if let Some(frontend) = &mut self.frontend {
+                            frontend.pick_file_disk_b();
+                        }
+                    }
+                    if ui.button("Tape: Load CDT").clicked() {
+                        ui.close_menu();
+                        if let Some(frontend) = &mut self.frontend {
+                            frontend.pick_file_tape();
+                        }
+                    }
                 });
                 ui.menu_button("Settings", |ui| {
                     ui.menu_button("Theme", |ui| {

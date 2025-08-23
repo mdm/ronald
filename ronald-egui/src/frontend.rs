@@ -78,12 +78,14 @@ where
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn pick_file_disk_a(&mut self) {
-        let picked_file = self.picked_file_disk_a.clone();
+    fn pick_file_internal(&mut self, title: &str, filter_name: &str, extension: &str, picked_file: Shared<Option<File>>) {
+        let title = title.to_string();
+        let filter_name = filter_name.to_string();
+        let extension = extension.to_string();
         spawn(move || {
             if let Some(file) = rfd::AsyncFileDialog::new()
-                .set_title("Load DSK into Drive A:")
-                .add_filter("DSK Disk Image", &["dsk"])
+                .set_title(&title)
+                .add_filter(&filter_name, &[&extension])
                 .pick_file()
                 .block_on()
             {
@@ -98,12 +100,14 @@ where
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn pick_file_disk_a(&mut self) {
-        let picked_file = self.picked_file_disk_a.clone();
+    fn pick_file_internal(&mut self, title: &str, filter_name: &str, extension: &str, picked_file: Shared<Option<File>>) {
+        let title = title.to_string();
+        let filter_name = filter_name.to_string();
+        let extension = extension.to_string();
         wasm_bindgen_futures::spawn_local(async move {
             if let Some(file) = rfd::AsyncFileDialog::new()
-                .set_title("Load DSK into Drive A:")
-                .add_filter("DSK Disk Image", &["dsk"])
+                .set_title(&title)
+                .add_filter(&filter_name, &[&extension])
                 .pick_file()
                 .await
             {
@@ -116,6 +120,18 @@ where
                 });
             }
         });
+    }
+
+    pub fn pick_file_disk_a(&mut self) {
+        self.pick_file_internal("Load DSK into Drive A:", "DSK Disk Image", "dsk", self.picked_file_disk_a.clone());
+    }
+
+    pub fn pick_file_disk_b(&mut self) {
+        self.pick_file_internal("Load DSK into Drive B:", "DSK Disk Image", "dsk", self.picked_file_disk_b.clone());
+    }
+
+    pub fn pick_file_tape(&mut self) {
+        self.pick_file_internal("Load Tape:", "CDT Tape Image", "cdt", self.picked_file_tape.clone());
     }
 
     pub fn ui<K>(
