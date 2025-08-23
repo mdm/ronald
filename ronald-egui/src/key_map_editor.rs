@@ -831,3 +831,433 @@ impl Default for KeyMapEditor {
         }
     }
 }
+
+#[cfg(test)]
+mod gui_tests {
+    use super::*;
+    use crate::key_mapper::{KeyMapper, KeyMapStore, KeyMap};
+    use egui::accesskit::Role;
+    use egui_kittest::{Harness, kittest::Queryable};
+    
+    #[derive(Default)]
+    struct MockKeyMapStore;
+
+    impl KeyMapStore for MockKeyMapStore {
+        fn load_key_map(&self) -> Result<KeyMap, Box<dyn std::error::Error>> {
+            Ok(KeyMap::default())
+        }
+
+        fn save_key_map(&self, _keymap: &KeyMap) -> Result<(), Box<dyn std::error::Error>> {
+            Ok(())
+        }
+
+        fn reset_key_map(&self) -> Result<KeyMap, Box<dyn std::error::Error>> {
+            Ok(KeyMap::default())
+        }
+    }
+
+    fn create_input_state_with_key(key: egui::Key, modifiers: egui::Modifiers, pressed: bool) -> egui::InputState {
+        let events = vec![egui::Event::Key {
+            key,
+            physical_key: Some(key),
+            pressed,
+            repeat: false,
+            modifiers,
+        }];
+        let mut raw_input = egui::RawInput::default();
+        raw_input.events = events;
+        let mut input_state = egui::InputState::default();
+        input_state.raw = raw_input;
+        input_state
+    }
+
+    #[test]
+    fn test_key_map_editor_modal_opens_and_closes() {
+        let mut key_map_editor = KeyMapEditor::default();
+        let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
+        
+        // Initially modal should not be shown
+        key_map_editor.show = false;
+        
+        let app = move |ctx: &egui::Context| {
+            key_map_editor.ui(ctx, &mut key_mapper);
+        };
+        
+        let mut harness = Harness::new(app);
+        
+        // Modal should not be visible initially
+        assert!(harness.try_get_by("Click keys to set bindings").is_none());
+        
+        // Show the modal
+        key_map_editor.show = true;
+        harness.run();
+        
+        // Modal should now be visible
+        harness.get_by("Click keys to set bindings");
+        
+        // Close the modal using the Close button
+        harness.get_by("Close").click();
+        harness.run();
+        
+        // Modal should be hidden again
+        assert!(harness.try_get_by("Click keys to set bindings").is_none());
+    }
+
+    #[test]
+    fn test_key_layout_hover_detection() {
+        let mut key_map_editor = KeyMapEditor::default();
+        key_map_editor.show = true;
+        let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
+        
+        let app = move |ctx: &egui::Context| {
+            key_map_editor.ui(ctx, &mut key_mapper);
+        };
+        
+        let mut harness = Harness::new(app);
+        harness.run();
+        
+        // Get the keyboard layout image
+        let keyboard_image = harness.get_by_role(Role::Image);
+        
+        // Find the Q key layout from the key_layouts vector
+        let q_key_layout = key_map_editor.key_layouts.iter()
+            .find(|layout| layout.name == "Q")
+            .expect("Q key layout should exist");
+        
+        // Calculate position within the key bounds (center of the key)
+        // Convert from SVG coordinates (2200x500 viewBox) to display coordinates (1100x250)
+        let q_key_center_x = (q_key_layout.x + q_key_layout.width / 2) as f32 / 2.0;
+        let q_key_center_y = (q_key_layout.y + SIZE / 2) as f32 / 2.0;
+        let q_key_pos = egui::Pos2::new(q_key_center_x, q_key_center_y);
+        
+        // keyboard_image.hover_at(q_key_pos);
+        harness.run();
+        
+        // Verify that Q key is now hovered
+        assert_eq!(key_map_editor.hovered_key, Some("Q"));
+        
+        // Move hover to empty area (outside all keys)
+        // keyboard_image.hover_at(egui::Pos2::new(0.0, 0.0));
+        harness.run();
+        
+        // Verify hover is cleared
+        assert_eq!(key_map_editor.hovered_key, None);
+    }
+
+    #[test]
+    fn test_key_binding_dialog_opens_on_click() {
+        let mut key_map_editor = KeyMapEditor::default();
+        key_map_editor.show = true;
+        let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
+        
+        let app = move |ctx: &egui::Context| {
+            key_map_editor.ui(ctx, &mut key_mapper);
+        };
+        
+        let mut harness = Harness::new(app);
+        harness.run();
+        
+        // Get the keyboard layout image
+        let keyboard_image = harness.get_by_role(Role::Image);
+        
+        // Find the A key layout
+        let a_key_layout = key_map_editor.key_layouts.iter()
+            .find(|layout| layout.name == "A")
+            .expect("A key layout should exist");
+        
+        // Calculate center position of A key
+        let a_key_center_x = (a_key_layout.x + a_key_layout.width / 2) as f32 / 2.0;
+        let a_key_center_y = (a_key_layout.y + SIZE / 2) as f32 / 2.0;
+        let a_key_pos = egui::Pos2::new(a_key_center_x, a_key_center_y);
+        
+        // First hover over the key to select it
+        keyboard_image.hover_at(a_key_pos);
+        harness.run();
+        
+        // Verify A key is hovered
+        assert_eq!(key_map_editor.hovered_key, Some("A"));
+        
+        // Click on the A key
+        keyboard_image.click_at(a_key_pos);
+        harness.run();
+        
+        // Verify binding dialog opened
+        assert_eq!(key_map_editor.listening, Some(("A", false))); // Not shifted
+        
+        // Verify dialog text appears
+        harness.get_by("Press a key to bind to \"A\" on the guest system.");
+        harness.get_by("No binding set yet.");
+        harness.get_by("Cancel");
+    }
+
+    #[test]
+    fn test_shifted_key_binding_dialog() {
+        let mut key_map_editor = KeyMapEditor::default();
+        key_map_editor.show = true;
+        let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
+        
+        let app = move |ctx: &egui::Context| {
+            key_map_editor.ui(ctx, &mut key_mapper);
+        };
+        
+        let mut harness = Harness::new(app);
+        harness.run();
+        
+        // Get the keyboard layout image
+        let keyboard_image = harness.get_by_role(Role::Image);
+        
+        // Find the A key layout (A is shiftable according to KEYS constant)
+        let a_key_layout = key_map_editor.key_layouts.iter()
+            .find(|layout| layout.name == "A")
+            .expect("A key layout should exist");
+        
+        // Calculate center position of A key
+        let a_key_center_x = (a_key_layout.x + a_key_layout.width / 2) as f32 / 2.0;
+        let a_key_center_y = (a_key_layout.y + SIZE / 2) as f32 / 2.0;
+        let a_key_pos = egui::Pos2::new(a_key_center_x, a_key_center_y);
+        
+        // First hover over the key to select it
+        keyboard_image.hover_at(a_key_pos);
+        harness.run();
+        
+        // Verify A key is hovered
+        assert_eq!(key_map_editor.hovered_key, Some("A"));
+        
+        // Shift+click on the A key
+        keyboard_image.click_at_with_modifiers(a_key_pos, egui::Modifiers::SHIFT);
+        harness.run();
+        
+        // Verify shifted binding dialog opened
+        assert_eq!(key_map_editor.listening, Some(("A", true))); // Shifted = true
+        
+        // Verify dialog text shows shift binding
+        harness.get_by("Press a key to bind to \"Shift + A\" on the guest system.");
+        harness.get_by("No binding set yet.");
+        harness.get_by("Cancel");
+    }
+
+    #[test]
+    fn test_key_binding_dialog_cancellation() {
+        let mut key_map_editor = KeyMapEditor::default();
+        key_map_editor.show = true;
+        let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
+        
+        let app = move |ctx: &egui::Context| {
+            key_map_editor.ui(ctx, &mut key_mapper);
+        };
+        
+        let mut harness = Harness::new(app);
+        harness.run();
+        
+        // Get the keyboard layout image
+        let keyboard_image = harness.get_by_role(Role::Image);
+        
+        // Find the A key layout
+        let a_key_layout = key_map_editor.key_layouts.iter()
+            .find(|layout| layout.name == "A")
+            .expect("A key layout should exist");
+        
+        // Calculate center position of A key
+        let a_key_center_x = (a_key_layout.x + a_key_layout.width / 2) as f32 / 2.0;
+        let a_key_center_y = (a_key_layout.y + SIZE / 2) as f32 / 2.0;
+        let a_key_pos = egui::Pos2::new(a_key_center_x, a_key_center_y);
+        
+        // Open binding dialog
+        keyboard_image.hover_at(a_key_pos);
+        harness.run();
+        keyboard_image.click_at(a_key_pos);
+        harness.run();
+        
+        // Verify dialog is open
+        assert_eq!(key_map_editor.listening, Some(("A", false)));
+        harness.get_by("Press a key to bind to \"A\" on the guest system.");
+        
+        // Click Cancel button
+        harness.get_by("Cancel").click();
+        harness.run();
+        
+        // Verify dialog is closed
+        assert_eq!(key_map_editor.listening, None);
+        
+        // Verify no binding was set
+        assert_eq!(key_mapper.binding("A", false), None);
+        
+        // Verify dialog text is no longer present
+        assert!(harness.try_get_by("Press a key to bind to \"A\" on the guest system.").is_none());
+    }
+
+    #[test]
+    fn test_clear_existing_binding() {
+        let mut key_map_editor = KeyMapEditor::default();
+        key_map_editor.show = true;
+        let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
+        
+        // Pre-set a binding for A key to Q
+        let input_state = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
+        key_mapper.try_set_binding("A", false, &input_state).unwrap();
+        
+        let app = move |ctx: &egui::Context| {
+            key_map_editor.ui(ctx, &mut key_mapper);
+        };
+        
+        let mut harness = Harness::new(app);
+        harness.run();
+        
+        // Get the keyboard layout image
+        let keyboard_image = harness.get_by_role(Role::Image);
+        
+        // Find the A key layout
+        let a_key_layout = key_map_editor.key_layouts.iter()
+            .find(|layout| layout.name == "A")
+            .expect("A key layout should exist");
+        
+        // Calculate center position of A key
+        let a_key_center_x = (a_key_layout.x + a_key_layout.width / 2) as f32 / 2.0;
+        let a_key_center_y = (a_key_layout.y + SIZE / 2) as f32 / 2.0;
+        let a_key_pos = egui::Pos2::new(a_key_center_x, a_key_center_y);
+        
+        // Open binding dialog
+        keyboard_image.hover_at(a_key_pos);
+        harness.run();
+        keyboard_image.click_at(a_key_pos);
+        harness.run();
+        
+        // Verify existing binding is shown
+        harness.get_by("Currently bound to Q");
+        
+        // Click Clear Binding button
+        harness.get_by("Clear Binding").click();
+        harness.run();
+        
+        // Verify binding was cleared
+        assert_eq!(key_mapper.binding("A", false), None);
+        
+        // Verify dialog shows no binding
+        harness.get_by("No binding set yet.");
+        assert!(harness.try_get_by("Currently bound to Q").is_none());
+    }
+
+    #[test]
+    fn test_shift_key_exclusion() {
+        let mut key_map_editor = KeyMapEditor::default();
+        key_map_editor.show = true;
+        let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
+        
+        let app = move |ctx: &egui::Context| {
+            key_map_editor.ui(ctx, &mut key_mapper);
+        };
+        
+        let mut harness = Harness::new(app);
+        harness.run();
+        
+        // Verify that Shift keys are excluded from the rendered keyboard layout
+        // The code explicitly skips rendering keys with name "Shift" in the SVG generation
+        
+        // Count how many Shift keys are in the key_layouts (should be 2: left and right)
+        let shift_keys_in_layouts = key_map_editor.key_layouts.iter()
+            .filter(|layout| layout.name == "Shift")
+            .count();
+        assert_eq!(shift_keys_in_layouts, 2); // Both left and right shift exist in layouts
+        
+        // Verify the instruction text mentions that Shift keys cannot be bound
+        harness.get_by("Click keys to set bindings. Shift-click to set bindings for shifted keys. The guest system's Shift keys themselves cannot be bound.");
+        
+        // Get the keyboard layout image
+        let keyboard_image = harness.get_by_role(Role::Image);
+        
+        // Test left Shift key (x=0, y=300)
+        let left_shift_layout = key_map_editor.key_layouts.iter()
+            .find(|layout| layout.name == "Shift" && layout.x == 0)
+            .expect("Left Shift key layout should exist");
+        
+        let left_shift_center_x = (left_shift_layout.x + left_shift_layout.width / 2) as f32 / 2.0;
+        let left_shift_center_y = (left_shift_layout.y + SIZE / 2) as f32 / 2.0;
+        let left_shift_pos = egui::Pos2::new(left_shift_center_x, left_shift_center_y);
+        
+        keyboard_image.hover_at(left_shift_pos);
+        harness.run();
+        
+        // Verify that hovering over left Shift key area doesn't set hovered_key
+        assert_ne!(key_map_editor.hovered_key, Some("Shift"));
+        
+        // Test right Shift key (x=1300, y=300)
+        let right_shift_layout = key_map_editor.key_layouts.iter()
+            .find(|layout| layout.name == "Shift" && layout.x == 1300)
+            .expect("Right Shift key layout should exist");
+        
+        let right_shift_center_x = (right_shift_layout.x + right_shift_layout.width / 2) as f32 / 2.0;
+        let right_shift_center_y = (right_shift_layout.y + SIZE / 2) as f32 / 2.0;
+        let right_shift_pos = egui::Pos2::new(right_shift_center_x, right_shift_center_y);
+        
+        keyboard_image.hover_at(right_shift_pos);
+        harness.run();
+        
+        // Verify that hovering over right Shift key area doesn't set hovered_key
+        assert_ne!(key_map_editor.hovered_key, Some("Shift"));
+    }
+
+    #[test]
+    fn test_enter_key_special_shape_hit_detection() {
+        let mut key_map_editor = KeyMapEditor::default();
+        key_map_editor.show = true;
+        let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
+        
+        let app = move |ctx: &egui::Context| {
+            key_map_editor.ui(ctx, &mut key_mapper);
+        };
+        
+        let mut harness = Harness::new(app);
+        harness.run();
+        
+        // Get the keyboard layout image
+        let keyboard_image = harness.get_by_role(Role::Image);
+        
+        // Find the Enter key layout
+        let enter_key_layout = key_map_editor.key_layouts.iter()
+            .find(|layout| layout.name == "Enter")
+            .expect("Enter key layout should exist");
+        
+        // Test hit detection in the wide upper section of Enter key
+        let upper_section_x = (enter_key_layout.x + PADDING + 50) as f32 / 2.0; // Well within upper section
+        let upper_section_y = (enter_key_layout.y + PADDING + 20) as f32 / 2.0; // Upper part
+        let upper_pos = egui::Pos2::new(upper_section_x, upper_section_y);
+        
+        keyboard_image.hover_at(upper_pos);
+        harness.run();
+        
+        // Verify Enter key is detected in upper section
+        assert_eq!(key_map_editor.hovered_key, Some("Enter"));
+        
+        // Test hit detection in the narrow lower section of Enter key
+        let lower_section_x = (enter_key_layout.x + PADDING + SIZE / 4 + 20) as f32 / 2.0; // Within narrow section
+        let lower_section_y = (enter_key_layout.y + SIZE + 20) as f32 / 2.0; // Lower part
+        let lower_pos = egui::Pos2::new(lower_section_x, lower_section_y);
+        
+        keyboard_image.hover_at(lower_pos);
+        harness.run();
+        
+        // Verify Enter key is still detected in narrow lower section
+        assert_eq!(key_map_editor.hovered_key, Some("Enter"));
+        
+        // Test hit detection outside the narrow lower section (should miss)
+        let outside_narrow_x = (enter_key_layout.x + PADDING + 10) as f32 / 2.0; // Too far left for narrow section
+        let outside_narrow_y = (enter_key_layout.y + SIZE + 20) as f32 / 2.0; // Lower part
+        let outside_pos = egui::Pos2::new(outside_narrow_x, outside_narrow_y);
+        
+        keyboard_image.hover_at(outside_pos);
+        harness.run();
+        
+        // Verify Enter key is NOT detected outside its L-shape
+        assert_ne!(key_map_editor.hovered_key, Some("Enter"));
+        
+        // Test clicking on Enter key in valid area
+        keyboard_image.hover_at(upper_pos);
+        harness.run();
+        keyboard_image.click_at(upper_pos);
+        harness.run();
+        
+        // Verify binding dialog opened for Enter key
+        assert_eq!(key_map_editor.listening, Some(("Enter", false)));
+        harness.get_by("Press a key to bind to \"Enter\" on the guest system.");
+    }
+}

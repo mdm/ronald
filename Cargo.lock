@@ -29,13 +29,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "accesskit"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e25ae84c0260bdf5df07796d7cc4882460de26a2b406ec0e6c42461a723b271b"
+
+[[package]]
 name = "accesskit_atspi_common"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c5dd55e6e94949498698daf4d48fb5659e824d7abec0d394089656ceaf99d4f"
 dependencies = [
- "accesskit",
- "accesskit_consumer",
+ "accesskit 0.17.1",
+ "accesskit_consumer 0.26.0",
  "atspi-common",
  "serde",
  "thiserror 1.0.61",
@@ -44,13 +50,33 @@ dependencies = [
 
 [[package]]
 name = "accesskit_consumer"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa3a17950ce0d911f132387777b9b3d05eddafb59b773ccaa53fceefaeb0228e"
+dependencies = [
+ "accesskit 0.17.1",
+ "immutable-chunkmap",
+]
+
+[[package]]
+name = "accesskit_consumer"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f47983a1084940ba9a39c077a8c63e55c619388be5476ac04c804cfbd1e63459"
 dependencies = [
- "accesskit",
+ "accesskit 0.17.1",
  "hashbrown 0.15.4",
  "immutable-chunkmap",
+]
+
+[[package]]
+name = "accesskit_consumer"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bfae7c152994a31dc7d99b8eeac7784a919f71d1b306f4b83217e110fd3824c"
+dependencies = [
+ "accesskit 0.19.0",
+ "hashbrown 0.15.4",
 ]
 
 [[package]]
@@ -59,8 +85,8 @@ version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7329821f3bd1101e03a7d2e03bd339e3ac0dc64c70b4c9f9ae1949e3ba8dece1"
 dependencies = [
- "accesskit",
- "accesskit_consumer",
+ "accesskit 0.17.1",
+ "accesskit_consumer 0.26.0",
  "hashbrown 0.15.4",
  "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
@@ -73,7 +99,7 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcee751cc20d88678c33edaf9c07e8b693cd02819fe89053776f5313492273f5"
 dependencies = [
- "accesskit",
+ "accesskit 0.17.1",
  "accesskit_atspi_common",
  "async-channel",
  "async-executor",
@@ -91,8 +117,8 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24fcd5d23d70670992b823e735e859374d694a3d12bfd8dd32bd3bd8bedb5d81"
 dependencies = [
- "accesskit",
- "accesskit_consumer",
+ "accesskit 0.17.1",
+ "accesskit_consumer 0.26.0",
  "hashbrown 0.15.4",
  "paste",
  "static_assertions",
@@ -106,7 +132,7 @@ version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a6a48dad5530b6deb9fc7a52cc6c3bf72cdd9eb8157ac9d32d69f2427a5e879"
 dependencies = [
- "accesskit",
+ "accesskit 0.17.1",
  "accesskit_macos",
  "accesskit_unix",
  "accesskit_windows",
@@ -1361,7 +1387,7 @@ name = "egui"
 version = "0.31.1"
 source = "git+https://github.com/mdm/egui.git?branch=latest-patched#a1a40880f466a72c043b6e40178a1331b7e05310"
 dependencies = [
- "accesskit",
+ "accesskit 0.17.1",
  "ahash",
  "bitflags 2.9.1",
  "emath",
@@ -1441,6 +1467,15 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "winit",
+]
+
+[[package]]
+name = "egui_kittest"
+version = "0.31.1"
+source = "git+https://github.com/mdm/egui.git?branch=latest-patched#a1a40880f466a72c043b6e40178a1331b7e05310"
+dependencies = [
+ "egui",
+ "kittest 0.1.0",
 ]
 
 [[package]]
@@ -1982,7 +2017,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 1.0.61",
- "windows 0.54.0",
+ "windows 0.58.0",
 ]
 
 [[package]]
@@ -2456,6 +2491,28 @@ name = "khronos_api"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
+
+[[package]]
+name = "kittest"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f659954571a3c132356bd15c25f0dcf14d270a28ec5c58797adc2f432831bed5"
+dependencies = [
+ "accesskit 0.17.1",
+ "accesskit_consumer 0.25.0",
+ "parking_lot",
+]
+
+[[package]]
+name = "kittest"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c1bfc4cb16136b6f00fb85a281e4b53d026401cf5dff9a427c466bde5891f0b"
+dependencies = [
+ "accesskit 0.19.0",
+ "accesskit_consumer 0.28.0",
+ "parking_lot",
+]
 
 [[package]]
 name = "kurbo"
@@ -3921,7 +3978,9 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+ "egui_kittest",
  "env_logger",
+ "kittest 0.2.0",
  "log",
  "reqwest",
  "rfd",
