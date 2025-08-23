@@ -4,7 +4,6 @@ use std::{
 };
 
 use eframe::{egui, egui_wgpu};
-use pollster::FutureExt as _;
 use web_time::Instant;
 
 #[cfg(target_arch = "wasm32")]
@@ -83,18 +82,19 @@ where
         let filter_name = filter_name.to_string();
         let extension = extension.to_string();
         spawn(move || {
-            if let Some(file) = rfd::AsyncFileDialog::new()
+            if let Some(file) = rfd::FileDialog::new()
                 .set_title(&title)
                 .add_filter(&filter_name, &[&extension])
                 .pick_file()
-                .block_on()
             {
-                picked_file.with_mut(|f| {
-                    *f = Some(File {
-                        path_buf: file.path().to_path_buf(),
-                        image: file.read().block_on(),
+                if let Ok(image) = std::fs::read(&file) {
+                    picked_file.with_mut(|f| {
+                        *f = Some(File {
+                            path_buf: file,
+                            image,
+                        });
                     });
-                });
+                }
             }
         });
     }

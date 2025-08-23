@@ -3923,7 +3923,6 @@ dependencies = [
  "egui_extras",
  "env_logger",
  "log",
- "pollster 0.4.0",
  "reqwest",
  "rfd",
  "ronald-core",
