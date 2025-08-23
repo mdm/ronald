@@ -192,6 +192,10 @@ where
                 self.draw_framebuffer(ctx, ui, size);
             }
             None => {
+                egui::Window::new("Input Test").show(ctx, |ui| {
+                    ui.text_edit_singleline(&mut self.input_test);
+                });
+
                 let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
 
                 egui::Window::new("Screen")
@@ -229,10 +233,6 @@ where
                         self.step_emulation();
                         self.draw_framebuffer(ctx, ui, size);
                     });
-
-                egui::Window::new("Input Test").show(ctx, |ui| {
-                    ui.text_edit_singleline(&mut self.input_test);
-                });
             }
         }
     }
