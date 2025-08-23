@@ -20,7 +20,6 @@ egui_extras = { git = "https://github.com/mdm/egui.git", branch = "latest-patche
   "svg",
 ] }
 log = "0.4.27"
-pollster = "0.4.0"
 rfd = "0.15.4"
 serde = { version = "1.0.219", features = ["derive"] }
 web-time = "1.1.0"
