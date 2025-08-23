@@ -165,7 +165,9 @@ where
         }
 
         // Remove empty Vecs from host_to_guest
-        self.key_map.host_to_guest.retain(|_, guest_keys| !guest_keys.is_empty());
+        self.key_map
+            .host_to_guest
+            .retain(|_, guest_keys| !guest_keys.is_empty());
 
         if shifted {
             self.key_map
@@ -257,7 +259,6 @@ where
         }
     }
 }
-
 
 #[cfg(not(target_arch = "wasm32"))]
 pub struct NativeKeyMapStore<'a> {
@@ -351,17 +352,18 @@ impl WebKeyMapStore {
     fn load_from_server() -> Result<KeyMap, Box<dyn std::error::Error>> {
         // Use synchronous XMLHttpRequest since we need sync behavior
         let xhr = web_sys::XmlHttpRequest::new().map_err(|_| "Failed to create XMLHttpRequest")?;
-        
+
         xhr.open_with_async("GET", "./keymap.default.json", false)
             .map_err(|_| "Failed to open request")?;
-        
+
         xhr.send().map_err(|_| "Failed to send request")?;
 
         if xhr.status().map_err(|_| "Failed to get status")? != 200 {
             return Err(format!("HTTP error: {}", xhr.status().unwrap_or(0)).into());
         }
 
-        let response_text = xhr.response_text()
+        let response_text = xhr
+            .response_text()
             .map_err(|_| "Failed to get response text")?
             .ok_or("No response text")?;
 
@@ -576,34 +578,38 @@ mod tests {
     #[test]
     fn test_binding_returns_normal_binding() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        mapper.key_map.guest_to_description.insert(
-            "A".to_string(),
-            (Some("Q".to_string()), None),
-        );
+        mapper
+            .key_map
+            .guest_to_description
+            .insert("A".to_string(), (Some("Q".to_string()), None));
         assert_eq!(mapper.binding("A", false), Some("Q"));
     }
 
     #[test]
     fn test_binding_returns_shifted_binding() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        mapper.key_map.guest_to_description.insert(
-            "A".to_string(),
-            (None, Some("Shift + Q".to_string())),
-        );
+        mapper
+            .key_map
+            .guest_to_description
+            .insert("A".to_string(), (None, Some("Shift + Q".to_string())));
         assert_eq!(mapper.binding("A", true), Some("Shift + Q"));
     }
 
     #[test]
     fn test_binding_returns_none_when_shifted_not_available() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        mapper.key_map.guest_to_description.insert(
-            "A".to_string(),
-            (Some("Q".to_string()), None),
-        );
+        mapper
+            .key_map
+            .guest_to_description
+            .insert("A".to_string(), (Some("Q".to_string()), None));
         assert_eq!(mapper.binding("A", true), None);
     }
 
-    fn create_input_state_with_key(key: egui::Key, modifiers: egui::Modifiers, pressed: bool) -> egui::InputState {
+    fn create_input_state_with_key(
+        key: egui::Key,
+        modifiers: egui::Modifiers,
+        pressed: bool,
+    ) -> egui::InputState {
         let events = vec![egui::Event::Key {
             key,
             physical_key: Some(key),
@@ -633,10 +639,10 @@ mod tests {
         let result = mapper.try_set_binding("A", false, &input_state);
         assert_eq!(result.unwrap(), true);
         assert_eq!(mapper.binding("A", false), Some("Q"));
-        
+
         // Verify the binding works by testing key mapping
         let press_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
-        
+
         let mut received_key = None;
         mapper.map_keys(&press_input, |event| {
             if let crate::frontend::KeyEvent::Pressed(key) = event {
@@ -653,10 +659,10 @@ mod tests {
         let result = mapper.try_set_binding("A", true, &input_state);
         assert_eq!(result.unwrap(), true);
         assert_eq!(mapper.binding("A", true), Some("Shift + Q"));
-        
+
         // Verify the binding works by testing key mapping
         let press_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::SHIFT, true);
-        
+
         let mut received_keys = Vec::new();
         mapper.map_keys(&press_input, |event| {
             if let crate::frontend::KeyEvent::Pressed(key) = event {
@@ -671,22 +677,22 @@ mod tests {
     #[test]
     fn test_clear_binding_removes_normal_binding() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        
+
         // Set up a binding first using the public interface
         let input_state = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("A", false, &input_state).unwrap();
-        
+
         // Verify binding exists
         assert_eq!(mapper.binding("A", false), Some("Q"));
-        
+
         // Clear the binding
         let result = mapper.clear_binding("A", false);
         assert!(result.is_ok());
         assert_eq!(mapper.binding("A", false), None);
-        
+
         // Verify the binding no longer works by testing key mapping
         let press_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
-        
+
         let mut received_key = None;
         mapper.map_keys(&press_input, |event| {
             if let crate::frontend::KeyEvent::Pressed(key) = event {
@@ -699,22 +705,22 @@ mod tests {
     #[test]
     fn test_clear_binding_removes_shifted_binding() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        
+
         // Set up a shifted binding first using the public interface
         let input_state = create_input_state_with_key(egui::Key::Q, egui::Modifiers::SHIFT, true);
         mapper.try_set_binding("A", true, &input_state).unwrap();
-        
+
         // Verify binding exists
         assert_eq!(mapper.binding("A", true), Some("Shift + Q"));
-        
+
         // Clear the shifted binding
         let result = mapper.clear_binding("A", true);
         assert!(result.is_ok());
         assert_eq!(mapper.binding("A", true), None);
-        
+
         // Verify the binding no longer works by testing key mapping
         let press_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::SHIFT, true);
-        
+
         let mut event_received = false;
         mapper.map_keys(&press_input, |_| {
             event_received = true;
@@ -726,22 +732,22 @@ mod tests {
     #[test]
     fn test_reset_all_bindings_clears_existing_bindings() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        
+
         // Set up a binding first using the public interface
         let input_state = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("A", false, &input_state).unwrap();
-        
+
         // Verify binding exists
         assert_eq!(mapper.binding("A", false), Some("Q"));
-        
+
         // Reset all bindings
         let result = mapper.reset_all_bindings();
         assert!(result.is_ok());
         assert_eq!(mapper.binding("A", false), None);
-        
+
         // Verify the binding no longer works by testing key mapping
         let press_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
-        
+
         let mut event_received = false;
         mapper.map_keys(&press_input, |_| {
             event_received = true;
@@ -752,18 +758,20 @@ mod tests {
     #[test]
     fn test_map_keys_calls_callback_on_key_press() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        
+
         // Set up a binding first using the public interface
         let setup_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("A", false, &setup_input).unwrap();
-        
+
         let input_state = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
-        
+
         let mut received_key = None;
-        mapper.map_keys(&input_state, |event| {
-            match event {
-                crate::frontend::KeyEvent::Pressed(key) => received_key = Some(("Pressed", key.to_string())),
-                crate::frontend::KeyEvent::Released(key) => received_key = Some(("Released", key.to_string())),
+        mapper.map_keys(&input_state, |event| match event {
+            crate::frontend::KeyEvent::Pressed(key) => {
+                received_key = Some(("Pressed", key.to_string()))
+            }
+            crate::frontend::KeyEvent::Released(key) => {
+                received_key = Some(("Released", key.to_string()))
             }
         });
         assert_eq!(received_key, Some(("Pressed", "A".to_string())));
@@ -772,23 +780,25 @@ mod tests {
     #[test]
     fn test_map_keys_calls_callback_on_key_release() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        
+
         // Set up a binding first using the public interface
         let setup_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("A", false, &setup_input).unwrap();
-        
+
         // First press the key to track it
         let press_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.map_keys(&press_input, |_| {}); // Just to track the key as pressed
-        
+
         // Now release the key
         let release_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, false);
-        
+
         let mut received_key = None;
-        mapper.map_keys(&release_input, |event| {
-            match event {
-                crate::frontend::KeyEvent::Pressed(key) => received_key = Some(("Pressed", key.to_string())),
-                crate::frontend::KeyEvent::Released(key) => received_key = Some(("Released", key.to_string())),
+        mapper.map_keys(&release_input, |event| match event {
+            crate::frontend::KeyEvent::Pressed(key) => {
+                received_key = Some(("Pressed", key.to_string()))
+            }
+            crate::frontend::KeyEvent::Released(key) => {
+                received_key = Some(("Released", key.to_string()))
             }
         });
         assert_eq!(received_key, Some(("Released", "A".to_string())));
@@ -797,25 +807,27 @@ mod tests {
     #[test]
     fn test_multiple_guest_keys_bound_to_same_host_key() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        
+
         // Set up binding for A to Q
         let setup_input_a = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("A", false, &setup_input_a).unwrap();
-        
+
         // Set up binding for B to the same key Q (this should add to the existing binding)
         let setup_input_b = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("B", false, &setup_input_b).unwrap();
-        
+
         let input_state = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
-        
+
         let mut received_keys = Vec::new();
-        mapper.map_keys(&input_state, |event| {
-            match event {
-                crate::frontend::KeyEvent::Pressed(key) => received_keys.push(("Pressed", key.to_string())),
-                crate::frontend::KeyEvent::Released(key) => received_keys.push(("Released", key.to_string())),
+        mapper.map_keys(&input_state, |event| match event {
+            crate::frontend::KeyEvent::Pressed(key) => {
+                received_keys.push(("Pressed", key.to_string()))
+            }
+            crate::frontend::KeyEvent::Released(key) => {
+                received_keys.push(("Released", key.to_string()))
             }
         });
-        
+
         assert_eq!(received_keys.len(), 2);
         assert!(received_keys.contains(&("Pressed", "A".to_string())));
         assert!(received_keys.contains(&("Pressed", "B".to_string())));
@@ -824,11 +836,11 @@ mod tests {
     #[test]
     fn test_rebinding_guest_key_leaves_other_bindings_intact() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        
+
         // Set up initial bindings: Q maps to both A and B
         let setup_input_a = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("A", false, &setup_input_a).unwrap();
-        
+
         let setup_input_b = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("B", false, &setup_input_b).unwrap();
 
@@ -839,13 +851,13 @@ mod tests {
 
         // Verify A is now bound to W
         assert_eq!(mapper.binding("A", false), Some("W"));
-        
+
         // Verify B is still bound to Q
         assert_eq!(mapper.binding("B", false), Some("Q"));
 
         // Test that pressing W triggers A and pressing Q triggers B
         let press_w_input = create_input_state_with_key(egui::Key::W, egui::Modifiers::NONE, true);
-        
+
         let mut received_key = None;
         mapper.map_keys(&press_w_input, |event| {
             if let crate::frontend::KeyEvent::Pressed(key) = event {
@@ -853,10 +865,10 @@ mod tests {
             }
         });
         assert_eq!(received_key, Some("A".to_string()));
-        
+
         // Test that pressing Q still triggers B
         let press_q_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
-        
+
         let mut received_key = None;
         mapper.map_keys(&press_q_input, |event| {
             if let crate::frontend::KeyEvent::Pressed(key) = event {
@@ -869,11 +881,11 @@ mod tests {
     #[test]
     fn test_clear_binding_leaves_other_bindings_for_same_host_key_intact() {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        
+
         // Set up initial bindings: Q maps to both A and B
         let setup_input_a = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("A", false, &setup_input_a).unwrap();
-        
+
         let setup_input_b = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         mapper.try_set_binding("B", false, &setup_input_b).unwrap();
 
@@ -886,10 +898,10 @@ mod tests {
 
         // Verify B binding remains intact
         assert_eq!(mapper.binding("B", false), Some("Q"));
-        
+
         // Test that pressing Q still triggers B but not A
         let press_input = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
-        
+
         let mut received_key = None;
         mapper.map_keys(&press_input, |event| {
             if let crate::frontend::KeyEvent::Pressed(key) = event {

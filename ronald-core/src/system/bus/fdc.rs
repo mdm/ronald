@@ -227,9 +227,7 @@ impl FloppyDiskController {
                 }
             },
             _ => {
-                log::error!(
-                    "Unexpected FDC write using port {port:#06x}: {value:#010b}"
-                );
+                log::error!("Unexpected FDC write using port {port:#06x}: {value:#010b}");
                 unreachable!();
             }
         }
