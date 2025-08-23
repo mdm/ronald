@@ -1,7 +1,4 @@
-use std::{
-    path::PathBuf,
-    thread::spawn,
-};
+use std::{path::PathBuf, thread::spawn};
 
 use eframe::{egui, egui_wgpu};
 use web_time::Instant;
@@ -77,7 +74,13 @@ where
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn pick_file_internal(&mut self, title: &str, filter_name: &str, extension: &str, picked_file: Shared<Option<File>>) {
+    fn pick_file_internal(
+        &mut self,
+        title: &str,
+        filter_name: &str,
+        extension: &str,
+        picked_file: Shared<Option<File>>,
+    ) {
         let title = title.to_string();
         let filter_name = filter_name.to_string();
         let extension = extension.to_string();
@@ -100,7 +103,13 @@ where
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn pick_file_internal(&mut self, title: &str, filter_name: &str, extension: &str, picked_file: Shared<Option<File>>) {
+    fn pick_file_internal(
+        &mut self,
+        title: &str,
+        filter_name: &str,
+        extension: &str,
+        picked_file: Shared<Option<File>>,
+    ) {
         let title = title.to_string();
         let filter_name = filter_name.to_string();
         let extension = extension.to_string();
@@ -123,15 +132,30 @@ where
     }
 
     pub fn pick_file_disk_a(&mut self) {
-        self.pick_file_internal("Load DSK into Drive A:", "DSK Disk Image", "dsk", self.picked_file_disk_a.clone());
+        self.pick_file_internal(
+            "Load DSK into Drive A:",
+            "DSK Disk Image",
+            "dsk",
+            self.picked_file_disk_a.clone(),
+        );
     }
 
     pub fn pick_file_disk_b(&mut self) {
-        self.pick_file_internal("Load DSK into Drive B:", "DSK Disk Image", "dsk", self.picked_file_disk_b.clone());
+        self.pick_file_internal(
+            "Load DSK into Drive B:",
+            "DSK Disk Image",
+            "dsk",
+            self.picked_file_disk_b.clone(),
+        );
     }
 
     pub fn pick_file_tape(&mut self) {
-        self.pick_file_internal("Load Tape:", "CDT Tape Image", "cdt", self.picked_file_tape.clone());
+        self.pick_file_internal(
+            "Load Tape:",
+            "CDT Tape Image",
+            "cdt",
+            self.picked_file_tape.clone(),
+        );
     }
 
     pub fn ui<K>(

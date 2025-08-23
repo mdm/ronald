@@ -26,8 +26,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use serde_json;
+    use std::collections::HashMap;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
     struct TestKey {
@@ -47,12 +47,18 @@ mod tests {
     fn test_round_trip_serialization() {
         let mut original = HashMap::new();
         original.insert(TestKey { id: 10, flag: true }, 999);
-        original.insert(TestKey { id: 20, flag: false }, -50);
+        original.insert(
+            TestKey {
+                id: 20,
+                flag: false,
+            },
+            -50,
+        );
         original.insert(TestKey { id: 30, flag: true }, 0);
-        
+
         let serialized = serde_json::to_string(&original).unwrap();
         let deserialized: HashMap<TestKey, i32> = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(original, deserialized);
     }
 }
