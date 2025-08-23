@@ -107,11 +107,12 @@ where
                 .pick_file()
                 .await
             {
+                let file_data = File {
+                    path_buf: file.file_name().into(),
+                    image: file.read().await,
+                };
                 picked_file.with_mut(|f| {
-                    *f = Some(File {
-                        path_buf: file.file_name().into(),
-                        image: file.read().block_on(),
-                    });
+                    *f = Some(file_data);
                 });
             }
         });
