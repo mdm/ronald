@@ -71,7 +71,7 @@ impl Ram {
         // TODO: better error handling
         // TODO: check if ROM fits
         let mut ram = Ram::new(size);
-        let rom = read(path).unwrap_or_else(|_| panic!("ROM file \"{}\" could not be read.", path));
+        let rom = read(path).unwrap_or_else(|_| panic!("ROM file \"{path}\" could not be read."));
 
         for (i, byte) in rom.into_iter().enumerate() {
             ram.write_byte(offset + i, byte);

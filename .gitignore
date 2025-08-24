@@ -4,6 +4,13 @@
 /data
 
 keyconfig*.yml
+keymap.json
+keymap.backup.json
 
 # Local Netlify folder
 .netlify
+
+/ronald-egui/assets/keys/examples
+/ronald-egui/dist
+
+CLAUDE.md

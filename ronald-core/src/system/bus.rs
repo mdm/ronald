@@ -118,7 +118,7 @@ impl Bus for StandardBus {
             _ if port & 0x0800 == 0 => self.ppi.read_byte(&self.crtc, &self.psg, &self.tape, port),
             0xfb7e | 0xfb7f => self.fdc.read_byte(port),
             _ => {
-                log::error!("Unhandled read from port {:#06x}", port);
+                log::error!("Unhandled read from port {port:#06x}");
                 unimplemented!();
             }
         }
@@ -143,7 +143,7 @@ impl Bus for StandardBus {
             0xfa7e | 0xfb7f => self.fdc.write_byte(port, value),
             0xf8ff => (), // peripheral soft reset (ignored)
             _ => {
-                log::error!("Unhandled write to port {:#06x}: {:#010b}", port, value);
+                log::error!("Unhandled write to port {port:#06x}: {value:#010b}");
                 unimplemented!();
             }
         }

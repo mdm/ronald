@@ -6,7 +6,7 @@ pub mod constants;
 pub mod system;
 
 pub trait VideoSink {
-    fn draw_frame(&mut self, buffer: &Vec<(u8, u8, u8)>);
+    fn draw_frame(&mut self, buffer: &Vec<u8>);
 }
 
 pub trait AudioSink {
@@ -21,7 +21,7 @@ where
     S: system::System<'static>,
 {
     system: S,
-    keys: HashMap<&'static str, (bool, KeyDefinition)>,
+    keys: HashMap<&'static str, KeyDefinition>,
 }
 
 impl<S> Driver<S>
@@ -53,13 +53,13 @@ where
     }
 
     pub fn press_key(&mut self, key: &str) {
-        if let Some((_shiftable, key_definition)) = self.keys.get(key) {
+        if let Some(key_definition) = self.keys.get(key) {
             self.system.set_key(key_definition.line, key_definition.bit);
         }
     }
 
     pub fn release_key(&mut self, key: &str) {
-        if let Some((_shiftable, key_definition)) = self.keys.get(key) {
+        if let Some(key_definition) = self.keys.get(key) {
             self.system
                 .unset_key(key_definition.line, key_definition.bit);
         }

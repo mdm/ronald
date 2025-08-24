@@ -142,7 +142,7 @@ impl FloppyDiskController {
                 match self.phase {
                     Phase::Execution => {
                         let data = if let Some(data) = self.data_buffer.pop_front() {
-                            log::trace!("Reading data from FDC: {:#04x}", data);
+                            log::trace!("Reading data from FDC: {data:#04x}");
                             data
                         } else {
                             unreachable!()
@@ -157,7 +157,7 @@ impl FloppyDiskController {
                     }
                     Phase::Result => {
                         let result = if let Some(result) = self.result_buffer.pop_front() {
-                            log::debug!("Reading result from FDC: {:#04x}", result);
+                            log::debug!("Reading result from FDC: {result:#04x}");
                             result
                         } else {
                             // TODO: we hit this if no disk is loaded and CAT is executed
@@ -221,19 +221,13 @@ impl FloppyDiskController {
                 },
                 _ => {
                     log::error!(
-                        "FDC write outside command phase using port {:#06x}: {:#010b}",
-                        port,
-                        value
+                        "FDC write outside command phase using port {port:#06x}: {value:#010b}"
                     );
                     unimplemented!();
                 }
             },
             _ => {
-                log::error!(
-                    "Unexpected FDC write using port {:#06x}: {:#010b}",
-                    port,
-                    value
-                );
+                log::error!("Unexpected FDC write using port {port:#06x}: {value:#010b}");
                 unreachable!();
             }
         }
@@ -246,7 +240,7 @@ impl FloppyDiskController {
                 Some(disk)
             }
             Err(error) => {
-                log::warn!("Disk could not be loaded: {}", error);
+                log::warn!("Disk could not be loaded: {error}");
                 None
             }
         }
@@ -328,11 +322,7 @@ impl FloppyDiskController {
                     match &self.drives[self.selected_drive].disk {
                         Some(_) => {
                             self.drives[self.selected_drive].track =
-                                if self.drives[self.selected_drive].track > 77 {
-                                    self.drives[self.selected_drive].track - 77
-                                } else {
-                                    0
-                                };
+                                self.drives[self.selected_drive].track.saturating_sub(77);
                             self.seek_end = true;
                         }
                         None => {
@@ -427,7 +417,7 @@ impl FloppyDiskController {
             value |= 1 << 0;
         }
 
-        log::trace!("Reporting FDC main status register: {:#010b}", value);
+        log::trace!("Reporting FDC main status register: {value:#010b}");
 
         value
     }
