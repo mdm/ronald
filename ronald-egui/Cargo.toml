@@ -1,0 +1,51 @@
+[package]
+name = "ronald-egui"
+version = "0.2.0"
+authors = ["Marc Dominik Migge <marcmigge@gmx.net>"]
+license = "MIT"
+edition = "2024"
+
+[dependencies]
+ronald-core = { path = "../ronald-core" }
+anyhow = "1.0.98"
+serde_json = "1.0"
+cpal = { version = "0.16.0", features = ["wasm-bindgen"] }
+eframe = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", default-features = false, features = [
+  "accesskit",
+  "default_fonts",
+  "persistence",
+  "wgpu",
+  "x11",
+] }
+egui = { git = "https://github.com/mdm/egui.git", branch = "latest-patched" }
+egui_extras = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", features = [
+  "svg",
+] }
+log = "0.4.27"
+rfd = "0.15.4"
+serde = { version = "1.0.219", features = ["derive"] }
+web-time = "1.1.0"
+wgpu = { version = "24.0", features = ["webgpu", "webgl"] }
+
+# Native-only dependencies
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger = "0.11.8"
+
+# Web-only dependencies
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+  "console",
+  "Window",
+  "Document",
+  "Element",
+  "HtmlCanvasElement",
+  "XmlHttpRequest",
+] }
+
+[dev-dependencies]
+kittest = "0.2"
+egui_kittest = { git = "https://github.com/mdm/egui.git", branch = "latest-patched" }

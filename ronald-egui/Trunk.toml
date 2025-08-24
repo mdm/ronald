@@ -1,0 +1,6 @@
+[build]
+filehash = false
+release = true
+
+[serve]
+port = 8000

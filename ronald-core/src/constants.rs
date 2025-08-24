@@ -2,89 +2,650 @@
 pub struct KeyDefinition {
     pub line: usize,
     pub bit: u8,
+    pub shiftable: bool,
 }
 
-pub const KEYS: [(&str, (bool, KeyDefinition)); 80] = [
-    ("Escape", (false, KeyDefinition { line: 8, bit: 2 })),
-    ("Key1", (true, KeyDefinition { line: 8, bit: 0 })),
-    ("Key2", (true, KeyDefinition { line: 8, bit: 1 })),
-    ("Key3", (true, KeyDefinition { line: 7, bit: 1 })),
-    ("Key4", (true, KeyDefinition { line: 7, bit: 0 })),
-    ("Key5", (true, KeyDefinition { line: 6, bit: 1 })),
-    ("Key6", (true, KeyDefinition { line: 6, bit: 0 })),
-    ("Key7", (true, KeyDefinition { line: 5, bit: 1 })),
-    ("Key8", (true, KeyDefinition { line: 5, bit: 0 })),
-    ("Key9", (true, KeyDefinition { line: 4, bit: 1 })),
-    ("Key0", (true, KeyDefinition { line: 4, bit: 0 })),
-    ("Minus", (true, KeyDefinition { line: 3, bit: 1 })),
-    ("Caret", (true, KeyDefinition { line: 3, bit: 0 })),
-    ("Clear", (false, KeyDefinition { line: 2, bit: 0 })),
-    ("Delete", (false, KeyDefinition { line: 9, bit: 7 })),
-    ("Tab", (false, KeyDefinition { line: 8, bit: 4 })),
-    ("Q", (true, KeyDefinition { line: 8, bit: 3 })),
-    ("W", (true, KeyDefinition { line: 7, bit: 3 })),
-    ("E", (true, KeyDefinition { line: 7, bit: 2 })),
-    ("R", (true, KeyDefinition { line: 6, bit: 2 })),
-    ("T", (true, KeyDefinition { line: 6, bit: 3 })),
-    ("Y", (true, KeyDefinition { line: 5, bit: 3 })),
-    ("U", (true, KeyDefinition { line: 5, bit: 2 })),
-    ("I", (true, KeyDefinition { line: 4, bit: 3 })),
-    ("O", (true, KeyDefinition { line: 4, bit: 2 })),
-    ("P", (true, KeyDefinition { line: 3, bit: 3 })),
-    ("At", (true, KeyDefinition { line: 3, bit: 2 })),
-    ("BracketLeft", (false, KeyDefinition { line: 2, bit: 1 })),
-    ("Enter", (false, KeyDefinition { line: 2, bit: 2 })),
-    ("CapsLock", (false, KeyDefinition { line: 8, bit: 6 })),
-    ("A", (true, KeyDefinition { line: 8, bit: 5 })),
-    ("S", (true, KeyDefinition { line: 7, bit: 4 })),
-    ("D", (true, KeyDefinition { line: 7, bit: 5 })),
-    ("F", (true, KeyDefinition { line: 6, bit: 5 })),
-    ("G", (true, KeyDefinition { line: 6, bit: 4 })),
-    ("H", (true, KeyDefinition { line: 5, bit: 4 })),
-    ("J", (true, KeyDefinition { line: 5, bit: 5 })),
-    ("K", (true, KeyDefinition { line: 4, bit: 5 })),
-    ("L", (true, KeyDefinition { line: 4, bit: 4 })),
-    ("Colon", (true, KeyDefinition { line: 3, bit: 5 })),
-    ("Semicolon", (true, KeyDefinition { line: 3, bit: 4 })),
-    ("BracketRight", (false, KeyDefinition { line: 2, bit: 3 })),
-    ("Shift", (false, KeyDefinition { line: 2, bit: 5 })),
-    ("Z", (true, KeyDefinition { line: 8, bit: 7 })),
-    ("X", (true, KeyDefinition { line: 7, bit: 7 })),
-    ("C", (true, KeyDefinition { line: 7, bit: 6 })),
-    ("V", (true, KeyDefinition { line: 6, bit: 7 })),
-    ("B", (true, KeyDefinition { line: 6, bit: 6 })),
-    ("N", (true, KeyDefinition { line: 5, bit: 6 })),
-    ("M", (true, KeyDefinition { line: 4, bit: 6 })),
-    ("Comma", (true, KeyDefinition { line: 4, bit: 7 })),
-    ("Period", (true, KeyDefinition { line: 3, bit: 7 })),
-    ("Slash", (true, KeyDefinition { line: 3, bit: 6 })),
-    ("Backslash", (false, KeyDefinition { line: 2, bit: 6 })),
-    ("Space", (false, KeyDefinition { line: 5, bit: 7 })),
-    ("Control", (false, KeyDefinition { line: 2, bit: 7 })),
-    ("ArrowUp", (false, KeyDefinition { line: 0, bit: 0 })),
-    ("ArrowLeft", (false, KeyDefinition { line: 1, bit: 0 })),
-    ("Copy", (false, KeyDefinition { line: 1, bit: 1 })),
-    ("ArrowRight", (false, KeyDefinition { line: 0, bit: 1 })),
-    ("ArrowDown", (false, KeyDefinition { line: 0, bit: 2 })),
-    ("Numpad7", (false, KeyDefinition { line: 1, bit: 2 })),
-    ("Numpad8", (false, KeyDefinition { line: 1, bit: 3 })),
-    ("Numpad9", (false, KeyDefinition { line: 0, bit: 3 })),
-    ("Numpad4", (false, KeyDefinition { line: 2, bit: 4 })),
-    ("Numpad5", (false, KeyDefinition { line: 1, bit: 4 })),
-    ("Numpad6", (false, KeyDefinition { line: 0, bit: 4 })),
-    ("Numpad1", (false, KeyDefinition { line: 1, bit: 5 })),
-    ("Numpad2", (false, KeyDefinition { line: 1, bit: 6 })),
-    ("Numpad3", (false, KeyDefinition { line: 0, bit: 5 })),
-    ("Numpad0", (false, KeyDefinition { line: 1, bit: 7 })),
-    ("NumpadPeriod", (false, KeyDefinition { line: 0, bit: 7 })),
-    ("NumpadEnter", (false, KeyDefinition { line: 0, bit: 6 })),
-    ("JoystickUp", (false, KeyDefinition { line: 9, bit: 0 })),
-    ("JoystickLeft", (false, KeyDefinition { line: 9, bit: 2 })),
-    ("JoystickRight", (false, KeyDefinition { line: 9, bit: 3 })),
-    ("JoystickDown", (false, KeyDefinition { line: 9, bit: 1 })),
-    ("JoystickFire1", (false, KeyDefinition { line: 9, bit: 4 })),
-    ("JoystickFire2", (false, KeyDefinition { line: 9, bit: 5 })),
-    ("JoystickFire3", (false, KeyDefinition { line: 9, bit: 6 })),
+pub const KEYS: [(&str, KeyDefinition); 80] = [
+    (
+        "Escape",
+        (KeyDefinition {
+            line: 8,
+            bit: 2,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Key1",
+        (KeyDefinition {
+            line: 8,
+            bit: 0,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key2",
+        (KeyDefinition {
+            line: 8,
+            bit: 1,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key3",
+        (KeyDefinition {
+            line: 7,
+            bit: 1,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key4",
+        (KeyDefinition {
+            line: 7,
+            bit: 0,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key5",
+        (KeyDefinition {
+            line: 6,
+            bit: 1,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key6",
+        (KeyDefinition {
+            line: 6,
+            bit: 0,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key7",
+        (KeyDefinition {
+            line: 5,
+            bit: 1,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key8",
+        (KeyDefinition {
+            line: 5,
+            bit: 0,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key9",
+        (KeyDefinition {
+            line: 4,
+            bit: 1,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Key0",
+        (KeyDefinition {
+            line: 4,
+            bit: 0,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Minus",
+        (KeyDefinition {
+            line: 3,
+            bit: 1,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Caret",
+        (KeyDefinition {
+            line: 3,
+            bit: 0,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Clear",
+        (KeyDefinition {
+            line: 2,
+            bit: 0,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Delete",
+        (KeyDefinition {
+            line: 9,
+            bit: 7,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Tab",
+        (KeyDefinition {
+            line: 8,
+            bit: 4,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Q",
+        (KeyDefinition {
+            line: 8,
+            bit: 3,
+            shiftable: true,
+        }),
+    ),
+    (
+        "W",
+        (KeyDefinition {
+            line: 7,
+            bit: 3,
+            shiftable: true,
+        }),
+    ),
+    (
+        "E",
+        (KeyDefinition {
+            line: 7,
+            bit: 2,
+            shiftable: true,
+        }),
+    ),
+    (
+        "R",
+        (KeyDefinition {
+            line: 6,
+            bit: 2,
+            shiftable: true,
+        }),
+    ),
+    (
+        "T",
+        (KeyDefinition {
+            line: 6,
+            bit: 3,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Y",
+        (KeyDefinition {
+            line: 5,
+            bit: 3,
+            shiftable: true,
+        }),
+    ),
+    (
+        "U",
+        (KeyDefinition {
+            line: 5,
+            bit: 2,
+            shiftable: true,
+        }),
+    ),
+    (
+        "I",
+        (KeyDefinition {
+            line: 4,
+            bit: 3,
+            shiftable: true,
+        }),
+    ),
+    (
+        "O",
+        (KeyDefinition {
+            line: 4,
+            bit: 2,
+            shiftable: true,
+        }),
+    ),
+    (
+        "P",
+        (KeyDefinition {
+            line: 3,
+            bit: 3,
+            shiftable: true,
+        }),
+    ),
+    (
+        "At",
+        (KeyDefinition {
+            line: 3,
+            bit: 2,
+            shiftable: true,
+        }),
+    ),
+    (
+        "BracketLeft",
+        (KeyDefinition {
+            line: 2,
+            bit: 1,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Enter",
+        (KeyDefinition {
+            line: 2,
+            bit: 2,
+            shiftable: false,
+        }),
+    ),
+    (
+        "CapsLock",
+        (KeyDefinition {
+            line: 8,
+            bit: 6,
+            shiftable: false,
+        }),
+    ),
+    (
+        "A",
+        (KeyDefinition {
+            line: 8,
+            bit: 5,
+            shiftable: true,
+        }),
+    ),
+    (
+        "S",
+        (KeyDefinition {
+            line: 7,
+            bit: 4,
+            shiftable: true,
+        }),
+    ),
+    (
+        "D",
+        (KeyDefinition {
+            line: 7,
+            bit: 5,
+            shiftable: true,
+        }),
+    ),
+    (
+        "F",
+        (KeyDefinition {
+            line: 6,
+            bit: 5,
+            shiftable: true,
+        }),
+    ),
+    (
+        "G",
+        (KeyDefinition {
+            line: 6,
+            bit: 4,
+            shiftable: true,
+        }),
+    ),
+    (
+        "H",
+        (KeyDefinition {
+            line: 5,
+            bit: 4,
+            shiftable: true,
+        }),
+    ),
+    (
+        "J",
+        (KeyDefinition {
+            line: 5,
+            bit: 5,
+            shiftable: true,
+        }),
+    ),
+    (
+        "K",
+        (KeyDefinition {
+            line: 4,
+            bit: 5,
+            shiftable: true,
+        }),
+    ),
+    (
+        "L",
+        (KeyDefinition {
+            line: 4,
+            bit: 4,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Colon",
+        (KeyDefinition {
+            line: 3,
+            bit: 5,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Semicolon",
+        (KeyDefinition {
+            line: 3,
+            bit: 4,
+            shiftable: true,
+        }),
+    ),
+    (
+        "BracketRight",
+        (KeyDefinition {
+            line: 2,
+            bit: 3,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Shift",
+        (KeyDefinition {
+            line: 2,
+            bit: 5,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Z",
+        (KeyDefinition {
+            line: 8,
+            bit: 7,
+            shiftable: true,
+        }),
+    ),
+    (
+        "X",
+        (KeyDefinition {
+            line: 7,
+            bit: 7,
+            shiftable: true,
+        }),
+    ),
+    (
+        "C",
+        (KeyDefinition {
+            line: 7,
+            bit: 6,
+            shiftable: true,
+        }),
+    ),
+    (
+        "V",
+        (KeyDefinition {
+            line: 6,
+            bit: 7,
+            shiftable: true,
+        }),
+    ),
+    (
+        "B",
+        (KeyDefinition {
+            line: 6,
+            bit: 6,
+            shiftable: true,
+        }),
+    ),
+    (
+        "N",
+        (KeyDefinition {
+            line: 5,
+            bit: 6,
+            shiftable: true,
+        }),
+    ),
+    (
+        "M",
+        (KeyDefinition {
+            line: 4,
+            bit: 6,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Comma",
+        (KeyDefinition {
+            line: 4,
+            bit: 7,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Period",
+        (KeyDefinition {
+            line: 3,
+            bit: 7,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Slash",
+        (KeyDefinition {
+            line: 3,
+            bit: 6,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Backslash",
+        (KeyDefinition {
+            line: 2,
+            bit: 6,
+            shiftable: true,
+        }),
+    ),
+    (
+        "Space",
+        (KeyDefinition {
+            line: 5,
+            bit: 7,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Control",
+        (KeyDefinition {
+            line: 2,
+            bit: 7,
+            shiftable: false,
+        }),
+    ),
+    (
+        "ArrowUp",
+        (KeyDefinition {
+            line: 0,
+            bit: 0,
+            shiftable: false,
+        }),
+    ),
+    (
+        "ArrowLeft",
+        (KeyDefinition {
+            line: 1,
+            bit: 0,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Copy",
+        (KeyDefinition {
+            line: 1,
+            bit: 1,
+            shiftable: false,
+        }),
+    ),
+    (
+        "ArrowRight",
+        (KeyDefinition {
+            line: 0,
+            bit: 1,
+            shiftable: false,
+        }),
+    ),
+    (
+        "ArrowDown",
+        (KeyDefinition {
+            line: 0,
+            bit: 2,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad7",
+        (KeyDefinition {
+            line: 1,
+            bit: 2,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad8",
+        (KeyDefinition {
+            line: 1,
+            bit: 3,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad9",
+        (KeyDefinition {
+            line: 0,
+            bit: 3,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad4",
+        (KeyDefinition {
+            line: 2,
+            bit: 4,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad5",
+        (KeyDefinition {
+            line: 1,
+            bit: 4,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad6",
+        (KeyDefinition {
+            line: 0,
+            bit: 4,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad1",
+        (KeyDefinition {
+            line: 1,
+            bit: 5,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad2",
+        (KeyDefinition {
+            line: 1,
+            bit: 6,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad3",
+        (KeyDefinition {
+            line: 0,
+            bit: 5,
+            shiftable: false,
+        }),
+    ),
+    (
+        "Numpad0",
+        (KeyDefinition {
+            line: 1,
+            bit: 7,
+            shiftable: false,
+        }),
+    ),
+    (
+        "NumpadPeriod",
+        (KeyDefinition {
+            line: 0,
+            bit: 7,
+            shiftable: false,
+        }),
+    ),
+    (
+        "NumpadEnter",
+        (KeyDefinition {
+            line: 0,
+            bit: 6,
+            shiftable: false,
+        }),
+    ),
+    (
+        "JoystickUp",
+        (KeyDefinition {
+            line: 9,
+            bit: 0,
+            shiftable: false,
+        }),
+    ),
+    (
+        "JoystickLeft",
+        (KeyDefinition {
+            line: 9,
+            bit: 2,
+            shiftable: false,
+        }),
+    ),
+    (
+        "JoystickRight",
+        (KeyDefinition {
+            line: 9,
+            bit: 3,
+            shiftable: false,
+        }),
+    ),
+    (
+        "JoystickDown",
+        (KeyDefinition {
+            line: 9,
+            bit: 1,
+            shiftable: false,
+        }),
+    ),
+    (
+        "JoystickFire1",
+        (KeyDefinition {
+            line: 9,
+            bit: 4,
+            shiftable: false,
+        }),
+    ),
+    (
+        "JoystickFire2",
+        (KeyDefinition {
+            line: 9,
+            bit: 5,
+            shiftable: false,
+        }),
+    ),
+    (
+        "JoystickFire3",
+        (KeyDefinition {
+            line: 9,
+            bit: 6,
+            shiftable: false,
+        }),
+    ),
 ];
 
 pub const SCREEN_BUFFER_WIDTH: usize = 48 * 16;
