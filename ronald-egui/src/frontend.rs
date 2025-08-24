@@ -73,6 +73,65 @@ where
         }
     }
 
+    pub fn ui<K>(
+        &mut self,
+        ctx: &egui::Context,
+        ui: Option<&mut egui::Ui>,
+        key_mapper: &mut KeyMapper<K>,
+        can_interact: bool,
+    ) where
+        K: KeyMapStore,
+    {
+        match ui {
+            Some(ui) => {
+                let size = self.calculate_emulator_display_size(ui);
+                self.run_frame(ctx, ui, size, false, can_interact, key_mapper);
+            }
+            None => {
+                egui::Window::new("Input Test").show(ctx, |ui| {
+                    ui.text_edit_singleline(&mut self.input_test);
+                });
+
+                let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
+
+                egui::Window::new("Screen")
+                    .collapsible(false)
+                    .resizable(false)
+                    .default_size(size)
+                    .show(ctx, |ui| {
+                        self.run_frame(ctx, ui, size, true, can_interact, key_mapper);
+                    });
+            }
+        }
+    }
+
+    pub fn pick_file_disk_a(&mut self) {
+        self.pick_file_internal(
+            "Load DSK into Drive A:",
+            "DSK Disk Image",
+            "dsk",
+            self.picked_file_disk_a.clone(),
+        );
+    }
+
+    pub fn pick_file_disk_b(&mut self) {
+        self.pick_file_internal(
+            "Load DSK into Drive B:",
+            "DSK Disk Image",
+            "dsk",
+            self.picked_file_disk_b.clone(),
+        );
+    }
+
+    pub fn pick_file_tape(&mut self) {
+        self.pick_file_internal(
+            "Load Tape:",
+            "CDT Tape Image",
+            "cdt",
+            self.picked_file_tape.clone(),
+        );
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn pick_file_internal(
         &mut self,
@@ -131,136 +190,50 @@ where
         });
     }
 
-    pub fn pick_file_disk_a(&mut self) {
-        self.pick_file_internal(
-            "Load DSK into Drive A:",
-            "DSK Disk Image",
-            "dsk",
-            self.picked_file_disk_a.clone(),
-        );
-    }
-
-    pub fn pick_file_disk_b(&mut self) {
-        self.pick_file_internal(
-            "Load DSK into Drive B:",
-            "DSK Disk Image",
-            "dsk",
-            self.picked_file_disk_b.clone(),
-        );
-    }
-
-    pub fn pick_file_tape(&mut self) {
-        self.pick_file_internal(
-            "Load Tape:",
-            "CDT Tape Image",
-            "cdt",
-            self.picked_file_tape.clone(),
-        );
-    }
-
-    pub fn ui<K>(
+    fn run_frame<K>(
         &mut self,
         ctx: &egui::Context,
-        ui: Option<&mut egui::Ui>,
-        key_mapper: &mut KeyMapper<K>,
+        ui: &mut egui::Ui,
+        size: egui::Vec2,
+        workbench: bool,
         can_interact: bool,
-    ) where
+        key_mapper: &mut KeyMapper<K>,
+    ) -> egui::Response
+    where
         K: KeyMapStore,
     {
-        match ui {
-            Some(ui) => {
-                let central_panel_size = ui.max_rect().size();
-                let size = if central_panel_size.x
-                    * (SCREEN_BUFFER_HEIGHT as f32 / SCREEN_BUFFER_WIDTH as f32)
-                    < central_panel_size.y
-                {
-                    egui::Vec2::new(
-                        central_panel_size.x,
-                        central_panel_size.x
-                            * (SCREEN_BUFFER_HEIGHT as f32 / SCREEN_BUFFER_WIDTH as f32),
-                    )
-                } else {
-                    egui::Vec2::new(
-                        central_panel_size.y
-                            * (SCREEN_BUFFER_WIDTH as f32 / SCREEN_BUFFER_HEIGHT as f32),
-                        central_panel_size.y,
-                    )
-                };
+        self.can_interact = if workbench {
+            // Workbench mode - check if window is active
+            let is_active_window = ctx.top_layer_id() == Some(ui.layer_id());
+            is_active_window && can_interact && self.dropped_files.is_empty()
+        } else {
+            // Emulator only mode
+            can_interact && self.dropped_files.is_empty()
+        };
 
-                self.can_interact = can_interact && self.dropped_files.is_empty();
-
-                if !ctx.wants_keyboard_input() {
-                    ui.input(|input| self.handle_input(input, key_mapper));
-                }
-
-                self.handle_dropped_files(ctx);
-                self.handle_picked_files();
-
-                #[cfg(target_arch = "wasm32")]
-                {
-                    if self.has_window_focus() && self.can_interact {
-                        self.resume();
-                    } else {
-                        self.pause();
-                    }
-                }
-
-                #[cfg(not(target_arch = "wasm32"))]
-                if self.can_interact {
-                    self.resume();
-                } else {
-                    self.pause();
-                }
-
-                self.step_emulation();
-                self.draw_framebuffer(ctx, ui, size);
-            }
-            None => {
-                egui::Window::new("Input Test").show(ctx, |ui| {
-                    ui.text_edit_singleline(&mut self.input_test);
-                });
-
-                let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
-
-                egui::Window::new("Screen")
-                    .collapsible(false)
-                    .resizable(false)
-                    .default_size(size)
-                    .show(ctx, |ui| {
-                        let is_active_window = ctx.top_layer_id() == Some(ui.layer_id());
-                        self.can_interact =
-                            is_active_window && can_interact && self.dropped_files.is_empty();
-
-                        if !ctx.wants_keyboard_input() {
-                            ui.input(|input| self.handle_input(input, key_mapper));
-                        }
-
-                        self.handle_dropped_files(ctx);
-                        self.handle_picked_files();
-
-                        #[cfg(target_arch = "wasm32")]
-                        {
-                            if self.has_window_focus() && self.can_interact {
-                                self.resume();
-                            } else {
-                                self.pause();
-                            }
-                        }
-
-                        #[cfg(not(target_arch = "wasm32"))]
-                        if self.can_interact {
-                            self.resume();
-                        } else {
-                            self.pause();
-                        }
-
-                        self.step_emulation();
-                        self.draw_framebuffer(ctx, ui, size);
-                    });
-            }
+        if !ctx.wants_keyboard_input() {
+            ui.input(|input| self.handle_input(input, key_mapper));
         }
-    }
 
+        self.handle_dropped_files(ctx);
+        self.handle_picked_files();
+
+        #[cfg(target_arch = "wasm32")]
+        if self.has_window_focus() && self.can_interact {
+            self.resume();
+        } else {
+            self.pause();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.can_interact {
+            self.resume();
+        } else {
+            self.pause();
+        }
+
+        self.step_emulation();
+        self.draw_framebuffer(ctx, ui, size)
+    }
     fn handle_input<K>(&mut self, input: &egui::InputState, key_mapper: &mut KeyMapper<K>)
     where
         K: KeyMapStore,
@@ -360,16 +333,6 @@ where
         }
     }
 
-    fn draw_framebuffer(
-        &mut self,
-        _ctx: &egui::Context,
-        ui: &mut egui::Ui,
-        size: egui::Vec2,
-    ) -> egui::Response {
-        let texture = egui::load::SizedTexture::new(self.video.framebuffer(), size);
-        ui.image(texture)
-    }
-
     fn step_emulation(&mut self) {
         if self.paused {
             return;
@@ -401,6 +364,16 @@ where
         );
     }
 
+    fn draw_framebuffer(
+        &mut self,
+        _ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        size: egui::Vec2,
+    ) -> egui::Response {
+        let texture = egui::load::SizedTexture::new(self.video.framebuffer(), size);
+        ui.image(texture)
+    }
+
     fn pause(&mut self) {
         if !self.paused {
             self.paused = true;
@@ -418,20 +391,30 @@ where
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
     fn has_window_focus(&self) -> bool {
-        #[cfg(target_arch = "wasm32")]
-        {
-            if let Some(window) = web_sys::window() {
-                if let Some(document) = window.document() {
-                    return document.has_focus().unwrap_or(true);
-                }
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                return document.has_focus().unwrap_or(true);
             }
-            true
         }
-        #[cfg(not(target_arch = "wasm32"))]
+        true
+    }
+
+    fn calculate_emulator_display_size(&self, ui: &mut egui::Ui) -> egui::Vec2 {
+        let central_panel_size = ui.max_rect().size();
+        if central_panel_size.x * (SCREEN_BUFFER_HEIGHT as f32 / SCREEN_BUFFER_WIDTH as f32)
+            < central_panel_size.y
         {
-            // On native, always consider window focused
-            true
+            egui::Vec2::new(
+                central_panel_size.x,
+                central_panel_size.x * (SCREEN_BUFFER_HEIGHT as f32 / SCREEN_BUFFER_WIDTH as f32),
+            )
+        } else {
+            egui::Vec2::new(
+                central_panel_size.y * (SCREEN_BUFFER_WIDTH as f32 / SCREEN_BUFFER_HEIGHT as f32),
+                central_panel_size.y,
+            )
         }
     }
 }
