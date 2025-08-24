@@ -1,6 +1,7 @@
 [package]
 name = "ronald-legacy-pixels"
-version = "0.1.0"
+version = "0.2.0"
+authors = ["Marc Dominik Migge <marcmigge@gmx.net>"]
 license = "MIT"
 edition = "2021"
 
