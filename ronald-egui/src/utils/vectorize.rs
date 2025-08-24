@@ -38,9 +38,10 @@ mod tests {
     #[test]
     fn test_serialize_empty_map() {
         let map: HashMap<TestKey, i32> = HashMap::new();
-        let serialized = serde_json::to_string(&map).unwrap();
+        let serialized = serialize(&map, serde_json::value::Serializer).unwrap();
+        let serialized_string = serde_json::to_string(&serialized).unwrap();
         let expected = "[]";
-        assert_eq!(serialized, expected);
+        assert_eq!(serialized_string, expected);
     }
 
     #[test]
@@ -56,8 +57,9 @@ mod tests {
         );
         original.insert(TestKey { id: 30, flag: true }, 0);
 
-        let serialized = serde_json::to_string(&original).unwrap();
-        let deserialized: HashMap<TestKey, i32> = serde_json::from_str(&serialized).unwrap();
+        let serialized = serialize(&original, serde_json::value::Serializer).unwrap();
+        let serialized_string = serde_json::to_string(&serialized).unwrap();
+        let deserialized: HashMap<TestKey, i32> = deserialize(&mut serde_json::Deserializer::from_str(&serialized_string)).unwrap();
 
         assert_eq!(original, deserialized);
     }
