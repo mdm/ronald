@@ -1,6 +1,7 @@
 [package]
 name = "ronald-wasm"
 version = "0.1.0"
+authors = ["Marc Dominik Migge <marcmigge@gmx.net>"]
 license = "MIT"
 edition = "2021"
 
@@ -17,4 +18,8 @@ log = "0.4"
 ronald-core = { path = "../../ronald-core" }
 wasm-bindgen = "0.2"
 wasm-logger = "0.2.0"
-web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "HtmlCanvasElement", "ImageData"] }
+web-sys = { version = "0.3", features = [
+  "CanvasRenderingContext2d",
+  "HtmlCanvasElement",
+  "ImageData",
+] }
