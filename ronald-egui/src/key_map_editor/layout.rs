@@ -569,4 +569,3 @@ pub const KEY_LAYOUTS: &[KeyLayout] = &[
         label: include_str!("../../assets/keys/ArrowRight.partial.svg"),
     },
 ];
-
