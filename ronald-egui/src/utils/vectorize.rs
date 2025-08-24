@@ -59,7 +59,8 @@ mod tests {
 
         let serialized = serialize(&original, serde_json::value::Serializer).unwrap();
         let serialized_string = serde_json::to_string(&serialized).unwrap();
-        let deserialized: HashMap<TestKey, i32> = deserialize(&mut serde_json::Deserializer::from_str(&serialized_string)).unwrap();
+        let deserialized: HashMap<TestKey, i32> =
+            deserialize(&mut serde_json::Deserializer::from_str(&serialized_string)).unwrap();
 
         assert_eq!(original, deserialized);
     }
