@@ -109,6 +109,43 @@ impl KeyMapEditor {
         }
 
         let modal = egui::Modal::new("key_bindings_modal".into()).show(ctx, |ui| {
+            // Handle key binding listener modal first to consume input
+            if let Some((hovered_key, shifted)) = self.listening {
+                egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
+                    if shifted {
+                        ui.label(format!("Press a key to bind to \"Shift + {hovered_key}\" on the guest system."));
+                    } else {
+                        ui.label(format!("Press a key to bind to \"{hovered_key}\" on the guest system."));
+                    }
+
+                    match key_mapper.binding(hovered_key, shifted) {
+                        Some(host_key) => {
+                            ui.label(format!("Currently bound to {host_key}"));
+                            if ui.button("Clear Binding").clicked() {
+                                let _ = key_mapper.clear_binding(hovered_key, shifted);
+                            }
+                        }
+                        None => {
+                            ui.label("No binding set yet.");
+                        }
+                    }
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.listening = None;
+                        }
+                    });
+
+                    ui.input(|input| {
+                        if let Ok(true) =
+                            key_mapper.try_set_binding(hovered_key, shifted, input)
+                        {
+                            self.listening = None;
+                        }
+                    });
+                });
+            }
+
             ui.label("Click keys to set bindings. Shift-click to set bindings for shifted keys. The guest system's Shift keys themselves cannot be bound.");
 
             // Get theme-appropriate colors
@@ -202,7 +239,8 @@ impl KeyMapEditor {
                     egui::vec2(key_width, key_height),
                 );
 
-                let key_response = ui.allocate_rect(key_rect, egui::Sense::hover().union(egui::Sense::click()));
+                let key_id = ui.make_persistent_id(("key_map_editor", key_layout.name));
+                let key_response = ui.interact(key_rect, key_id, egui::Sense::hover().union(egui::Sense::click()));
 
                 // Add accessibility label
                 key_response.widget_info(|| egui::WidgetInfo::labeled(
@@ -226,9 +264,14 @@ impl KeyMapEditor {
                     true
                 };
 
-                // Handle click events
-                if self.listening.is_none() && key_response.clicked() && is_valid_hit {
-                    log::debug!("Clicked on key: {}", key_layout.name);
+                // Handle click events and keyboard activation
+                let is_mouse_activated = key_response.clicked() && is_valid_hit;
+                let is_keyboard_activated = key_response.has_focus() && ui.input(|input| {
+                    input.key_pressed(egui::Key::Enter) || input.key_pressed(egui::Key::Space)
+                });
+
+                if self.listening.is_none() && (is_mouse_activated || is_keyboard_activated) {
+                    log::debug!("Activated key: {}", key_layout.name);
                     let shiftable = self
                         .key_definitions
                         .get(key_layout.name)
@@ -243,46 +286,10 @@ impl KeyMapEditor {
                     }
                 }
 
-                // Handle hover state
-                if key_response.hovered() && is_valid_hit {
+                // Handle hover and focus state
+                if (key_response.hovered() && is_valid_hit) || key_response.has_focus() {
                     self.hovered_key = Some(key_layout.name);
                 }
-            }
-
-            if let Some((hovered_key, shifted)) = self.listening {
-                egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
-                    if shifted {
-                        ui.label(format!("Press a key to bind to \"Shift + {hovered_key}\" on the guest system."));
-                    } else {
-                        ui.label(format!("Press a key to bind to \"{hovered_key}\" on the guest system."));
-                    }
-
-                    match key_mapper.binding(hovered_key, shifted) {
-                        Some(host_key) => {
-                            ui.label(format!("Currently bound to {host_key}"));
-                            if ui.button("Clear Binding").clicked() {
-                                let _ = key_mapper.clear_binding(hovered_key, shifted);
-                            }
-                        }
-                        None => {
-                            ui.label("No binding set yet.");
-                        }
-                    }
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Cancel").clicked() {
-                            self.listening = None;
-                        }
-                    });
-
-                    ui.input(|input| {
-                        if let Ok(true) =
-                            key_mapper.try_set_binding(hovered_key, shifted, input)
-                        {
-                            self.listening = None;
-                        }
-                    });
-                });
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
