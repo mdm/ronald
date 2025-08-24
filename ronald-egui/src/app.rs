@@ -66,6 +66,25 @@ where
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui_extras::install_image_loaders(ctx);
 
+        self.render_menu_bar(ctx);
+        self.initialize_frontend(ctx, frame);
+        self.render_emulator_only_mode(ctx);
+        self.render_workbench_mode(ctx);
+        self.key_map_editor.ui(ctx, &mut self.key_mapper);
+
+        ctx.request_repaint();
+    }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
+    }
+}
+
+impl<S> RonaldApp<S>
+where
+    S: KeyMapStore,
+{
+    fn render_menu_bar(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("View", |ui| {
@@ -137,7 +156,9 @@ where
                 });
             });
         });
+    }
 
+    fn initialize_frontend(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend) {
             // On WASM, show a welcome modal to work around the fact that browser audio contexts
             // cannot be started without user interaction.
@@ -162,7 +183,9 @@ where
                 self.frontend = Some(frontend);
             }
         }
+    }
 
+    fn render_emulator_only_mode(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(frontend) = &mut self.frontend
                 && !self.workbench
@@ -181,19 +204,13 @@ where
                 );
             }
         });
+    }
 
+    fn render_workbench_mode(&mut self, ctx: &egui::Context) {
         if let Some(frontend) = &mut self.frontend
             && self.workbench
         {
             frontend.ui(ctx, None, &mut self.key_mapper, !self.key_map_editor.show);
         }
-
-        self.key_map_editor.ui(ctx, &mut self.key_mapper);
-
-        ctx.request_repaint();
-    }
-
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
     }
 }
