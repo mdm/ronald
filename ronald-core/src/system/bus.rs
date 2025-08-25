@@ -15,7 +15,7 @@ pub mod screen; // TODO: refactor to not use pub
 mod tape;
 
 use self::psg::SoundGenerator;
-use crtc::CrtController;
+use crtc::HitachiHd6845s;
 use fdc::FloppyDiskController;
 use gate_array::GateArray;
 use keyboard::Keyboard;
@@ -23,12 +23,19 @@ use ppi::PeripheralInterface;
 use screen::Screen;
 use tape::TapeController;
 
+pub trait BusDevice {
+    fn read_byte(&self, port: u16) -> u8;
+    fn write_byte(&mut self, port: u16, value: u8);
+    fn step(&mut self);
+}
+
 pub trait Bus {
+    // TODO: replace by BusDevice
     fn read_byte(&mut self, port: u16) -> u8;
     fn write_byte(&mut self, memory: &mut impl Mmu, port: u16, value: u8);
 }
 
-pub struct DummyBus {}
+pub struct DummyBus {} // TODO: rename to BlackHole
 
 impl DummyBus {
     pub fn new() -> DummyBus {
@@ -49,7 +56,7 @@ impl Bus for DummyBus {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StandardBus {
-    crtc: CrtController,
+    crtc: HitachiHd6845s,
     fdc: FloppyDiskController,
     gate_array: GateArray,
     keyboard: Keyboard,
@@ -60,8 +67,9 @@ pub struct StandardBus {
 }
 
 impl StandardBus {
+    // TODO: rename StandardBus to BusDeviceManager
     pub fn new() -> Self {
-        let crtc = CrtController::new();
+        let crtc = HitachiHd6845s::new();
         let fdc = FloppyDiskController::new();
         let gate_array = GateArray::new();
         let keyboard = Keyboard::new();

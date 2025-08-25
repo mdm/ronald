@@ -84,7 +84,7 @@ impl GateArray {
 
     pub fn step(
         &mut self,
-        crtc: &crtc::CrtController,
+        crtc: &dyn crtc::CrtController,
         memory: &memory::Memory,
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
@@ -99,7 +99,7 @@ impl GateArray {
         generate_interrupt
     }
 
-    fn update_interrupt_counter(&mut self, crtc: &crtc::CrtController) -> bool {
+    fn update_interrupt_counter(&mut self, crtc: &dyn crtc::CrtController) -> bool {
         let mut generate_interrupt = false;
         if self.hsync_active && !crtc.read_horizontal_sync() {
             self.interrupt_counter += 1;
@@ -125,7 +125,7 @@ impl GateArray {
         generate_interrupt
     }
 
-    fn update_screen_mode(&mut self, crtc: &crtc::CrtController) {
+    fn update_screen_mode(&mut self, crtc: &dyn crtc::CrtController) {
         if !self.hsync_active && crtc.read_horizontal_sync() {
             self.current_screen_mode = self.requested_screen_mode;
             log::trace!("New screen mode: {}", self.current_screen_mode);
@@ -134,7 +134,7 @@ impl GateArray {
 
     fn write_to_screen(
         &self,
-        crtc: &crtc::CrtController,
+        crtc: &dyn crtc::CrtController,
         memory: &memory::Memory,
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
