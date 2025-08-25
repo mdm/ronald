@@ -166,7 +166,7 @@ where
             egui::Modal::new("welcome_modal".into()).show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(10.0);
-                    ui.label("Welcome to Ronald");
+                    ui.label(format!("Welcome to Ronald {}", env!("CARGO_PKG_VERSION")));
                     ui.add_space(10.0);
                     ui.label("This emulator recreates the classic Amstrad CPC.");
                     ui.add_space(20.0);
