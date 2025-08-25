@@ -44,7 +44,7 @@ impl PeripheralInterface {
 
     pub fn read_byte(
         &self,
-        crtc: &CrtController,
+        crtc: &dyn CrtController,
         psg: &SoundGenerator,
         tape: &TapeController,
         port: u16,
