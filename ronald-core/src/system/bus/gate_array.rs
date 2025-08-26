@@ -15,6 +15,7 @@ pub struct GateArray {
     vsync_active: bool,
     hsyncs_since_last_vsync: u8,
     interrupt_counter: u8,
+    hold_interrupt: bool,
     selected_pen: usize,
     pen_colors: Vec<u8>,
 }
@@ -28,6 +29,7 @@ impl GateArray {
             vsync_active: false,
             hsyncs_since_last_vsync: 0,
             interrupt_counter: 0,
+            hold_interrupt: false,
             selected_pen: 0,
             pen_colors: vec![0; 17], // 16 pens + border
         }
@@ -103,11 +105,6 @@ impl GateArray {
             self.interrupt_counter += 1;
             self.hsyncs_since_last_vsync += 1;
 
-            // TODO: handle this case properly
-            if self.hsyncs_since_last_vsync > 3 {
-                self.hsyncs_since_last_vsync = 3;
-            }
-
             if self.interrupt_counter == 52 {
                 self.interrupt_counter = 0;
                 generate_interrupt = true;
@@ -116,11 +113,13 @@ impl GateArray {
 
         if !self.vsync_active && crtc.read_vertical_sync() {
             self.hsyncs_since_last_vsync = 0;
+            self.hold_interrupt = true;
         }
 
-        if self.hsyncs_since_last_vsync == 2 {
+        if self.hold_interrupt && self.hsyncs_since_last_vsync == 2 {
             self.interrupt_counter = 0;
-            generate_interrupt = self.interrupt_counter & 0x20 != 0;
+            self.hold_interrupt = false;
+            generate_interrupt = self.interrupt_counter & 0x20 == 0;
         }
 
         generate_interrupt

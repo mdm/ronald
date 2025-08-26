@@ -100,6 +100,7 @@ pub struct CPC464 {
     memory: Memory,
     #[serde(flatten)]
     bus: StandardBus,
+    master_clock: u64,
     // debugger: Debugger,
 }
 
@@ -114,6 +115,7 @@ impl System<'_> for CPC464 {
             cpu,
             memory,
             bus,
+            master_clock: 0,
             // debugger,
         }
     }
@@ -126,7 +128,11 @@ impl System<'_> for CPC464 {
         let (cycles, interrupt_acknowledged) =
             self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
+        // Master clock runs at 16MHz
+        // CPU runs at 4MHz (master clock / 4)
+        // cycles represents NOP time units, where 1 NOP = 4 CPU cycles = 16 master clock ticks
         for _ in 0..cycles {
+            self.master_clock += 16;
             let interrupt = self.bus.step(&mut self.memory, video, audio);
             if interrupt {
                 self.cpu.request_interrupt();
