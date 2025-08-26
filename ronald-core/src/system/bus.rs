@@ -16,7 +16,7 @@ mod tape;
 
 use self::psg::SoundGenerator;
 use crtc::HitachiHd6845s;
-use fdc::FloppyDiskController;
+use fdc::NecUpd765;
 use gate_array::GateArray;
 use keyboard::Keyboard;
 use ppi::PeripheralInterface;
@@ -24,7 +24,7 @@ use screen::Screen;
 use tape::TapeController;
 
 pub trait BusDevice {
-    fn read_byte(&self, port: u16) -> u8;
+    fn read_byte(&mut self, port: u16) -> u8;
     fn write_byte(&mut self, port: u16, value: u8);
     fn step(&mut self);
 }
@@ -57,7 +57,7 @@ impl Bus for DummyBus {
 #[serde(rename_all = "camelCase")]
 pub struct StandardBus {
     crtc: HitachiHd6845s,
-    fdc: FloppyDiskController,
+    fdc: NecUpd765,
     gate_array: GateArray,
     keyboard: Keyboard,
     ppi: PeripheralInterface,
@@ -70,7 +70,7 @@ impl StandardBus {
     // TODO: rename StandardBus to BusDeviceManager
     pub fn new() -> Self {
         let crtc = HitachiHd6845s::new();
-        let fdc = FloppyDiskController::new();
+        let fdc = NecUpd765::new();
         let gate_array = GateArray::new();
         let keyboard = Keyboard::new();
         let ppi = PeripheralInterface::new();
