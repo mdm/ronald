@@ -149,7 +149,7 @@ impl HitachiHd6845s {
 }
 
 impl BusDevice for HitachiHd6845s {
-    fn read_byte(&self, port: u16) -> u8 {
+    fn read_byte(&mut self, port: u16) -> u8 {
         // TODO: get rid of port parameter?
         log::error!("Unexpected read from CRT controller");
         unimplemented!()
