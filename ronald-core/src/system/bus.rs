@@ -14,20 +14,14 @@ mod psg;
 pub mod screen; // TODO: refactor to not use pub
 mod tape;
 
-use self::psg::SoundGenerator;
-use crtc::HitachiHd6845s;
+use crtc::{CrtController, HitachiHd6845s};
 use fdc::NecUpd765;
 use gate_array::GateArray;
 use keyboard::Keyboard;
 use ppi::PeripheralInterface;
+use psg::SoundGenerator;
 use screen::Screen;
 use tape::TapeController;
-
-pub trait BusDevice {
-    fn read_byte(&mut self, port: u16) -> u8;
-    fn write_byte(&mut self, port: u16, value: u8);
-    fn step(&mut self);
-}
 
 pub trait Bus {
     // TODO: replace by BusDevice

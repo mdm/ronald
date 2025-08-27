@@ -3,13 +3,13 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::BusDevice;
-
 mod dsk_file;
 
 use dsk_file::Disk;
 
-pub trait FloppyDiskController: BusDevice {
+pub trait FloppyDiskController {
+    fn read_byte(&mut self, port: u16) -> u8;
+    fn write_byte(&mut self, port: u16, value: u8);
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
 }
 
@@ -507,7 +507,8 @@ impl NecUpd765 {
     }
 }
 
-impl BusDevice for NecUpd765 {
+
+impl FloppyDiskController for NecUpd765 {
     fn read_byte(&mut self, port: u16) -> u8 {
         match port {
             0xfb7e => self.report_main_status_register(),
@@ -606,12 +607,6 @@ impl BusDevice for NecUpd765 {
         }
     }
 
-    fn step(&mut self) {
-        // FDC doesn't need to step
-    }
-}
-
-impl FloppyDiskController for NecUpd765 {
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         self.drives[drive].disk = match dsk_file::Disk::load(rom, path) {
             Ok(disk) => {
