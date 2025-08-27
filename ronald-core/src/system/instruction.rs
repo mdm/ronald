@@ -483,7 +483,7 @@ impl Instruction {
             Instruction::Ldi => 5,
             Instruction::Ldir => 6,
             Instruction::Neg => 2,
-            Instruction::Nop => 4,
+            Instruction::Nop => 1,
             Instruction::Or(Operand::Register8(cpu::Register8::IXH)) => 2,
             Instruction::Or(Operand::Register8(cpu::Register8::IXL)) => 2,
             Instruction::Or(Operand::Register8(cpu::Register8::IYH)) => 2,
