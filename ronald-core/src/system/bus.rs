@@ -16,7 +16,7 @@ mod tape;
 
 use crtc::{CrtController, HitachiHd6845s};
 use fdc::NecUpd765;
-use gate_array::GateArray;
+use gate_array::{GateArray, Amstrad40007};
 use keyboard::Keyboard;
 use ppi::PeripheralInterface;
 use psg::SoundGenerator;
@@ -52,7 +52,7 @@ impl Bus for DummyBus {
 pub struct StandardBus {
     crtc: HitachiHd6845s,
     fdc: NecUpd765,
-    gate_array: GateArray,
+    gate_array: Amstrad40007,
     keyboard: Keyboard,
     ppi: PeripheralInterface,
     psg: SoundGenerator,
@@ -65,7 +65,7 @@ impl StandardBus {
     pub fn new() -> Self {
         let crtc = HitachiHd6845s::new();
         let fdc = NecUpd765::new();
-        let gate_array = GateArray::new();
+        let gate_array = Amstrad40007::new();
         let keyboard = Keyboard::new();
         let ppi = PeripheralInterface::new();
         let psg = SoundGenerator::new();
