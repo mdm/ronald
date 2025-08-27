@@ -9,7 +9,7 @@ mod dsk_file;
 
 use dsk_file::Disk;
 
-pub trait FloppyDiskController {
+pub trait FloppyDiskController: BusDevice {
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
 }
 
