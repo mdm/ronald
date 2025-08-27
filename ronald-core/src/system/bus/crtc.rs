@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::BusDevice;
 
-pub trait CrtController {
+pub trait CrtController: BusDevice {
     fn read_address(&self) -> usize;
     fn read_display_enabled(&self) -> bool;
     fn read_horizontal_sync(&self) -> bool;
