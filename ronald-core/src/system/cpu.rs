@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::system::bus::Bus;
 use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
-use crate::system::memory::{Mmu, Read, Write};
+use crate::system::memory::{MemManage, MemRead, MemWrite};
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
 pub enum Register8 {
@@ -211,9 +211,23 @@ impl Flag {
     }
 }
 
+pub trait Cpu: Default {
+    fn fetch_and_execute(
+        &mut self,
+        memory: &mut (impl MemRead + MemWrite + MemManage),
+        bus: &mut impl Bus,
+    ) -> (u8, bool);
+    fn request_interrupt(&mut self);
+    fn disassemble(
+        &mut self,
+        memory: &mut (impl MemRead + MemWrite + MemManage),
+        count: usize,
+    ) -> Vec<(u16, String)>;
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Cpu {
+pub struct ZilogZ80 {
     #[serde(flatten)]
     pub registers: RegisterFile, // TODO: make this private
     pub decoder: Decoder, // TODO: make this private
@@ -225,12 +239,12 @@ pub struct Cpu {
     irq_received: bool,
 }
 
-impl Cpu {
+impl ZilogZ80 {
     pub fn new(initial_pc: u16) -> Self {
         let mut registers = RegisterFile::new();
         registers.write_word(&Register16::PC, initial_pc);
 
-        let mut cpu = Cpu {
+        let mut cpu = Self {
             registers,
             iff1: false,
             iff2: false,
@@ -246,9 +260,144 @@ impl Cpu {
         cpu
     }
 
-    pub fn fetch_and_execute(
+    fn reset(&mut self) {
+        // TODO: implement reset
+    }
+
+    fn check_flag(&self, flag: Flag) -> bool {
+        // TODO: move this from CPU to register file
+        let flags = self.registers.read_byte(&Register8::F);
+
+        flags & flag.mask() != 0
+    }
+
+    fn set_flag(&mut self, flag: Flag, value: bool) {
+        // TODO: move this from CPU to register file
+        let old_flags = self.registers.read_byte(&Register8::F);
+
+        let new_flags = if value {
+            old_flags | flag.mask()
+        } else {
+            old_flags & (!flag.mask()) // TODO: add tests
+        };
+
+        self.registers.write_byte(&Register8::F, new_flags);
+    }
+
+    fn check_jump(&self, jump_test: &JumpTest) -> bool {
+        match jump_test {
+            JumpTest::Unconditional => true,
+            JumpTest::NonZero => !self.check_flag(Flag::Zero),
+            JumpTest::Zero => self.check_flag(Flag::Zero),
+            JumpTest::NoCarry => !self.check_flag(Flag::Carry),
+            JumpTest::Carry => self.check_flag(Flag::Carry),
+            JumpTest::ParityOdd => !self.check_flag(Flag::ParityOverflow),
+            JumpTest::ParityEven => self.check_flag(Flag::ParityOverflow),
+            JumpTest::SignPositive => !self.check_flag(Flag::Sign),
+            JumpTest::SignNegative => self.check_flag(Flag::Sign),
+        }
+    }
+
+    fn load_byte(&self, memory: &impl MemRead, operand: &Operand) -> u8 {
+        match operand {
+            Operand::Immediate8(value) => *value,
+            Operand::Register8(register) => self.registers.read_byte(register),
+            Operand::Direct8(_) => unimplemented!(),
+            Operand::Direct16(address) => memory.read_byte(*address as usize),
+            Operand::RegisterIndirect(register) => {
+                let address = self.registers.read_word(register);
+                memory.read_byte(address as usize)
+            }
+            Operand::Indexed(register, displacement) => {
+                let address = self.registers.read_word(register);
+                memory.read_byte((address as i64 + *displacement as i64) as usize)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn store_byte(&mut self, memory: &mut impl MemWrite, operand: &Operand, value: u8) {
+        match operand {
+            Operand::Register8(register) => self.registers.write_byte(register, value),
+            Operand::Direct8(_) => unimplemented!(),
+            Operand::Direct16(address) => memory.write_byte(*address as usize, value),
+            Operand::RegisterIndirect(register) => {
+                let address = self.registers.read_word(register);
+                memory.write_byte(address as usize, value)
+            }
+            Operand::Indexed(register, displacement) => {
+                let address = self.registers.read_word(register);
+                memory.write_byte((address as i64 + *displacement as i64) as usize, value)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn load_word(&self, memory: &impl MemRead, operand: &Operand) -> u16 {
+        match operand {
+            Operand::Immediate16(value) => *value,
+            Operand::Register16(register) => self.registers.read_word(register),
+            Operand::Direct16(address) => memory.read_word(*address as usize),
+            Operand::RegisterIndirect(register) => {
+                let address = self.registers.read_word(register);
+                memory.read_word(address as usize)
+            }
+            Operand::Indexed(register, displacement) => {
+                let address = self.registers.read_word(register);
+                memory.read_word((address as i64 + *displacement as i64) as usize)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn store_word(&mut self, memory: &mut impl MemWrite, operand: &Operand, value: u16) {
+        match operand {
+            Operand::Register16(register) => self.registers.write_word(register, value),
+            Operand::Direct16(address) => memory.write_word(*address as usize, value),
+            Operand::RegisterIndirect(register) => {
+                let address = self.registers.read_word(register);
+                memory.write_word(address as usize, value)
+            }
+            Operand::Indexed(register, displacement) => {
+                let address = self.registers.read_word(register);
+                memory.write_word((address as i64 + *displacement as i64) as usize, value)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn handle_interrupt(&mut self, memory: &mut (impl MemRead + MemWrite + MemManage)) -> bool {
+        if self.irq_received && self.iff1 {
+            // TODO: allow non-maskable interrupts (they are not used in the CPC)?
+            self.halted = false;
+            self.irq_received = false; // TODO: make requester hold interrupt until acknowledged?
+
+            match self.interrupt_mode {
+                InterruptMode::Mode1 => {
+                    log::trace!("Handling interrupt");
+                    let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
+                    let new_sp = self.registers.read_word(&Register16::SP) - 2;
+                    self.registers.write_word(&Register16::SP, new_sp);
+                    memory.write_word(new_sp as usize, old_pc);
+
+                    self.registers.write_word(&Register16::PC, 0x0038);
+
+                    // timing_in_nops += 4; // + Instruction::Rst(_).timing()
+                }
+                _ => unimplemented!(),
+            }
+
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl Cpu for ZilogZ80 {
+    fn fetch_and_execute(
         &mut self,
-        memory: &mut (impl Read + Write + Mmu),
+        memory: &mut (impl MemRead + MemWrite + MemManage),
         bus: &mut impl Bus,
     ) -> (u8, bool) {
         if self.halted {
@@ -1502,13 +1651,13 @@ impl Cpu {
         (timing_in_nops, false)
     }
 
-    pub fn request_interrupt(&mut self) {
+    fn request_interrupt(&mut self) {
         self.irq_received = true;
     }
 
-    pub fn disassemble(
+    fn disassemble(
         &mut self,
-        memory: &mut (impl Read + Write + Mmu),
+        memory: &mut (impl MemRead + MemWrite + MemManage),
         count: usize,
     ) -> Vec<(u16, String)> {
         let mut address = self.registers.read_word(&Register16::PC);
@@ -1522,137 +1671,10 @@ impl Cpu {
 
         assembly
     }
+}
 
-    fn reset(&mut self) {
-        // TODO: implement reset
-    }
-
-    fn check_flag(&self, flag: Flag) -> bool {
-        // TODO: move this from CPU to register file
-        let flags = self.registers.read_byte(&Register8::F);
-
-        flags & flag.mask() != 0
-    }
-
-    fn set_flag(&mut self, flag: Flag, value: bool) {
-        // TODO: move this from CPU to register file
-        let old_flags = self.registers.read_byte(&Register8::F);
-
-        let new_flags = if value {
-            old_flags | flag.mask()
-        } else {
-            old_flags & (!flag.mask()) // TODO: add tests
-        };
-
-        self.registers.write_byte(&Register8::F, new_flags);
-    }
-
-    fn check_jump(&self, jump_test: &JumpTest) -> bool {
-        match jump_test {
-            JumpTest::Unconditional => true,
-            JumpTest::NonZero => !self.check_flag(Flag::Zero),
-            JumpTest::Zero => self.check_flag(Flag::Zero),
-            JumpTest::NoCarry => !self.check_flag(Flag::Carry),
-            JumpTest::Carry => self.check_flag(Flag::Carry),
-            JumpTest::ParityOdd => !self.check_flag(Flag::ParityOverflow),
-            JumpTest::ParityEven => self.check_flag(Flag::ParityOverflow),
-            JumpTest::SignPositive => !self.check_flag(Flag::Sign),
-            JumpTest::SignNegative => self.check_flag(Flag::Sign),
-        }
-    }
-
-    fn load_byte(&self, memory: &impl Read, operand: &Operand) -> u8 {
-        match operand {
-            Operand::Immediate8(value) => *value,
-            Operand::Register8(register) => self.registers.read_byte(register),
-            Operand::Direct8(_) => unimplemented!(),
-            Operand::Direct16(address) => memory.read_byte(*address as usize),
-            Operand::RegisterIndirect(register) => {
-                let address = self.registers.read_word(register);
-                memory.read_byte(address as usize)
-            }
-            Operand::Indexed(register, displacement) => {
-                let address = self.registers.read_word(register);
-                memory.read_byte((address as i64 + *displacement as i64) as usize)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn store_byte(&mut self, memory: &mut impl Write, operand: &Operand, value: u8) {
-        match operand {
-            Operand::Register8(register) => self.registers.write_byte(register, value),
-            Operand::Direct8(_) => unimplemented!(),
-            Operand::Direct16(address) => memory.write_byte(*address as usize, value),
-            Operand::RegisterIndirect(register) => {
-                let address = self.registers.read_word(register);
-                memory.write_byte(address as usize, value)
-            }
-            Operand::Indexed(register, displacement) => {
-                let address = self.registers.read_word(register);
-                memory.write_byte((address as i64 + *displacement as i64) as usize, value)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn load_word(&self, memory: &impl Read, operand: &Operand) -> u16 {
-        match operand {
-            Operand::Immediate16(value) => *value,
-            Operand::Register16(register) => self.registers.read_word(register),
-            Operand::Direct16(address) => memory.read_word(*address as usize),
-            Operand::RegisterIndirect(register) => {
-                let address = self.registers.read_word(register);
-                memory.read_word(address as usize)
-            }
-            Operand::Indexed(register, displacement) => {
-                let address = self.registers.read_word(register);
-                memory.read_word((address as i64 + *displacement as i64) as usize)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn store_word(&mut self, memory: &mut impl Write, operand: &Operand, value: u16) {
-        match operand {
-            Operand::Register16(register) => self.registers.write_word(register, value),
-            Operand::Direct16(address) => memory.write_word(*address as usize, value),
-            Operand::RegisterIndirect(register) => {
-                let address = self.registers.read_word(register);
-                memory.write_word(address as usize, value)
-            }
-            Operand::Indexed(register, displacement) => {
-                let address = self.registers.read_word(register);
-                memory.write_word((address as i64 + *displacement as i64) as usize, value)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn handle_interrupt(&mut self, memory: &mut (impl Read + Write + Mmu)) -> bool {
-        if self.irq_received && self.iff1 {
-            // TODO: allow non-maskable interrupts (they are not used in the CPC)?
-            self.halted = false;
-            self.irq_received = false; // TODO: make requester hold interrupt until acknowledged?
-
-            match self.interrupt_mode {
-                InterruptMode::Mode1 => {
-                    log::trace!("Handling interrupt");
-                    let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
-                    let new_sp = self.registers.read_word(&Register16::SP) - 2;
-                    self.registers.write_word(&Register16::SP, new_sp);
-                    memory.write_word(new_sp as usize, old_pc);
-
-                    self.registers.write_word(&Register16::PC, 0x0038);
-
-                    // timing_in_nops += 4; // + Instruction::Rst(_).timing()
-                }
-                _ => unimplemented!(),
-            }
-
-            true
-        } else {
-            false
-        }
+impl Default for ZilogZ80 {
+    fn default() -> Self {
+        Self::new(0)
     }
 }

@@ -2,17 +2,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::system::bus::crtc;
 use crate::system::bus::screen;
-use crate::system::memory;
-use crate::system::memory::Mmu;
+use crate::system::memory::MemManage;
+use crate::system::memory::MemRead;
 use crate::VideoSink;
 
 pub trait GateArray {
-    fn write_byte(&mut self, memory: &mut impl Mmu, port: u16, value: u8);
+    fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8);
     fn acknowledge_interrupt(&mut self);
     fn step(
         &mut self,
         crtc: &dyn crtc::CrtController,
-        memory: &memory::Memory,
+        memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
     ) -> bool;
@@ -47,7 +47,7 @@ impl Amstrad40007 {
         }
     }
 
-    pub fn write_byte(&mut self, memory: &mut impl Mmu, port: u16, value: u8) {
+    pub fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8) {
         // TODO: remove port parameter?
         let function = (value >> 6) & 0x03;
 
@@ -97,7 +97,7 @@ impl Amstrad40007 {
     pub fn step(
         &mut self,
         crtc: &dyn crtc::CrtController,
-        memory: &memory::Memory,
+        memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
     ) -> bool {
@@ -147,7 +147,7 @@ impl Amstrad40007 {
     fn write_to_screen(
         &self,
         crtc: &dyn crtc::CrtController,
-        memory: &memory::Memory,
+        memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
     ) {
@@ -171,9 +171,10 @@ impl Amstrad40007 {
             return;
         }
 
+        memory.force_ram_read(true);
         for offset in 0..2 {
             let address = crtc.read_address() + offset;
-            let packed = memory.read_byte_from_ram(address);
+            let packed = memory.read_byte(address);
             match self.current_screen_mode {
                 0 => {
                     let pixels = [
@@ -216,11 +217,12 @@ impl Amstrad40007 {
                 _ => unimplemented!(),
             }
         }
+        memory.force_ram_read(false);
     }
 }
 
 impl GateArray for Amstrad40007 {
-    fn write_byte(&mut self, memory: &mut impl Mmu, port: u16, value: u8) {
+    fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8) {
         // TODO: remove port parameter?
         let function = (value >> 6) & 0x03;
 
@@ -270,7 +272,7 @@ impl GateArray for Amstrad40007 {
     fn step(
         &mut self,
         crtc: &dyn crtc::CrtController,
-        memory: &memory::Memory,
+        memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
     ) -> bool {

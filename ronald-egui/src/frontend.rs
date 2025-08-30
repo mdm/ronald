@@ -1,6 +1,7 @@
 use std::{path::PathBuf, thread::spawn};
 
 use eframe::{egui, egui_wgpu};
+use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
 #[cfg(target_arch = "wasm32")]
@@ -27,7 +28,7 @@ struct File {
 
 pub struct Frontend<S>
 where
-    S: System<'static> + 'static,
+    S: System + Serialize + Deserialize<'static>,
 {
     driver: Driver<S>,
     audio: CpalAudio,
@@ -45,7 +46,7 @@ where
 
 impl<S> Frontend<S>
 where
-    S: System<'static> + 'static,
+    S: System + Serialize + Deserialize<'static>,
 {
     pub fn new(render_state: &egui_wgpu::RenderState) -> Self {
         let driver = Driver::new();

@@ -1,6 +1,8 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
+use serde::{Deserialize, Serialize};
+use system::System;
 
 pub mod constants;
 pub mod system;
@@ -18,7 +20,7 @@ pub trait AudioSink {
 
 pub struct Driver<S>
 where
-    S: system::System<'static>,
+    S: System + Serialize + Deserialize<'static>,
 {
     system: S,
     keys: HashMap<&'static str, KeyDefinition>,
@@ -26,12 +28,12 @@ where
 
 impl<S> Driver<S>
 where
-    S: system::System<'static>,
+    S: System + Serialize + Deserialize<'static>,
 {
     pub fn new() -> Self {
         let keys = HashMap::from(constants::KEYS);
         Self {
-            system: S::new(),
+            system: S::default(),
             keys,
         }
     }
@@ -94,7 +96,7 @@ where
 
 impl<S> Default for Driver<S>
 where
-    S: system::System<'static>,
+    S: System + Serialize + Deserialize<'static>,
 {
     fn default() -> Self {
         Self::new()
