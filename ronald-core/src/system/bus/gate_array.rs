@@ -2,13 +2,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::system::bus::crtc;
 use crate::system::bus::screen;
-use crate::system::memory;
-use crate::system::memory::Mmu;
+use crate::system::memory::MemManage;
+use crate::system::memory::MemRead;
 use crate::VideoSink;
+
+pub trait GateArray: Default {
+    fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8);
+    fn acknowledge_interrupt(&mut self);
+    fn step(
+        &mut self,
+        crtc: &impl crtc::CrtController,
+        memory: &mut (impl MemRead + MemManage),
+        screen: &mut screen::Screen,
+        video: &mut impl VideoSink,
+    ) -> bool;
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GateArray {
+pub struct Amstrad40007 {
     current_screen_mode: u8,
     requested_screen_mode: u8,
     hsync_active: bool,
@@ -20,9 +32,9 @@ pub struct GateArray {
     pen_colors: Vec<u8>,
 }
 
-impl GateArray {
-    pub fn new() -> Self {
-        GateArray {
+impl Default for Amstrad40007 {
+    fn default() -> Self {
+        Amstrad40007 {
             current_screen_mode: 0,
             requested_screen_mode: 0,
             hsync_active: false,
@@ -31,75 +43,13 @@ impl GateArray {
             interrupt_counter: 0,
             hold_interrupt: false,
             selected_pen: 0,
-            pen_colors: vec![0; 17], // 16 pens + border
+            pen_colors: vec![0; 17], // 16 colors + border
         }
     }
+}
 
-    pub fn write_byte(&mut self, memory: &mut impl Mmu, port: u16, value: u8) {
-        // TODO: remove port parameter?
-        let function = (value >> 6) & 0x03;
-
-        match function {
-            0 => {
-                if value & 0x10 == 0 {
-                    self.selected_pen = (value & 0x0f) as usize; // TODO: what if pen number exceeds max. number of pens for mode?
-                } else {
-                    self.selected_pen = 0x10; // select border
-                }
-            }
-            1 => {
-                log::trace!(
-                    "Gate Array color select (pen {}): {:#04x} ({:#04x})",
-                    self.selected_pen,
-                    value,
-                    value & 0x1f
-                );
-                self.pen_colors[self.selected_pen] = value & 0x1f;
-            }
-            2 => {
-                self.requested_screen_mode = value & 0x03;
-
-                memory.enable_lower_rom(value & 0x04 == 0);
-                memory.enable_upper_rom(value & 0x08 == 0);
-
-                if value & 0x10 != 0 {
-                    self.interrupt_counter = 0;
-                }
-            }
-            3 => {
-                // ROM banking (only available in CPC 6128)
-                // TODO: show error message to user
-                log::error!("Gate Array ROM banking not supported: {value:#010b}");
-                unimplemented!();
-            }
-            _ => {
-                unreachable!();
-            }
-        }
-    }
-
-    pub fn acknowledge_interrupt(&mut self) {
-        self.interrupt_counter &= 0x1f;
-    }
-
-    pub fn step(
-        &mut self,
-        crtc: &crtc::CrtController,
-        memory: &memory::Memory,
-        screen: &mut screen::Screen,
-        video: &mut impl VideoSink,
-    ) -> bool {
-        let generate_interrupt = self.update_interrupt_counter(crtc);
-        self.update_screen_mode(crtc);
-        self.write_to_screen(crtc, memory, screen, video);
-
-        self.hsync_active = crtc.read_horizontal_sync();
-        self.vsync_active = crtc.read_vertical_sync();
-
-        generate_interrupt
-    }
-
-    fn update_interrupt_counter(&mut self, crtc: &crtc::CrtController) -> bool {
+impl Amstrad40007 {
+    fn update_interrupt_counter(&mut self, crtc: &impl crtc::CrtController) -> bool {
         let mut generate_interrupt = false;
         if self.hsync_active && !crtc.read_horizontal_sync() {
             self.interrupt_counter += 1;
@@ -125,7 +75,7 @@ impl GateArray {
         generate_interrupt
     }
 
-    fn update_screen_mode(&mut self, crtc: &crtc::CrtController) {
+    fn update_screen_mode(&mut self, crtc: &impl crtc::CrtController) {
         if !self.hsync_active && crtc.read_horizontal_sync() {
             self.current_screen_mode = self.requested_screen_mode;
             log::trace!("New screen mode: {}", self.current_screen_mode);
@@ -134,8 +84,8 @@ impl GateArray {
 
     fn write_to_screen(
         &self,
-        crtc: &crtc::CrtController,
-        memory: &memory::Memory,
+        crtc: &impl crtc::CrtController,
+        memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
     ) {
@@ -159,9 +109,10 @@ impl GateArray {
             return;
         }
 
+        memory.force_ram_read(true);
         for offset in 0..2 {
             let address = crtc.read_address() + offset;
-            let packed = memory.read_byte_from_ram(address);
+            let packed = memory.read_byte(address);
             match self.current_screen_mode {
                 0 => {
                     let pixels = [
@@ -204,5 +155,72 @@ impl GateArray {
                 _ => unimplemented!(),
             }
         }
+        memory.force_ram_read(false);
+    }
+}
+
+impl GateArray for Amstrad40007 {
+    fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8) {
+        // TODO: remove port parameter?
+        let function = (value >> 6) & 0x03;
+
+        match function {
+            0 => {
+                if value & 0x10 == 0 {
+                    self.selected_pen = (value & 0x0f) as usize; // TODO: what if pen number exceeds max. number of pens for mode?
+                } else {
+                    self.selected_pen = 0x10; // select border
+                }
+            }
+            1 => {
+                log::trace!(
+                    "Gate Array color select (pen {}): {:#04x} ({:#04x})",
+                    self.selected_pen,
+                    value,
+                    value & 0x1f
+                );
+                self.pen_colors[self.selected_pen] = value & 0x1f;
+            }
+            2 => {
+                self.requested_screen_mode = value & 0x03;
+
+                memory.enable_lower_rom(value & 0x04 == 0);
+                memory.enable_upper_rom(value & 0x08 == 0);
+
+                if value & 0x10 != 0 {
+                    self.interrupt_counter = 0;
+                }
+            }
+            3 => {
+                // ROM banking (only available in CPC 6128)
+                // TODO: show error message to user
+                log::error!("Gate Array ROM banking not supported: {value:#010b}");
+                unimplemented!();
+            }
+            _ => {
+                unreachable!();
+            }
+        }
+    }
+
+    fn acknowledge_interrupt(&mut self) {
+        self.interrupt_counter &= 0x1f;
+    }
+
+    fn step(
+        &mut self,
+        crtc: &impl crtc::CrtController,
+        memory: &mut (impl MemRead + MemManage),
+        screen: &mut screen::Screen,
+        video: &mut impl VideoSink,
+    ) -> bool {
+        let generate_interrupt = self.update_interrupt_counter(crtc);
+        self.update_screen_mode(crtc);
+        self.write_to_screen(crtc, memory, screen, video);
+
+        self.hsync_active = crtc.read_horizontal_sync();
+        self.vsync_active = crtc.read_vertical_sync();
+
+        generate_interrupt
     }
 }

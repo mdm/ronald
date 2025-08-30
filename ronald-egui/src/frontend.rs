@@ -1,6 +1,7 @@
 use std::{path::PathBuf, thread::spawn};
 
 use eframe::{egui, egui_wgpu};
+use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
 #[cfg(target_arch = "wasm32")]
@@ -9,7 +10,6 @@ use web_sys;
 use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
-    system::System,
 };
 
 use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
@@ -25,11 +25,8 @@ struct File {
     image: Vec<u8>,
 }
 
-pub struct Frontend<S>
-where
-    S: System<'static> + 'static,
-{
-    driver: Driver<S>,
+pub struct Frontend {
+    driver: Driver,
     audio: CpalAudio,
     video: EguiWgpuVideo,
     frame_start: Instant,
@@ -43,10 +40,7 @@ where
     dropped_files: Vec<File>,
 }
 
-impl<S> Frontend<S>
-where
-    S: System<'static> + 'static,
-{
+impl Frontend {
     pub fn new(render_state: &egui_wgpu::RenderState) -> Self {
         let driver = Driver::new();
         let audio = CpalAudio::new();
