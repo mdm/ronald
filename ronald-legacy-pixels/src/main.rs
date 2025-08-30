@@ -51,7 +51,7 @@ fn main() {
     match system.as_str() {
         "cpc464" => {
             let debug = matches.get_flag("debug");
-            let mut driver = Driver::<system::AmstradCpc464>::new();
+            let mut driver = Driver::<system::AmstradCpc>::new();
             if debug {
                 driver.activate_debugger();
             }
