@@ -7,12 +7,6 @@ mod dsk_file;
 
 use dsk_file::Disk;
 
-pub trait FloppyDiskController {
-    fn read_byte(&mut self, port: u16) -> u8;
-    fn write_byte(&mut self, port: u16, value: u8);
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
-}
-
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Drive {
@@ -85,7 +79,7 @@ impl Command {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NecUpd765 {
+pub struct FloppyDiskController {
     drives: [Drive; 2],
     phase: Phase,
     command: Option<Command>,
@@ -106,9 +100,9 @@ pub struct NecUpd765 {
     status2: u8,
 }
 
-impl NecUpd765 {
-    pub fn new() -> Self {
-        NecUpd765 {
+impl Default for FloppyDiskController {
+    fn default() -> Self {
+        Self {
             drives: [
                 Drive {
                     track: 0,
@@ -140,7 +134,9 @@ impl NecUpd765 {
             status2: 0,
         }
     }
+}
 
+impl FloppyDiskController {
     pub fn read_byte(&mut self, port: u16) -> u8 {
         match port {
             0xfb7e => self.report_main_status_register(),
@@ -503,120 +499,6 @@ impl NecUpd765 {
                 self.result_buffer.push_back(sector_info.sector_size);
             }
             None => unreachable!(),
-        }
-    }
-}
-
-
-impl FloppyDiskController for NecUpd765 {
-    fn read_byte(&mut self, port: u16) -> u8 {
-        match port {
-            0xfb7e => self.report_main_status_register(),
-            0xfb7f => {
-                match self.phase {
-                    Phase::Execution => {
-                        let data = if let Some(data) = self.data_buffer.pop_front() {
-                            log::trace!("Reading data from FDC: {data:#04x}");
-                            data
-                        } else {
-                            unreachable!()
-                        };
-
-                        if self.data_buffer.is_empty() {
-                            self.execution_mode = false;
-                            self.phase = Phase::Result;
-                        }
-
-                        data
-                    }
-                    Phase::Result => {
-                        let result = if let Some(result) = self.result_buffer.pop_front() {
-                            log::debug!("Reading result from FDC: {result:#04x}");
-                            result
-                        } else {
-                            // TODO: we hit this if no disk is loaded and CAT is executed
-                            unreachable!()
-                        };
-
-                        if self.result_buffer.is_empty() {
-                            self.data_input_output = false;
-                            self.floppy_controller_busy = false;
-                            self.phase = Phase::Command;
-                        }
-
-                        result
-                    }
-                    Phase::Command => {
-                        log::error!("Unexpected FDC read in command phase");
-                        unreachable!() // TODO: return dummy value instead?
-                    }
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn write_byte(&mut self, port: u16, value: u8) {
-        match port {
-            0xfa7e => match value {
-                0 => {
-                    self.motors_on = false;
-                }
-                1 => {
-                    self.motors_on = true;
-                }
-                _ => unreachable!(),
-            },
-            0xfb7f => match self.phase {
-                Phase::Command => match &self.command {
-                    Some(command) => {
-                        if self.parameters_buffer.len() < command.expected_parameter_bytes() {
-                            self.parameters_buffer.push(value);
-                        }
-
-                        if self.parameters_buffer.len() == command.expected_parameter_bytes() {
-                            self.execute_command();
-                        }
-                    }
-                    None => {
-                        self.command = Some(Command::from_byte(value));
-                        self.end_of_track = false;
-                        self.seek_end = false;
-                        self.drive_not_ready = false;
-                        // TODO: do we need to reset anything else?
-                        self.floppy_controller_busy = true;
-
-                        if self.parameters_buffer.len()
-                            == self.command.as_ref().unwrap().expected_parameter_bytes()
-                        {
-                            self.execute_command();
-                        }
-                    }
-                },
-                _ => {
-                    log::error!(
-                        "FDC write outside command phase using port {port:#06x}: {value:#010b}"
-                    );
-                    unimplemented!();
-                }
-            },
-            _ => {
-                log::error!("Unexpected FDC write using port {port:#06x}: {value:#010b}");
-                unreachable!();
-            }
-        }
-    }
-
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
-        self.drives[drive].disk = match dsk_file::Disk::load(rom, path) {
-            Ok(disk) => {
-                log::info!("Disk loaded successfully");
-                Some(disk)
-            }
-            Err(error) => {
-                log::warn!("Disk could not be loaded: {error}");
-                None
-            }
         }
     }
 }

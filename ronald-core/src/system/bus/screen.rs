@@ -82,16 +82,18 @@ pub struct Screen {
     waiting_for_vsync: bool,
 }
 
-impl Screen {
-    pub fn new() -> Self {
-        Screen {
+impl Default for Screen {
+    fn default() -> Self {
+        Self {
             buffer: vec![0; SCREEN_BUFFER_WIDTH * SCREEN_BUFFER_HEIGHT * 4],
             gun_position: 0,
             width_counter: 0,
             waiting_for_vsync: true,
         }
     }
+}
 
+impl Screen {
     pub fn write(&mut self, color: usize) {
         if self.waiting_for_vsync {
             return;

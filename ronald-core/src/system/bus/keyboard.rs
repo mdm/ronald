@@ -7,14 +7,16 @@ pub struct Keyboard {
     active_line: usize,
 }
 
-impl Keyboard {
-    pub fn new() -> Self {
+impl Default for Keyboard {
+    fn default() -> Self {
         Self {
             lines: [0xff; 10],
             active_line: 0,
         }
     }
+}
 
+impl Keyboard {
     pub fn reset_all(&mut self) {
         self.lines = [0xff; 10];
     }
