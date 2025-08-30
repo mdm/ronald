@@ -1,6 +1,6 @@
 pub mod bus;
 pub mod cpu;
-mod instruction; // TODO: do we need this at this level? for debugger?
+pub mod instruction;
 pub mod memory;
 
 use std::path::PathBuf;
@@ -11,10 +11,11 @@ use crate::{AudioSink, VideoSink};
 
 use bus::{Bus, DummyBus, StandardBus};
 use cpu::{Cpu, Register16, Register8, ZilogZ80};
+use instruction::{AlgorithmicDecoder, Decoder};
 use memory::{MemManage, MemRead, MemWrite, Memory, Ram};
 
 pub struct ZexHarness {
-    cpu: ZilogZ80,
+    cpu: ZilogZ80<AlgorithmicDecoder>,
     memory: Ram,
     bus: DummyBus,
 }
@@ -82,7 +83,7 @@ pub struct DisassembledInstruction {
     instruction: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(bound(
     serialize = "C: Serialize, M: Serialize, B: Serialize",
     deserialize = "C: Deserialize<'de>, M: Deserialize<'de>, B: Deserialize<'de>"
@@ -99,7 +100,6 @@ where
     #[serde(flatten)]
     bus: B,
     master_clock: u64,
-    // debugger: Debugger,
 }
 
 impl<C, M, B> AmstradCpc<C, M, B>
@@ -108,19 +108,6 @@ where
     M: MemRead + MemWrite + MemManage + Default,
     B: Bus,
 {
-    pub fn new() -> Self {
-        let cpu = C::default();
-        let memory = M::default();
-        let bus = B::default();
-
-        Self {
-            cpu,
-            memory,
-            bus,
-            master_clock: 0,
-        }
-    }
-
     pub fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
         let (cycles, interrupt_acknowledged) =
             self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
@@ -167,16 +154,5 @@ where
                 instruction,
             })
             .collect()
-    }
-}
-
-impl<C, M, B> Default for AmstradCpc<C, M, B>
-where
-    C: Cpu,
-    M: MemRead + MemWrite + MemManage + Default,
-    B: Bus,
-{
-    fn default() -> Self {
-        Self::new()
     }
 }

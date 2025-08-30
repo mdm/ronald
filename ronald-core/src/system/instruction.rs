@@ -71,8 +71,9 @@ impl fmt::Display for Operand {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
 pub enum InterruptMode {
+    #[default]
     #[serde(rename = "0")]
     Mode0,
     #[serde(rename = "1")]
@@ -834,8 +835,13 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+pub trait Decoder: Default {
+    fn decode(&mut self, memory: &impl MemRead, address: usize) -> (Instruction, usize);
+}
+
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
 enum DecoderMode {
+    #[default]
     Default,
     PatchIX,
     PatchIY,
@@ -852,25 +858,17 @@ impl DecoderMode {
 }
 
 // TODO: make decoder stateless?
-#[derive(Serialize, Deserialize)]
+// based on http://z80.info/decoding.htm
+#[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Decoder {
+pub struct AlgorithmicDecoder {
     next_address: usize,
     mode: DecoderMode,
     patched: bool,
 }
 
-impl Decoder {
-    // based on http://z80.info/decoding.htm
-    pub fn new() -> Self {
-        Decoder {
-            next_address: 0,
-            mode: DecoderMode::Default,
-            patched: false,
-        }
-    }
-
-    pub fn decode_at(&mut self, memory: &impl MemRead, address: usize) -> (Instruction, usize) {
+impl Decoder for AlgorithmicDecoder {
+    fn decode(&mut self, memory: &impl MemRead, address: usize) -> (Instruction, usize) {
         self.next_address = address;
 
         let opcode = memory.read_byte(self.next_address);
@@ -890,11 +888,9 @@ impl Decoder {
             _ => (self.decode_instruction(memory, opcode), self.next_address),
         }
     }
+}
 
-    pub fn decode_next(&mut self, memory: &impl MemRead) -> (Instruction, usize) {
-        self.decode_at(memory, self.next_address)
-    }
-
+impl AlgorithmicDecoder {
     fn decode_cb_instruction(&mut self, memory: &impl MemRead) -> Instruction {
         match self.mode {
             DecoderMode::PatchIX => {
