@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use constants::KeyDefinition;
 use system::bus::StandardBus;
 use system::cpu::ZilogZ80;
+use system::instruction::AlgorithmicDecoder;
 use system::memory::Memory;
 use system::AmstradCpc;
 
@@ -21,7 +22,7 @@ pub trait AudioSink {
 }
 
 pub struct Driver {
-    system: AmstradCpc<ZilogZ80, Memory, StandardBus>,
+    system: AmstradCpc<ZilogZ80<AlgorithmicDecoder>, Memory, StandardBus>,
     keys: HashMap<&'static str, KeyDefinition>,
 }
 

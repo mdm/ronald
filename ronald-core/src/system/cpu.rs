@@ -227,10 +227,13 @@ pub trait Cpu: Default {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ZilogZ80 {
+pub struct ZilogZ80<D>
+where
+    D: Decoder,
+{
     #[serde(flatten)]
     pub registers: RegisterFile, // TODO: make this private
-    pub decoder: Decoder, // TODO: make this private
+    pub decoder: D, // TODO: make this private
     iff1: bool,
     iff2: bool,
     halted: bool,
@@ -239,7 +242,19 @@ pub struct ZilogZ80 {
     irq_received: bool,
 }
 
-impl ZilogZ80 {
+impl<D> Default for ZilogZ80<D>
+where
+    D: Decoder,
+{
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl<D> ZilogZ80<D>
+where
+    D: Decoder,
+{
     pub fn new(initial_pc: u16) -> Self {
         let mut registers = RegisterFile::new();
         registers.write_word(&Register16::PC, initial_pc);
@@ -249,8 +264,8 @@ impl ZilogZ80 {
             iff1: false,
             iff2: false,
             halted: false,
-            decoder: Decoder::new(),
-            interrupt_mode: InterruptMode::Mode0,
+            decoder: D::default(),
+            interrupt_mode: InterruptMode::default(),
             enable_interrupt: false,
             irq_received: false,
         };
@@ -394,7 +409,10 @@ impl ZilogZ80 {
     }
 }
 
-impl Cpu for ZilogZ80 {
+impl<D> Cpu for ZilogZ80<D>
+where
+    D: Decoder,
+{
     fn fetch_and_execute(
         &mut self,
         memory: &mut (impl MemRead + MemWrite + MemManage),
@@ -418,7 +436,7 @@ impl Cpu for ZilogZ80 {
 
         let pc = self.registers.read_word(&Register16::PC);
 
-        let (instruction, next_address) = self.decoder.decode_at(memory, pc as usize);
+        let (instruction, next_address) = self.decoder.decode(memory, pc as usize);
 
         log::trace!("{:#06x}: {}", pc, &instruction);
 
@@ -1664,17 +1682,11 @@ impl Cpu for ZilogZ80 {
 
         let mut assembly = Vec::with_capacity(count);
         for _ in 0..count {
-            let (instruction, next_address) = self.decoder.decode_at(memory, address as usize);
+            let (instruction, next_address) = self.decoder.decode(memory, address as usize);
             assembly.push((address, format!("{instruction}")));
             address = next_address as u16;
         }
 
         assembly
-    }
-}
-
-impl Default for ZilogZ80 {
-    fn default() -> Self {
-        Self::new(0)
     }
 }
