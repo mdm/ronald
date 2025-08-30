@@ -76,15 +76,6 @@ impl ZexHarness {
     }
 }
 
-pub trait System: Default {
-    fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8;
-    fn activate_debugger(&mut self);
-    fn set_key(&mut self, line: usize, bit: u8);
-    fn unset_key(&mut self, line: usize, bit: u8);
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
-    fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction>;
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct DisassembledInstruction {
     address: u16,
@@ -97,7 +88,7 @@ pub struct DisassembledInstruction {
     deserialize = "C: Deserialize<'de>, M: Deserialize<'de>, B: Deserialize<'de>"
 ))]
 #[serde(rename_all = "camelCase")]
-pub struct AmstradCpc464<C, M, B>
+pub struct AmstradCpc<C, M, B>
 where
     C: Cpu,
     M: MemRead + MemWrite + MemManage + Default,
@@ -111,7 +102,7 @@ where
     // debugger: Debugger,
 }
 
-impl<C, M, B> AmstradCpc464<C, M, B>
+impl<C, M, B> AmstradCpc<C, M, B>
 where
     C: Cpu,
     M: MemRead + MemWrite + MemManage + Default,
@@ -129,15 +120,8 @@ where
             master_clock: 0,
         }
     }
-}
 
-impl<C, M, B> System for AmstradCpc464<C, M, B>
-where
-    C: Cpu,
-    M: MemRead + MemWrite + MemManage + Default,
-    B: Bus,
-{
-    fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
+    pub fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
         let (cycles, interrupt_acknowledged) =
             self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
@@ -161,24 +145,20 @@ where
         cycles
     }
 
-    fn activate_debugger(&mut self) {
-        // self.debugger.activate();
-    }
-
-    fn set_key(&mut self, line: usize, bit: u8) {
+    pub fn set_key(&mut self, line: usize, bit: u8) {
         self.bus.set_key(line, bit);
     }
 
-    fn unset_key(&mut self, line: usize, bit: u8) {
+    pub fn unset_key(&mut self, line: usize, bit: u8) {
         self.bus.unset_key(line, bit);
     }
 
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         // TODO: allow loading tapes as well
         self.bus.load_disk(drive, rom, path);
     }
 
-    fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
+    pub fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
         self.cpu
             .disassemble(&mut self.memory, count)
             .into_iter()
@@ -190,7 +170,7 @@ where
     }
 }
 
-impl<C, M, B> Default for AmstradCpc464<C, M, B>
+impl<C, M, B> Default for AmstradCpc<C, M, B>
 where
     C: Cpu,
     M: MemRead + MemWrite + MemManage + Default,

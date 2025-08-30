@@ -1,10 +1,7 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use ronald_core::system::AmstradCpc464;
-use ronald_core::system::bus::StandardBus;
-use ronald_core::system::cpu::ZilogZ80;
-use ronald_core::system::memory::Memory;
+use ronald_core::system::AmstradCpc;
 
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
@@ -22,7 +19,7 @@ where
     workbench: bool,
     dark_mode: bool,
     #[serde(skip)]
-    frontend: Option<Frontend<AmstradCpc464<ZilogZ80, Memory, StandardBus>>>,
+    frontend: Option<Frontend>,
     #[serde(skip)]
     key_map_editor: KeyMapEditor,
     #[serde(skip)]

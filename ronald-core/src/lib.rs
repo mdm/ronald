@@ -1,8 +1,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
-use serde::{Deserialize, Serialize};
-use system::System;
+use system::bus::StandardBus;
+use system::cpu::ZilogZ80;
+use system::memory::Memory;
+use system::AmstradCpc;
 
 pub mod constants;
 pub mod system;
@@ -18,22 +20,16 @@ pub trait AudioSink {
     fn add_sample(&self, sample: f32);
 }
 
-pub struct Driver<S>
-where
-    S: System + Serialize + Deserialize<'static>,
-{
-    system: S,
+pub struct Driver {
+    system: AmstradCpc<ZilogZ80, Memory, StandardBus>,
     keys: HashMap<&'static str, KeyDefinition>,
 }
 
-impl<S> Driver<S>
-where
-    S: System + Serialize + Deserialize<'static>,
-{
+impl Driver {
     pub fn new() -> Self {
         let keys = HashMap::from(constants::KEYS);
         Self {
-            system: S::default(),
+            system: AmstradCpc::default(),
             keys,
         }
     }
@@ -94,10 +90,7 @@ where
     }
 }
 
-impl<S> Default for Driver<S>
-where
-    S: System + Serialize + Deserialize<'static>,
-{
+impl Default for Driver {
     fn default() -> Self {
         Self::new()
     }
