@@ -1,14 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TapeController {}
 
 impl TapeController {
-    pub fn new() -> Self {
-        TapeController {}
-    }
-
     pub fn switch_motor(&mut self, on: bool) {
         // TODO: implement this
     }

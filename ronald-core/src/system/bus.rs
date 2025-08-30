@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::system::memory::{MemManage, MemRead, Memory};
 use crate::{AudioSink, VideoSink};
 
-mod crtc;
+pub mod crtc;
 mod fdc;
-mod gate_array;
+pub mod gate_array;
 pub mod keyboard; // TODO: refactor to not use pub
 mod ppi;
 mod psg;
@@ -15,7 +15,7 @@ pub mod screen; // TODO: refactor to not use pub
 mod tape;
 
 use crtc::{CrtController, HitachiHd6845s};
-use fdc::NecUpd765;
+use fdc::FloppyDiskController;
 use gate_array::{Amstrad40007, GateArray};
 use keyboard::Keyboard;
 use ppi::PeripheralInterface;
@@ -70,25 +70,29 @@ impl Bus for DummyBus {
         unimplemented!();
     }
 
-    fn set_key(&mut self, line: usize, bit: u8) {
+    fn set_key(&mut self, _line: usize, _bit: u8) {
         unimplemented!();
     }
 
-    fn unset_key(&mut self, line: usize, bit: u8) {
+    fn unset_key(&mut self, _line: usize, _bit: u8) {
         unimplemented!();
     }
 
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
+    fn load_disk(&mut self, _drive: usize, _rom: Vec<u8>, _path: PathBuf) {
         unimplemented!();
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct StandardBus {
-    crtc: HitachiHd6845s,
-    fdc: NecUpd765,
-    gate_array: Amstrad40007,
+pub struct StandardBus<C, G>
+where
+    C: CrtController,
+    G: GateArray,
+{
+    crtc: C,
+    fdc: FloppyDiskController,
+    gate_array: G,
     keyboard: Keyboard,
     ppi: PeripheralInterface,
     psg: SoundGenerator,
@@ -96,32 +100,11 @@ pub struct StandardBus {
     tape: TapeController,
 }
 
-impl StandardBus {
-    // TODO: rename StandardBus to BusDeviceManager
-    pub fn new() -> Self {
-        let crtc = HitachiHd6845s::new();
-        let fdc = NecUpd765::new();
-        let gate_array = Amstrad40007::new();
-        let keyboard = Keyboard::new();
-        let ppi = PeripheralInterface::new();
-        let psg = SoundGenerator::new();
-        let screen = Screen::new();
-        let tape = TapeController::new();
-
-        StandardBus {
-            crtc,
-            fdc,
-            gate_array,
-            keyboard,
-            ppi,
-            psg,
-            screen,
-            tape,
-        }
-    }
-}
-
-impl Bus for StandardBus {
+impl<C, G> Bus for StandardBus<C, G>
+where
+    C: CrtController,
+    G: GateArray,
+{
     fn read_byte(&mut self, port: u16) -> u8 {
         match port {
             _ if port & 0x4000 == 0 => self.crtc.read_byte(port),
@@ -185,11 +168,5 @@ impl Bus for StandardBus {
 
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         self.fdc.load_disk(drive, rom, path);
-    }
-}
-
-impl Default for StandardBus {
-    fn default() -> Self {
-        Self::new()
     }
 }

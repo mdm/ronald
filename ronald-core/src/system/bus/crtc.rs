@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub trait CrtController {
+pub trait CrtController: Default {
     fn read_byte(&mut self, port: u16) -> u8;
     fn write_byte(&mut self, port: u16, value: u8);
     fn step(&mut self);
@@ -32,7 +32,7 @@ enum Register {
     LightPenAddressLow,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HitachiHd6845s {
     registers: [u8; 18],
@@ -45,18 +45,6 @@ pub struct HitachiHd6845s {
 }
 
 impl HitachiHd6845s {
-    pub fn new() -> Self {
-        HitachiHd6845s {
-            registers: [0; 18],
-            selected_register: 0,
-            horizontal_counter: 0,
-            horizontal_sync_width_counter: 0,
-            character_row_counter: 0,
-            scan_line_counter: 0,
-            display_start_address: 0,
-        }
-    }
-
     fn select_register(&mut self, register: usize) {
         self.selected_register = register;
     }
