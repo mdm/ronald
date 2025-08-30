@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::system::bus::keyboard::Keyboard;
 use crate::AudioSink;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SoundGenerator {
     buffer: u8,
@@ -16,17 +16,6 @@ pub struct SoundGenerator {
 }
 
 impl SoundGenerator {
-    pub fn new() -> Self {
-        SoundGenerator {
-            buffer: 0,
-            registers: [0; 14],
-            selected_register: 0,
-            chip_clock_now: 0,
-            chip_clock_next_sample: 0.0,
-            psg: None,
-        }
-    }
-
     pub fn perform_function(&mut self, keyboard: &Keyboard, function: u8) {
         match function {
             0 => (), // inactive

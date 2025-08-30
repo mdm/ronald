@@ -30,9 +30,9 @@ pub struct PeripheralInterface {
     mode_b_and_c_lower: Mode,
 }
 
-impl PeripheralInterface {
-    pub fn new() -> Self {
-        PeripheralInterface {
+impl Default for PeripheralInterface {
+    fn default() -> Self {
+        Self {
             direction_a: Direction::Input,
             direction_b: Direction::Input,
             direction_c_lower: Direction::Input,
@@ -41,10 +41,12 @@ impl PeripheralInterface {
             mode_b_and_c_lower: Mode::Basic,
         }
     }
+}
 
+impl PeripheralInterface {
     pub fn read_byte(
         &self,
-        crtc: &CrtController,
+        crtc: &impl CrtController,
         psg: &SoundGenerator,
         tape: &TapeController,
         port: u16,

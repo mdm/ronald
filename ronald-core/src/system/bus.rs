@@ -2,33 +2,45 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::system::memory::{Memory, Mmu};
+use crate::system::memory::{MemManage, MemRead, Memory};
 use crate::{AudioSink, VideoSink};
 
-mod crtc;
+pub mod crtc;
 mod fdc;
-mod gate_array;
+pub mod gate_array;
 pub mod keyboard; // TODO: refactor to not use pub
 mod ppi;
 mod psg;
 pub mod screen; // TODO: refactor to not use pub
 mod tape;
 
-use self::psg::SoundGenerator;
-use crtc::CrtController;
+use crtc::{CrtController, HitachiHd6845s};
 use fdc::FloppyDiskController;
-use gate_array::GateArray;
+use gate_array::{Amstrad40007, GateArray};
 use keyboard::Keyboard;
 use ppi::PeripheralInterface;
+use psg::SoundGenerator;
 use screen::Screen;
 use tape::TapeController;
 
-pub trait Bus {
+pub trait Bus: Default {
+    // TODO: replace by BusDevice
     fn read_byte(&mut self, port: u16) -> u8;
-    fn write_byte(&mut self, memory: &mut impl Mmu, port: u16, value: u8);
+    fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8);
+    fn step(
+        &mut self,
+        memory: &mut (impl MemRead + MemManage),
+        video: &mut impl VideoSink,
+        audio: &mut impl AudioSink,
+    ) -> bool;
+    fn acknowledge_interrupt(&mut self);
+    fn set_key(&mut self, line: usize, bit: u8);
+    fn unset_key(&mut self, line: usize, bit: u8);
+    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
 }
 
-pub struct DummyBus {}
+#[derive(Default)]
+pub struct DummyBus {} // TODO: rename to BlackHole
 
 impl DummyBus {
     pub fn new() -> DummyBus {
@@ -41,17 +53,46 @@ impl Bus for DummyBus {
         unimplemented!()
     }
 
-    fn write_byte(&mut self, _memory: &mut impl Mmu, _port: u16, _value: u8) {
+    fn write_byte(&mut self, _memory: &mut impl MemManage, _port: u16, _value: u8) {
+        unimplemented!();
+    }
+
+    fn step(
+        &mut self,
+        _memory: &mut impl MemManage,
+        _video: &mut impl VideoSink,
+        _audio: &mut impl AudioSink,
+    ) -> bool {
+        unimplemented!();
+    }
+
+    fn acknowledge_interrupt(&mut self) {
+        unimplemented!();
+    }
+
+    fn set_key(&mut self, _line: usize, _bit: u8) {
+        unimplemented!();
+    }
+
+    fn unset_key(&mut self, _line: usize, _bit: u8) {
+        unimplemented!();
+    }
+
+    fn load_disk(&mut self, _drive: usize, _rom: Vec<u8>, _path: PathBuf) {
         unimplemented!();
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct StandardBus {
-    crtc: CrtController,
+pub struct StandardBus<C, G>
+where
+    C: CrtController,
+    G: GateArray,
+{
+    crtc: C,
     fdc: FloppyDiskController,
-    gate_array: GateArray,
+    gate_array: G,
     keyboard: Keyboard,
     ppi: PeripheralInterface,
     psg: SoundGenerator,
@@ -59,59 +100,11 @@ pub struct StandardBus {
     tape: TapeController,
 }
 
-impl StandardBus {
-    pub fn new() -> Self {
-        let crtc = CrtController::new();
-        let fdc = FloppyDiskController::new();
-        let gate_array = GateArray::new();
-        let keyboard = Keyboard::new();
-        let ppi = PeripheralInterface::new();
-        let psg = SoundGenerator::new();
-        let screen = Screen::new();
-        let tape = TapeController::new();
-
-        StandardBus {
-            crtc,
-            fdc,
-            gate_array,
-            keyboard,
-            ppi,
-            psg,
-            screen,
-            tape,
-        }
-    }
-
-    pub fn step(
-        &mut self,
-        memory: &mut Memory,
-        video: &mut impl VideoSink,
-        audio: &mut impl AudioSink,
-    ) -> bool {
-        self.psg.step(audio);
-        self.crtc.step();
-        self.gate_array
-            .step(&self.crtc, memory, &mut self.screen, video)
-    }
-
-    pub fn acknowledge_interrupt(&mut self) {
-        self.gate_array.acknowledge_interrupt();
-    }
-
-    pub fn set_key(&mut self, line: usize, bit: u8) {
-        self.keyboard.set_key(line, bit)
-    }
-
-    pub fn unset_key(&mut self, line: usize, bit: u8) {
-        self.keyboard.unset_key(line, bit)
-    }
-
-    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
-        self.fdc.load_disk(drive, rom, path);
-    }
-}
-
-impl Bus for StandardBus {
+impl<C, G> Bus for StandardBus<C, G>
+where
+    C: CrtController,
+    G: GateArray,
+{
     fn read_byte(&mut self, port: u16) -> u8 {
         match port {
             _ if port & 0x4000 == 0 => self.crtc.read_byte(port),
@@ -124,7 +117,7 @@ impl Bus for StandardBus {
         }
     }
 
-    fn write_byte(&mut self, memory: &mut impl Mmu, port: u16, value: u8) {
+    fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8) {
         // TODO: do we need "value" or is it always the lower half of "port"?
         match port {
             _ if port & 0x8000 == 0 && port & 0x4000 != 0 => {
@@ -147,5 +140,33 @@ impl Bus for StandardBus {
                 unimplemented!();
             }
         }
+    }
+
+    fn step(
+        &mut self,
+        memory: &mut (impl MemRead + MemManage),
+        video: &mut impl VideoSink,
+        audio: &mut impl AudioSink,
+    ) -> bool {
+        self.psg.step(audio);
+        self.crtc.step();
+        self.gate_array
+            .step(&self.crtc, memory, &mut self.screen, video)
+    }
+
+    fn acknowledge_interrupt(&mut self) {
+        self.gate_array.acknowledge_interrupt();
+    }
+
+    fn set_key(&mut self, line: usize, bit: u8) {
+        self.keyboard.set_key(line, bit)
+    }
+
+    fn unset_key(&mut self, line: usize, bit: u8) {
+        self.keyboard.unset_key(line, bit)
+    }
+
+    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
+        self.fdc.load_disk(drive, rom, path);
     }
 }

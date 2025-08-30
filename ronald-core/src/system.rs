@@ -1,8 +1,7 @@
-mod bus;
-mod cpu;
-// mod debugger;
-mod instruction; // TODO: do we need this at this level? for debugger?
-mod memory;
+pub mod bus;
+pub mod cpu;
+pub mod instruction;
+pub mod memory;
 
 use std::path::PathBuf;
 
@@ -10,12 +9,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AudioSink, VideoSink};
 
-use bus::{DummyBus, StandardBus};
-use cpu::{Cpu, Register16, Register8};
-use memory::{Memory, Ram, Read, Write};
+use bus::{Bus, DummyBus, StandardBus};
+use cpu::{Cpu, Register16, Register8, ZilogZ80};
+use instruction::{AlgorithmicDecoder, Decoder};
+use memory::{MemManage, MemRead, MemWrite, Memory, Ram};
 
 pub struct ZexHarness {
-    cpu: Cpu,
+    cpu: ZilogZ80<AlgorithmicDecoder>,
     memory: Ram,
     bus: DummyBus,
 }
@@ -27,7 +27,7 @@ impl ZexHarness {
         memory.write_word(0x0006, 0xe400); // patch with initial SP
 
         ZexHarness {
-            cpu: Cpu::new(0x100),
+            cpu: ZilogZ80::new(0x100),
             memory,
             bus: DummyBus::new(),
         }
@@ -77,54 +77,38 @@ impl ZexHarness {
     }
 }
 
-pub trait System<'de>: Serialize + Deserialize<'de> {
-    fn new() -> Self;
-    fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8;
-    fn activate_debugger(&mut self);
-    fn set_key(&mut self, line: usize, bit: u8);
-    fn unset_key(&mut self, line: usize, bit: u8);
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
-    fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction>;
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct DisassembledInstruction {
     address: u16,
     instruction: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "C: Serialize, M: Serialize, B: Serialize",
+    deserialize = "C: Deserialize<'de>, M: Deserialize<'de>, B: Deserialize<'de>"
+))]
 #[serde(rename_all = "camelCase")]
-pub struct CPC464 {
-    cpu: Cpu,
-    memory: Memory,
+pub struct AmstradCpc<C, M, B>
+where
+    C: Cpu,
+    M: MemRead + MemWrite + MemManage + Default,
+    B: Bus,
+{
+    cpu: C,
+    memory: M,
     #[serde(flatten)]
-    bus: StandardBus,
+    bus: B,
     master_clock: u64,
-    // debugger: Debugger,
 }
 
-impl System<'_> for CPC464 {
-    fn new() -> CPC464 {
-        let cpu = Cpu::new(0);
-        let memory = Memory::new();
-        let bus = StandardBus::new();
-        // let debugger = Debugger::new();
-
-        CPC464 {
-            cpu,
-            memory,
-            bus,
-            master_clock: 0,
-            // debugger,
-        }
-    }
-
-    fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
-        // if self.debugger.is_active(&self.cpu) {
-        //     self.debugger.run_command_shell(&mut self.cpu, &self.memory);
-        // }
-
+impl<C, M, B> AmstradCpc<C, M, B>
+where
+    C: Cpu,
+    M: MemRead + MemWrite + MemManage + Default,
+    B: Bus,
+{
+    pub fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
         let (cycles, interrupt_acknowledged) =
             self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
@@ -148,24 +132,20 @@ impl System<'_> for CPC464 {
         cycles
     }
 
-    fn activate_debugger(&mut self) {
-        // self.debugger.activate();
-    }
-
-    fn set_key(&mut self, line: usize, bit: u8) {
+    pub fn set_key(&mut self, line: usize, bit: u8) {
         self.bus.set_key(line, bit);
     }
 
-    fn unset_key(&mut self, line: usize, bit: u8) {
+    pub fn unset_key(&mut self, line: usize, bit: u8) {
         self.bus.unset_key(line, bit);
     }
 
-    fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         // TODO: allow loading tapes as well
         self.bus.load_disk(drive, rom, path);
     }
 
-    fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
+    pub fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
         self.cpu
             .disassemble(&mut self.memory, count)
             .into_iter()

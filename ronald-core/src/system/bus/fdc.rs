@@ -100,9 +100,9 @@ pub struct FloppyDiskController {
     status2: u8,
 }
 
-impl FloppyDiskController {
-    pub fn new() -> Self {
-        FloppyDiskController {
+impl Default for FloppyDiskController {
+    fn default() -> Self {
+        Self {
             drives: [
                 Drive {
                     track: 0,
@@ -134,7 +134,9 @@ impl FloppyDiskController {
             status2: 0,
         }
     }
+}
 
+impl FloppyDiskController {
     pub fn read_byte(&mut self, port: u16) -> u8 {
         match port {
             0xfb7e => self.report_main_status_register(),

@@ -1,7 +1,7 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use ronald_core::system::CPC464;
+use ronald_core::system::AmstradCpc;
 
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
@@ -19,7 +19,7 @@ where
     workbench: bool,
     dark_mode: bool,
     #[serde(skip)]
-    frontend: Option<Frontend<CPC464>>,
+    frontend: Option<Frontend>,
     #[serde(skip)]
     key_map_editor: KeyMapEditor,
     #[serde(skip)]
@@ -166,7 +166,7 @@ where
             egui::Modal::new("welcome_modal".into()).show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(10.0);
-                    ui.label("Welcome to Ronald");
+                    ui.label(format!("Welcome to Ronald {}", env!("CARGO_PKG_VERSION")));
                     ui.add_space(10.0);
                     ui.label("This emulator recreates the classic Amstrad CPC.");
                     ui.add_space(20.0);
