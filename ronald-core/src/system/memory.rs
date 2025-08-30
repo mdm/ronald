@@ -4,7 +4,7 @@ use std::io;
 
 use serde::{Deserialize, Serialize};
 
-pub trait Read {
+pub trait MemRead {
     fn read_byte(&self, address: usize) -> u8;
 
     fn read_word(&self, address: usize) -> u16 {
@@ -14,7 +14,7 @@ pub trait Read {
     }
 }
 
-pub trait Write {
+pub trait MemWrite {
     fn write_byte(&mut self, address: usize, value: u8);
 
     fn write_word(&mut self, address: usize, value: u16) {
@@ -24,12 +24,14 @@ pub trait Write {
     }
 }
 
-pub trait Mmu {
+pub trait MemManage {
     fn enable_lower_rom(&mut self, enable: bool);
 
     fn enable_upper_rom(&mut self, enable: bool);
 
     fn select_upper_rom(&mut self, upper_rom_nr: u8);
+
+    fn force_ram_read(&mut self, force: bool);
 }
 
 #[derive(Serialize, Deserialize)]
@@ -48,7 +50,7 @@ impl Rom {
     }
 }
 
-impl Read for Rom {
+impl MemRead for Rom {
     fn read_byte(&self, address: usize) -> u8 {
         self.data[address]
     }
@@ -86,24 +88,26 @@ impl Ram {
     }
 }
 
-impl Read for Ram {
+impl MemRead for Ram {
     fn read_byte(&self, address: usize) -> u8 {
         self.data[address]
     }
 }
 
-impl Write for Ram {
+impl MemWrite for Ram {
     fn write_byte(&mut self, address: usize, value: u8) {
         self.data[address] = value;
     }
 }
 
-impl Mmu for Ram {
+impl MemManage for Ram {
     fn enable_lower_rom(&mut self, enable: bool) {}
 
     fn enable_upper_rom(&mut self, enable: bool) {}
 
     fn select_upper_rom(&mut self, upper_rom_nr: u8) {}
+
+    fn force_ram_read(&mut self, force: bool) {}
 }
 
 #[derive(Serialize, Deserialize)]
@@ -117,6 +121,7 @@ pub struct Memory {
     upper_roms: HashMap<u8, Rom>,
     selected_upper_rom: u8,
     upper_rom_enabled: bool,
+    ram_read_forced: bool,
 }
 
 impl Memory {
@@ -139,16 +144,23 @@ impl Memory {
             upper_roms,
             selected_upper_rom: 0,
             upper_rom_enabled: true,
+            ram_read_forced: false,
         }
-    }
-
-    pub fn read_byte_from_ram(&self, address: usize) -> u8 {
-        self.ram.read_byte(address)
     }
 }
 
-impl Read for Memory {
+impl Default for Memory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MemRead for Memory {
     fn read_byte(&self, address: usize) -> u8 {
+        if self.ram_read_forced {
+            return self.ram.read_byte(address);
+        }
+
         // TODO: define proper constants
         if self.lower_rom_enabled && address < 0x4000 {
             return self.lower_rom.read_byte(address);
@@ -169,13 +181,13 @@ impl Read for Memory {
     }
 }
 
-impl Write for Memory {
+impl MemWrite for Memory {
     fn write_byte(&mut self, address: usize, value: u8) {
         self.ram.write_byte(address, value);
     }
 }
 
-impl Mmu for Memory {
+impl MemManage for Memory {
     fn enable_lower_rom(&mut self, enable: bool) {
         self.lower_rom_enabled = enable;
     }
@@ -186,5 +198,9 @@ impl Mmu for Memory {
 
     fn select_upper_rom(&mut self, upper_rom_nr: u8) {
         self.selected_upper_rom = upper_rom_nr;
+    }
+
+    fn force_ram_read(&mut self, force: bool) {
+        self.ram_read_forced = force;
     }
 }

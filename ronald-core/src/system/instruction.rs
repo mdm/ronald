@@ -3,7 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::system::cpu;
-use crate::system::memory::Read;
+use crate::system::memory::MemRead;
 
 pub enum Operand {
     Immediate8(u8),
@@ -870,7 +870,7 @@ impl Decoder {
         }
     }
 
-    pub fn decode_at(&mut self, memory: &impl Read, address: usize) -> (Instruction, usize) {
+    pub fn decode_at(&mut self, memory: &impl MemRead, address: usize) -> (Instruction, usize) {
         self.next_address = address;
 
         let opcode = memory.read_byte(self.next_address);
@@ -891,11 +891,11 @@ impl Decoder {
         }
     }
 
-    pub fn decode_next(&mut self, memory: &impl Read) -> (Instruction, usize) {
+    pub fn decode_next(&mut self, memory: &impl MemRead) -> (Instruction, usize) {
         self.decode_at(memory, self.next_address)
     }
 
-    fn decode_cb_instruction(&mut self, memory: &impl Read) -> Instruction {
+    fn decode_cb_instruction(&mut self, memory: &impl MemRead) -> Instruction {
         match self.mode {
             DecoderMode::PatchIX => {
                 let displacement = memory.read_byte(self.next_address) as i8;
@@ -1049,7 +1049,7 @@ impl Decoder {
         }
     }
 
-    fn decode_ed_instruction(&mut self, memory: &impl Read) -> Instruction {
+    fn decode_ed_instruction(&mut self, memory: &impl MemRead) -> Instruction {
         let opcode = memory.read_byte(self.next_address);
         self.next_address += 1;
 
@@ -1188,7 +1188,7 @@ impl Decoder {
         }
     }
 
-    fn decode_prefixed(&mut self, memory: &impl Read, mode: DecoderMode) -> Instruction {
+    fn decode_prefixed(&mut self, memory: &impl MemRead, mode: DecoderMode) -> Instruction {
         self.mode = mode;
 
         let opcode = memory.read_byte(self.next_address);
@@ -1222,7 +1222,7 @@ impl Decoder {
         instruction
     }
 
-    fn decode_instruction(&mut self, memory: &impl Read, opcode: u8) -> Instruction {
+    fn decode_instruction(&mut self, memory: &impl MemRead, opcode: u8) -> Instruction {
         let opcode_x = opcode >> 6;
         let opcode_y = (opcode >> 3) & 7;
         let opcode_z = opcode & 7;
@@ -1543,7 +1543,7 @@ impl Decoder {
         }
     }
 
-    fn decode_register(&mut self, memory: &impl Read, encoded: u8) -> Operand {
+    fn decode_register(&mut self, memory: &impl MemRead, encoded: u8) -> Operand {
         match encoded {
             0 => Operand::Register8(cpu::Register8::B),
             1 => Operand::Register8(cpu::Register8::C),

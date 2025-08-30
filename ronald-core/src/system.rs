@@ -1,8 +1,7 @@
-mod bus;
-mod cpu;
-// mod debugger;
+pub mod bus;
+pub mod cpu;
 mod instruction; // TODO: do we need this at this level? for debugger?
-mod memory;
+pub mod memory;
 
 use std::path::PathBuf;
 
@@ -10,12 +9,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AudioSink, VideoSink};
 
-use bus::{DummyBus, StandardBus};
-use cpu::{Cpu, Register16, Register8};
-use memory::{Memory, Ram, Read, Write};
+use bus::{Bus, DummyBus, StandardBus};
+use cpu::{Cpu, Register16, Register8, ZilogZ80};
+use memory::{MemManage, MemRead, MemWrite, Memory, Ram};
 
 pub struct ZexHarness {
-    cpu: Cpu,
+    cpu: ZilogZ80,
     memory: Ram,
     bus: DummyBus,
 }
@@ -27,7 +26,7 @@ impl ZexHarness {
         memory.write_word(0x0006, 0xe400); // patch with initial SP
 
         ZexHarness {
-            cpu: Cpu::new(0x100),
+            cpu: ZilogZ80::new(0x100),
             memory,
             bus: DummyBus::new(),
         }
@@ -77,8 +76,7 @@ impl ZexHarness {
     }
 }
 
-pub trait System<'de>: Serialize + Deserialize<'de> {
-    fn new() -> Self;
+pub trait System: Default {
     fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8;
     fn activate_debugger(&mut self);
     fn set_key(&mut self, line: usize, bit: u8);
@@ -94,37 +92,52 @@ pub struct DisassembledInstruction {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "C: Serialize, M: Serialize, B: Serialize",
+    deserialize = "C: Deserialize<'de>, M: Deserialize<'de>, B: Deserialize<'de>"
+))]
 #[serde(rename_all = "camelCase")]
-pub struct CPC464 {
-    cpu: Cpu,
-    memory: Memory,
+pub struct AmstradCpc464<C, M, B>
+where
+    C: Cpu,
+    M: MemRead + MemWrite + MemManage + Default,
+    B: Bus,
+{
+    cpu: C,
+    memory: M,
     #[serde(flatten)]
-    bus: StandardBus,
+    bus: B,
     master_clock: u64,
     // debugger: Debugger,
 }
 
-impl System<'_> for CPC464 {
-    fn new() -> CPC464 {
-        let cpu = Cpu::new(0);
-        let memory = Memory::new();
-        let bus = StandardBus::new();
-        // let debugger = Debugger::new();
+impl<C, M, B> AmstradCpc464<C, M, B>
+where
+    C: Cpu,
+    M: MemRead + MemWrite + MemManage + Default,
+    B: Bus,
+{
+    pub fn new() -> Self {
+        let cpu = C::default();
+        let memory = M::default();
+        let bus = B::default();
 
-        CPC464 {
+        Self {
             cpu,
             memory,
             bus,
             master_clock: 0,
-            // debugger,
         }
     }
+}
 
+impl<C, M, B> System for AmstradCpc464<C, M, B>
+where
+    C: Cpu,
+    M: MemRead + MemWrite + MemManage + Default,
+    B: Bus,
+{
     fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
-        // if self.debugger.is_active(&self.cpu) {
-        //     self.debugger.run_command_shell(&mut self.cpu, &self.memory);
-        // }
-
         let (cycles, interrupt_acknowledged) =
             self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
 
@@ -174,5 +187,16 @@ impl System<'_> for CPC464 {
                 instruction,
             })
             .collect()
+    }
+}
+
+impl<C, M, B> Default for AmstradCpc464<C, M, B>
+where
+    C: Cpu,
+    M: MemRead + MemWrite + MemManage + Default,
+    B: Bus,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -13,7 +13,7 @@ use io::{CanvasVideo, WebAudio};
 
 #[wasm_bindgen]
 pub struct Emulator {
-    driver: Driver<system::CPC464>,
+    driver: Driver<system::AmstradCpc464>,
     video: CanvasVideo,
     audio: WebAudio,
 }
@@ -34,7 +34,7 @@ impl Emulator {
             .dyn_into::<CanvasRenderingContext2d>()?;
         let video = CanvasVideo::new(ctx);
 
-        let driver = Driver::<system::CPC464>::new();
+        let driver = Driver::<system::AmstradCpc464>::new();
         log::debug!("Initialized CPC 464 emulator");
 
         Ok(Self {
