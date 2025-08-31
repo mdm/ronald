@@ -6,6 +6,7 @@ use ronald_core::system::AmstradCpc;
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
+use crate::system_config::{SystemConfig, SystemConfigModal};
 
 pub use crate::key_mapper::{KeyMap, KeyMapStore};
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
@@ -18,12 +19,15 @@ where
 {
     workbench: bool,
     dark_mode: bool,
+    system_config: SystemConfig,
     #[serde(skip)]
     frontend: Option<Frontend>,
     #[serde(skip)]
     key_map_editor: KeyMapEditor,
     #[serde(skip)]
     key_mapper: KeyMapper<S>,
+    #[serde(skip)]
+    system_config_modal: SystemConfigModal,
 }
 
 impl<S> Default for RonaldApp<S>
@@ -34,9 +38,11 @@ where
         Self {
             workbench: false,
             dark_mode: true,
+            system_config: SystemConfig::default(),
             frontend: None,
             key_map_editor: KeyMapEditor::default(),
             key_mapper: KeyMapper::default(),
+            system_config_modal: SystemConfigModal::default(),
         }
     }
 }
@@ -71,6 +77,7 @@ where
         self.render_emulator_only_mode(ctx);
         self.render_workbench_mode(ctx);
         self.key_map_editor.ui(ctx, &mut self.key_mapper);
+        self.system_config_modal.ui(ctx, &mut self.system_config);
 
         ctx.request_repaint();
     }
@@ -131,7 +138,7 @@ where
                     }
                 });
                 ui.menu_button("Settings", |ui| {
-                    ui.menu_button("Theme", |ui| {
+                    ui.menu_button("Emulator Theme", |ui| {
                         if ui
                             .add(egui::Button::new("Light").selected(!self.dark_mode))
                             .clicked()
@@ -149,6 +156,11 @@ where
                             ui.close_menu();
                         }
                     });
+                    ui.separator();
+                    if ui.button("System Configuration").clicked() {
+                        self.system_config_modal.show = true;
+                        ui.close_menu();
+                    }
                     if ui.button("Key Bindings").clicked() {
                         self.key_map_editor.show = true;
                         ui.close_menu();

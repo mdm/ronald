@@ -2,6 +2,7 @@ mod app;
 mod frontend;
 mod key_map_editor;
 mod key_mapper;
+mod system_config;
 mod utils;
 
 use app::{RonaldApp, SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};

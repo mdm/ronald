@@ -134,7 +134,12 @@ impl KeyMapEditor {
         egui::Modal::new("key_bindings_modal".into()).show(ctx, |ui| {
             self.render_binding_listener_modal(ctx, key_mapper);
 
+            ui.add_space(10.0);
+            ui.heading("Key Bindings");
+            ui.add_space(20.0);
+
             ui.label("Click keys to set bindings. Shift-click to set bindings for shifted keys. The guest system's Shift keys themselves cannot be bound.");
+            ui.add_space(20.0);
 
             let svg = self.generate_keyboard_svg(ui);
             let image_response = self.render_keyboard_image(ui, svg);
