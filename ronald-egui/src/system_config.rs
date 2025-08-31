@@ -452,4 +452,3 @@ mod gui_tests {
         );
     }
 }
-

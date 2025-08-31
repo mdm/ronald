@@ -146,11 +146,10 @@ impl KeyMapEditor {
 
             self.handle_key_interactions(ctx, ui, image_response);
 
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Close").clicked() {
-                    self.show = false;
-                }
-            });
+            ui.add_space(15.0);
+            if ui.button("Close").clicked() {
+                self.show = false;
+            }
         });
     }
 
@@ -163,6 +162,7 @@ impl KeyMapEditor {
     {
         if let Some((hovered_key, shifted)) = self.listening {
             egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
+                ui.set_max_width(350.0);
                 if shifted {
                     ui.label(format!(
                         "Press a key to bind to \"Shift + {hovered_key}\" on the guest system."
@@ -176,19 +176,24 @@ impl KeyMapEditor {
                 match key_mapper.binding(hovered_key, shifted) {
                     Some(host_key) => {
                         ui.label(format!("Currently bound to {host_key}"));
-                        if ui.button("Clear Binding").clicked() {
-                            let _ = key_mapper.clear_binding(hovered_key, shifted);
-                        }
                     }
                     None => {
                         ui.label("No binding set yet.");
                     }
                 }
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add_space(15.0);
+                ui.horizontal(|ui| {
                     if ui.button("Cancel").clicked() {
                         self.listening = None;
                     }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if let Some(host_key) = key_mapper.binding(hovered_key, shifted) {
+                            if ui.button("Clear Binding").clicked() {
+                                let _ = key_mapper.clear_binding(hovered_key, shifted);
+                            }
+                        }
+                    });
                 });
 
                 ui.input(|input| {
