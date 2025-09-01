@@ -7,7 +7,7 @@ use nom::{
     sequence::{delimited, pair, separated_pair}
 };
 
-use crate::{cpu::{Cpu, Register16}, memory::MemoryCpcX64};
+use crate::{cpu::{Cpu, Register16}, memory::AnyMemory};
 
 #[derive(Debug)]
 enum Command {
@@ -152,7 +152,7 @@ impl Debugger {
         }
     }
 
-    pub fn run_command_shell(&mut self, cpu: &mut Cpu, memory: &MemoryCpcX64) {
+    pub fn run_command_shell(&mut self, cpu: &mut Cpu, memory: &AnyMemory) {
         let address = cpu.registers.read_word(&Register16::PC) as usize;
         let (instruction, _) = cpu.decoder.decode_at(memory, address);
         println!("{:#06x}: {}", address, &instruction);

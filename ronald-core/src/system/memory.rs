@@ -261,3 +261,77 @@ impl MemManage for MemoryCpc6128 {
         self.memory.force_ram_read(force);
     }
 }
+
+#[derive(Serialize, Deserialize)]
+pub enum AnyMemory {
+    CpcX64(MemoryCpcX64),
+    Cpc6128(MemoryCpc6128),
+}
+
+impl Default for AnyMemory {
+    fn default() -> Self {
+        AnyMemory::CpcX64(MemoryCpcX64::default())
+    }
+}
+
+impl MemRead for AnyMemory {
+    fn read_byte(&self, address: usize) -> u8 {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.read_byte(address),
+            AnyMemory::Cpc6128(memory) => memory.read_byte(address),
+        }
+    }
+
+    fn read_word(&self, address: usize) -> u16 {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.read_word(address),
+            AnyMemory::Cpc6128(memory) => memory.read_word(address),
+        }
+    }
+}
+
+impl MemWrite for AnyMemory {
+    fn write_byte(&mut self, address: usize, value: u8) {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.write_byte(address, value),
+            AnyMemory::Cpc6128(memory) => memory.write_byte(address, value),
+        }
+    }
+
+    fn write_word(&mut self, address: usize, value: u16) {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.write_word(address, value),
+            AnyMemory::Cpc6128(memory) => memory.write_word(address, value),
+        }
+    }
+}
+
+impl MemManage for AnyMemory {
+    fn enable_lower_rom(&mut self, enable: bool) {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.enable_lower_rom(enable),
+            AnyMemory::Cpc6128(memory) => memory.enable_lower_rom(enable),
+        }
+    }
+
+    fn enable_upper_rom(&mut self, enable: bool) {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.enable_upper_rom(enable),
+            AnyMemory::Cpc6128(memory) => memory.enable_upper_rom(enable),
+        }
+    }
+
+    fn select_upper_rom(&mut self, upper_rom_nr: u8) {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.select_upper_rom(upper_rom_nr),
+            AnyMemory::Cpc6128(memory) => memory.select_upper_rom(upper_rom_nr),
+        }
+    }
+
+    fn force_ram_read(&mut self, force: bool) {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.force_ram_read(force),
+            AnyMemory::Cpc6128(memory) => memory.force_ram_read(force),
+        }
+    }
+}
