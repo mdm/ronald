@@ -112,7 +112,7 @@ impl MemManage for Ram {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Memory {
+pub struct MemoryCpcX64 {
     #[serde(flatten)]
     ram: Ram,
     #[serde(flatten)]
@@ -124,7 +124,7 @@ pub struct Memory {
     ram_read_forced: bool,
 }
 
-impl Memory {
+impl MemoryCpcX64 {
     pub fn new() -> Self {
         // TODO: receive rom paths as parameters
         let mut upper_roms = HashMap::new();
@@ -137,7 +137,7 @@ impl Memory {
             Rom::from_bytes(include_bytes!("../../rom/amsdos_0.5.rom")),
         );
 
-        Memory {
+        MemoryCpcX64 {
             ram: Ram::new(0x10000),
             lower_rom: Rom::from_bytes(include_bytes!("../../rom/os_464.rom")),
             lower_rom_enabled: true,
@@ -149,13 +149,13 @@ impl Memory {
     }
 }
 
-impl Default for Memory {
+impl Default for MemoryCpcX64 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl MemRead for Memory {
+impl MemRead for MemoryCpcX64 {
     fn read_byte(&self, address: usize) -> u8 {
         if self.ram_read_forced {
             return self.ram.read_byte(address);
@@ -181,13 +181,13 @@ impl MemRead for Memory {
     }
 }
 
-impl MemWrite for Memory {
+impl MemWrite for MemoryCpcX64 {
     fn write_byte(&mut self, address: usize, value: u8) {
         self.ram.write_byte(address, value);
     }
 }
 
-impl MemManage for Memory {
+impl MemManage for MemoryCpcX64 {
     fn enable_lower_rom(&mut self, enable: bool) {
         self.lower_rom_enabled = enable;
     }
@@ -202,5 +202,62 @@ impl MemManage for Memory {
 
     fn force_ram_read(&mut self, force: bool) {
         self.ram_read_forced = force;
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MemoryCpc6128 {
+    memory: MemoryCpcX64,
+}
+
+impl MemoryCpc6128 {
+    pub fn new() -> Self {
+        MemoryCpc6128 {
+            memory: MemoryCpcX64::new(),
+        }
+    }
+}
+
+impl Default for MemoryCpc6128 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MemRead for MemoryCpc6128 {
+    fn read_byte(&self, address: usize) -> u8 {
+        self.memory.read_byte(address)
+    }
+
+    fn read_word(&self, address: usize) -> u16 {
+        self.memory.read_word(address)
+    }
+}
+
+impl MemWrite for MemoryCpc6128 {
+    fn write_byte(&mut self, address: usize, value: u8) {
+        self.memory.write_byte(address, value);
+    }
+
+    fn write_word(&mut self, address: usize, value: u16) {
+        self.memory.write_word(address, value);
+    }
+}
+
+impl MemManage for MemoryCpc6128 {
+    fn enable_lower_rom(&mut self, enable: bool) {
+        self.memory.enable_lower_rom(enable);
+    }
+
+    fn enable_upper_rom(&mut self, enable: bool) {
+        self.memory.enable_upper_rom(enable);
+    }
+
+    fn select_upper_rom(&mut self, upper_rom_nr: u8) {
+        self.memory.select_upper_rom(upper_rom_nr);
+    }
+
+    fn force_ram_read(&mut self, force: bool) {
+        self.memory.force_ram_read(force);
     }
 }

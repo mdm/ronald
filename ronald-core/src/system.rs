@@ -12,7 +12,7 @@ use crate::{AudioSink, VideoSink};
 use bus::{Bus, DummyBus, StandardBus};
 use cpu::{Cpu, Register16, Register8, ZilogZ80};
 use instruction::{AlgorithmicDecoder, Decoder};
-use memory::{MemManage, MemRead, MemWrite, Memory, Ram};
+use memory::{MemManage, MemRead, MemWrite, MemoryCpcX64, Ram};
 
 pub struct ZexHarness {
     cpu: ZilogZ80<AlgorithmicDecoder>,
