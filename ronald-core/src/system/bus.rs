@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::system::memory::{MemManage, MemRead, Memory};
+use crate::system::memory::{MemManage, MemRead, MemoryCpcX64};
 use crate::{AudioSink, VideoSink};
 
 pub mod crtc;
