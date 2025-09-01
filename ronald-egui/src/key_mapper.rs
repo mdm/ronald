@@ -8,7 +8,6 @@ use std::{
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use crate::frontend::KeyEvent;
 use crate::utils::vectorize;
 
 pub trait KeyMapStore: Default {
@@ -36,6 +35,12 @@ impl Display for HostKey {
 
         write!(f, "{}", self.key.name())
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum KeyEvent<'k> {
+    Pressed(&'k str),
+    Released(&'k str),
 }
 
 #[derive(Default, Serialize, Deserialize)]
