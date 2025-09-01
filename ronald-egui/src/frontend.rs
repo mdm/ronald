@@ -13,7 +13,7 @@ use ronald_core::{
 };
 
 use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
-use crate::key_mapper::{KeyMapStore, KeyMapper};
+use crate::key_mapper::{KeyEvent, KeyMapStore, KeyMapper};
 use crate::utils::sync::{Shared, SharedExt, shared};
 
 mod audio;
@@ -411,10 +411,4 @@ impl Frontend {
             )
         }
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum KeyEvent<'k> {
-    Pressed(&'k str),
-    Released(&'k str),
 }
