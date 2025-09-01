@@ -14,9 +14,9 @@ mod psg;
 pub mod screen; // TODO: refactor to not use pub
 mod tape;
 
-use crtc::{CrtController, HitachiHd6845s};
+use crtc::CrtController;
 use fdc::FloppyDiskController;
-use gate_array::{Amstrad40007, GateArray};
+use gate_array::GateArray;
 use keyboard::Keyboard;
 use ppi::PeripheralInterface;
 use psg::SoundGenerator;
