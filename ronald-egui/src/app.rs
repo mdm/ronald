@@ -6,7 +6,9 @@ use ronald_core::system::AmstradCpc;
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
-use crate::system_config::{SystemConfig, SystemConfigModal};
+use crate::system_config::SystemConfigModal;
+
+pub use ronald_core::system::SystemConfig;
 
 pub use crate::key_mapper::{KeyMap, KeyMapStore};
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
