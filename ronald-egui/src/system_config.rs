@@ -9,10 +9,12 @@ pub struct SystemConfigModal {
 }
 
 impl SystemConfigModal {
-    pub fn ui(&mut self, ctx: &egui::Context, config: &mut SystemConfig) {
+    pub fn ui(&mut self, ctx: &egui::Context, config: &mut SystemConfig) -> bool {
         if !self.show {
-            return;
+            return false;
         }
+        
+        let mut config_changed = false;
 
         // Initialize temp config if not already set
         if self.changed_config.is_none() {
@@ -139,6 +141,7 @@ impl SystemConfigModal {
                 ui.horizontal(|ui| {
                     if ui.button("OK").clicked() {
                         if let Some(changed) = self.changed_config.take() {
+                            config_changed = *config != changed;
                             *config = changed;
                         }
                         self.show = false;
@@ -158,6 +161,8 @@ impl SystemConfigModal {
                 ui.add_space(10.0);
             });
         });
+        
+        config_changed
     }
 }
 

@@ -10,6 +10,7 @@ use web_sys;
 use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
+    system::SystemConfig,
 };
 
 use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
@@ -43,6 +44,15 @@ pub struct Frontend {
 impl Frontend {
     pub fn new(render_state: &egui_wgpu::RenderState) -> Self {
         let driver = Driver::new();
+        Self::with_driver_and_render_state(driver, render_state)
+    }
+
+    pub fn with_config(render_state: &egui_wgpu::RenderState, config: &SystemConfig) -> Self {
+        let driver = Driver::with_config(config);
+        Self::with_driver_and_render_state(driver, render_state)
+    }
+
+    fn with_driver_and_render_state(driver: Driver, render_state: &egui_wgpu::RenderState) -> Self {
         let audio = CpalAudio::new();
         #[cfg(target_arch = "wasm32")]
         {
