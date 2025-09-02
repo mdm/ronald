@@ -9,12 +9,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AudioSink, VideoSink};
 
-use bus::{Bus, DummyBus, StandardBus};
 use bus::crtc::AnyCrtController;
 use bus::gate_array::AnyGateArray;
+use bus::{Bus, DummyBus, StandardBus};
 use cpu::{Cpu, Register16, Register8, ZilogZ80};
 use instruction::{AlgorithmicDecoder, Decoder};
-use memory::{MemManage, MemRead, MemWrite, AnyMemory, MemoryCpcX64, MemoryCpc6128, Ram};
+use memory::{AnyMemory, MemManage, MemRead, MemWrite, MemoryCpc6128, MemoryCpcX64, Ram};
 
 pub struct ZexHarness {
     cpu: ZilogZ80<AlgorithmicDecoder>,
@@ -160,7 +160,7 @@ where
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, PartialEq)]
 #[serde(default)]
 pub struct SystemConfig {
     pub model: CpcModel,
@@ -185,8 +185,8 @@ pub enum CrtcType {
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum DiskDrives {
-    #[default]
     None,
+    #[default]
     One,
     Two,
 }
@@ -240,7 +240,7 @@ where
         // Select memory implementation based on model
         let memory = match config.model {
             CpcModel::Cpc464 => AnyMemory::CpcX64(MemoryCpcX64::default()),
-            CpcModel::Cpc664 => AnyMemory::CpcX64(MemoryCpcX64::default()), 
+            CpcModel::Cpc664 => AnyMemory::CpcX64(MemoryCpcX64::default()),
             CpcModel::Cpc6128 => AnyMemory::Cpc6128(MemoryCpc6128::default()),
         };
 

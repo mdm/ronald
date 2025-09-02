@@ -79,7 +79,14 @@ where
         self.render_emulator_only_mode(ctx);
         self.render_workbench_mode(ctx);
         self.key_map_editor.ui(ctx, &mut self.key_mapper);
-        self.system_config_modal.ui(ctx, &mut self.system_config);
+        let config_changed = self.system_config_modal.ui(ctx, &mut self.system_config);
+        if config_changed {
+            // Recreate frontend with new config
+            if let Some(render_state) = frame.wgpu_render_state() {
+                let new_frontend = Frontend::with_config(render_state, &self.system_config);
+                self.frontend = Some(new_frontend);
+            }
+        }
 
         ctx.request_repaint();
     }
@@ -185,7 +192,7 @@ where
                     ui.label("This emulator recreates the classic Amstrad CPC.");
                     ui.add_space(20.0);
                     if ui.button("Start Emulator").clicked() {
-                        let frontend = Frontend::new(render_state);
+                        let frontend = Frontend::with_config(render_state, &self.system_config);
                         self.frontend = Some(frontend);
                     }
                     ui.add_space(10.0);
@@ -193,7 +200,7 @@ where
             });
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let frontend = Frontend::new(render_state);
+                let frontend = Frontend::with_config(render_state, &self.system_config);
                 self.frontend = Some(frontend);
             }
         }
