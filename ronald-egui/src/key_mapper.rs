@@ -650,7 +650,7 @@ mod tests {
 
         let mut received_key = None;
         mapper.map_keys(&press_input, |event| {
-            if let crate::frontend::KeyEvent::Pressed(key) = event {
+            if let KeyEvent::Pressed(key) = event {
                 received_key = Some(key.to_string());
             }
         });
@@ -670,7 +670,7 @@ mod tests {
 
         let mut received_keys = Vec::new();
         mapper.map_keys(&press_input, |event| {
-            if let crate::frontend::KeyEvent::Pressed(key) = event {
+            if let KeyEvent::Pressed(key) = event {
                 received_keys.push(key.to_string());
             }
         });
@@ -700,7 +700,7 @@ mod tests {
 
         let mut received_key = None;
         mapper.map_keys(&press_input, |event| {
-            if let crate::frontend::KeyEvent::Pressed(key) = event {
+            if let KeyEvent::Pressed(key) = event {
                 received_key = Some(key.to_string());
             }
         });
@@ -772,12 +772,8 @@ mod tests {
 
         let mut received_key = None;
         mapper.map_keys(&input_state, |event| match event {
-            crate::frontend::KeyEvent::Pressed(key) => {
-                received_key = Some(("Pressed", key.to_string()))
-            }
-            crate::frontend::KeyEvent::Released(key) => {
-                received_key = Some(("Released", key.to_string()))
-            }
+            KeyEvent::Pressed(key) => received_key = Some(("Pressed", key.to_string())),
+            KeyEvent::Released(key) => received_key = Some(("Released", key.to_string())),
         });
         assert_eq!(received_key, Some(("Pressed", "A".to_string())));
     }
@@ -799,12 +795,8 @@ mod tests {
 
         let mut received_key = None;
         mapper.map_keys(&release_input, |event| match event {
-            crate::frontend::KeyEvent::Pressed(key) => {
-                received_key = Some(("Pressed", key.to_string()))
-            }
-            crate::frontend::KeyEvent::Released(key) => {
-                received_key = Some(("Released", key.to_string()))
-            }
+            KeyEvent::Pressed(key) => received_key = Some(("Pressed", key.to_string())),
+            KeyEvent::Released(key) => received_key = Some(("Released", key.to_string())),
         });
         assert_eq!(received_key, Some(("Released", "A".to_string())));
     }
@@ -825,12 +817,8 @@ mod tests {
 
         let mut received_keys = Vec::new();
         mapper.map_keys(&input_state, |event| match event {
-            crate::frontend::KeyEvent::Pressed(key) => {
-                received_keys.push(("Pressed", key.to_string()))
-            }
-            crate::frontend::KeyEvent::Released(key) => {
-                received_keys.push(("Released", key.to_string()))
-            }
+            KeyEvent::Pressed(key) => received_keys.push(("Pressed", key.to_string())),
+            KeyEvent::Released(key) => received_keys.push(("Released", key.to_string())),
         });
 
         assert_eq!(received_keys.len(), 2);
@@ -865,7 +853,7 @@ mod tests {
 
         let mut received_key = None;
         mapper.map_keys(&press_w_input, |event| {
-            if let crate::frontend::KeyEvent::Pressed(key) = event {
+            if let KeyEvent::Pressed(key) = event {
                 received_key = Some(key.to_string());
             }
         });
@@ -876,7 +864,7 @@ mod tests {
 
         let mut received_key = None;
         mapper.map_keys(&press_q_input, |event| {
-            if let crate::frontend::KeyEvent::Pressed(key) = event {
+            if let KeyEvent::Pressed(key) = event {
                 received_key = Some(key.to_string());
             }
         });
@@ -909,7 +897,7 @@ mod tests {
 
         let mut received_key = None;
         mapper.map_keys(&press_input, |event| {
-            if let crate::frontend::KeyEvent::Pressed(key) = event {
+            if let KeyEvent::Pressed(key) = event {
                 received_key = Some(key.to_string());
             }
         });
