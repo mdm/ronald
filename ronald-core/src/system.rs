@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::Snapshotable;
 use crate::{AudioSink, VideoSink};
 
 use bus::{Bus, DummyBus, StandardBus};
@@ -38,14 +39,15 @@ impl ZexHarness {
         let mut total_cycles = 0;
 
         loop {
-            match self.cpu.registers.read_word(&Register16::PC) {
+            let cpu_debug_view = self.cpu.debug_view();
+            match cpu_debug_view.register_pc {
                 0x0000 => break,
                 0x0005 => {
-                    match self.cpu.registers.read_byte(&Register8::C) {
-                        2 => print!("{}", self.cpu.registers.read_byte(&Register8::E) as char),
+                    match cpu_debug_view.register_c {
+                        2 => print!("{}", cpu_debug_view.register_e as char),
                         9 => {
-                            let mut address =
-                                self.cpu.registers.read_word(&Register16::DE) as usize;
+                            let mut address = ((cpu_debug_view.register_d as usize) << 8)
+                                + cpu_debug_view.register_e as usize;
                             loop {
                                 let character = self.memory.read_byte(address) as char;
                                 if character == '$' {

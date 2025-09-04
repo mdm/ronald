@@ -8,6 +8,7 @@ use system::memory::Memory;
 use system::AmstradCpc;
 
 pub mod constants;
+pub mod debug;
 pub mod system;
 
 pub trait VideoSink {
