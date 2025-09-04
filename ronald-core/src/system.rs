@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::Snapshotable;
 use crate::{AudioSink, VideoSink};
 
 use bus::crtc::AnyCrtController;
