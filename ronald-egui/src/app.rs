@@ -6,6 +6,9 @@ use ronald_core::system::AmstradCpc;
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
+use crate::system_config::SystemConfigModal;
+
+pub use ronald_core::system::SystemConfig;
 
 pub use crate::key_mapper::{KeyMap, KeyMapStore};
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
@@ -18,12 +21,15 @@ where
 {
     workbench: bool,
     dark_mode: bool,
+    system_config: SystemConfig,
     #[serde(skip)]
     frontend: Option<Frontend>,
     #[serde(skip)]
     key_map_editor: KeyMapEditor,
     #[serde(skip)]
     key_mapper: KeyMapper<S>,
+    #[serde(skip)]
+    system_config_modal: SystemConfigModal,
 }
 
 impl<S> Default for RonaldApp<S>
@@ -34,9 +40,11 @@ where
         Self {
             workbench: false,
             dark_mode: true,
+            system_config: SystemConfig::default(),
             frontend: None,
             key_map_editor: KeyMapEditor::default(),
             key_mapper: KeyMapper::default(),
+            system_config_modal: SystemConfigModal::default(),
         }
     }
 }
@@ -71,6 +79,14 @@ where
         self.render_emulator_only_mode(ctx);
         self.render_workbench_mode(ctx);
         self.key_map_editor.ui(ctx, &mut self.key_mapper);
+        let config_changed = self.system_config_modal.ui(ctx, &mut self.system_config);
+        if config_changed {
+            // Recreate frontend with new config
+            if let Some(render_state) = frame.wgpu_render_state() {
+                let new_frontend = Frontend::with_config(render_state, &self.system_config);
+                self.frontend = Some(new_frontend);
+            }
+        }
 
         ctx.request_repaint();
     }
@@ -131,7 +147,7 @@ where
                     }
                 });
                 ui.menu_button("Settings", |ui| {
-                    ui.menu_button("Theme", |ui| {
+                    ui.menu_button("Emulator Theme", |ui| {
                         if ui
                             .add(egui::Button::new("Light").selected(!self.dark_mode))
                             .clicked()
@@ -149,6 +165,11 @@ where
                             ui.close_menu();
                         }
                     });
+                    ui.separator();
+                    if ui.button("System Configuration").clicked() {
+                        self.system_config_modal.show = true;
+                        ui.close_menu();
+                    }
                     if ui.button("Key Bindings").clicked() {
                         self.key_map_editor.show = true;
                         ui.close_menu();
@@ -171,7 +192,7 @@ where
                     ui.label("This emulator recreates the classic Amstrad CPC.");
                     ui.add_space(20.0);
                     if ui.button("Start Emulator").clicked() {
-                        let frontend = Frontend::new(render_state);
+                        let frontend = Frontend::with_config(render_state, &self.system_config);
                         self.frontend = Some(frontend);
                     }
                     ui.add_space(10.0);
@@ -179,7 +200,7 @@ where
             });
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let frontend = Frontend::new(render_state);
+                let frontend = Frontend::with_config(render_state, &self.system_config);
                 self.frontend = Some(frontend);
             }
         }

@@ -1,11 +1,11 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
-use system::bus::{crtc::HitachiHd6845s, gate_array::Amstrad40007, StandardBus};
+use system::bus::{crtc::AnyCrtController, gate_array::AnyGateArray, StandardBus};
 use system::cpu::ZilogZ80;
 use system::instruction::AlgorithmicDecoder;
-use system::memory::Memory;
-use system::AmstradCpc;
+use system::memory::AnyMemory;
+use system::{AmstradCpc, SystemConfig};
 
 pub mod constants;
 pub mod system;
@@ -22,8 +22,11 @@ pub trait AudioSink {
 }
 
 pub struct Driver {
-    system:
-        AmstradCpc<ZilogZ80<AlgorithmicDecoder>, Memory, StandardBus<HitachiHd6845s, Amstrad40007>>,
+    system: AmstradCpc<
+        ZilogZ80<AlgorithmicDecoder>,
+        AnyMemory,
+        StandardBus<AnyCrtController, AnyGateArray>,
+    >,
     keys: HashMap<&'static str, KeyDefinition>,
 }
 
@@ -32,6 +35,14 @@ impl Driver {
         let keys = HashMap::from(constants::KEYS);
         Self {
             system: AmstradCpc::default(),
+            keys,
+        }
+    }
+
+    pub fn with_config(config: &SystemConfig) -> Self {
+        let keys = HashMap::from(constants::KEYS);
+        Self {
+            system: config.clone().into(),
             keys,
         }
     }

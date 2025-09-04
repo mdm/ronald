@@ -224,3 +224,40 @@ impl GateArray for Amstrad40007 {
         generate_interrupt
     }
 }
+
+#[derive(Serialize, Deserialize)]
+pub enum AnyGateArray {
+    Amstrad40007(Amstrad40007),
+}
+
+impl Default for AnyGateArray {
+    fn default() -> Self {
+        AnyGateArray::Amstrad40007(Amstrad40007::default())
+    }
+}
+
+impl GateArray for AnyGateArray {
+    fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8) {
+        match self {
+            AnyGateArray::Amstrad40007(gate_array) => gate_array.write_byte(memory, port, value),
+        }
+    }
+
+    fn acknowledge_interrupt(&mut self) {
+        match self {
+            AnyGateArray::Amstrad40007(gate_array) => gate_array.acknowledge_interrupt(),
+        }
+    }
+
+    fn step(
+        &mut self,
+        crtc: &impl crtc::CrtController,
+        memory: &mut (impl MemRead + MemManage),
+        screen: &mut screen::Screen,
+        video: &mut impl VideoSink,
+    ) -> bool {
+        match self {
+            AnyGateArray::Amstrad40007(gate_array) => gate_array.step(crtc, memory, screen, video),
+        }
+    }
+}

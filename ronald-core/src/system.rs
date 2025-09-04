@@ -9,10 +9,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AudioSink, VideoSink};
 
+use bus::crtc::AnyCrtController;
+use bus::gate_array::AnyGateArray;
 use bus::{Bus, DummyBus, StandardBus};
 use cpu::{Cpu, Register16, Register8, ZilogZ80};
 use instruction::{AlgorithmicDecoder, Decoder};
-use memory::{MemManage, MemRead, MemWrite, Memory, Ram};
+use memory::{AnyMemory, MemManage, MemRead, MemWrite, MemoryCpc6128, MemoryCpcX64, Ram};
 
 pub struct ZexHarness {
     cpu: ZilogZ80<AlgorithmicDecoder>,
@@ -100,6 +102,7 @@ where
     #[serde(flatten)]
     bus: B,
     master_clock: u64,
+    disk_drives: DiskDrives,
 }
 
 impl<C, M, B> AmstradCpc<C, M, B>
@@ -154,5 +157,106 @@ where
                 instruction,
             })
             .collect()
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, PartialEq)]
+#[serde(default)]
+pub struct SystemConfig {
+    pub model: CpcModel,
+    pub crtc: CrtcType,
+    pub disk_drives: DiskDrives,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CpcModel {
+    Cpc464,
+    Cpc664,
+    Cpc6128,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CrtcType {
+    Type0,
+    Type1,
+    Type2,
+    Type4,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum DiskDrives {
+    None,
+    #[default]
+    One,
+    Two,
+}
+
+impl Default for SystemConfig {
+    fn default() -> Self {
+        Self {
+            model: CpcModel::Cpc464,
+            crtc: CrtcType::Type0,
+            disk_drives: DiskDrives::None,
+        }
+    }
+}
+
+impl std::fmt::Display for CpcModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CpcModel::Cpc464 => write!(f, "Amstrad CPC 464"),
+            CpcModel::Cpc664 => write!(f, "Amstrad CPC 664"),
+            CpcModel::Cpc6128 => write!(f, "Amstrad CPC 6128"),
+        }
+    }
+}
+
+impl std::fmt::Display for CrtcType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CrtcType::Type0 => write!(f, "Type 0 (HD6845S/UM6845)"),
+            CrtcType::Type1 => write!(f, "Type 1 (UM6845R)"),
+            CrtcType::Type2 => write!(f, "Type 2 (MC6845)"),
+            CrtcType::Type4 => write!(f, "Type 4 (AMS40226)"),
+        }
+    }
+}
+
+impl std::fmt::Display for DiskDrives {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DiskDrives::None => write!(f, "None"),
+            DiskDrives::One => write!(f, "Drive A only"),
+            DiskDrives::Two => write!(f, "Drives A and B"),
+        }
+    }
+}
+
+impl<C> From<SystemConfig> for AmstradCpc<C, AnyMemory, StandardBus<AnyCrtController, AnyGateArray>>
+where
+    C: Cpu + Default,
+{
+    fn from(config: SystemConfig) -> Self {
+        // Select memory implementation based on model
+        let memory = match config.model {
+            CpcModel::Cpc464 => AnyMemory::CpcX64(MemoryCpcX64::default()),
+            CpcModel::Cpc664 => AnyMemory::CpcX64(MemoryCpcX64::default()),
+            CpcModel::Cpc6128 => AnyMemory::Cpc6128(MemoryCpc6128::default()),
+        };
+
+        // Create CPU using Default trait
+        let cpu = C::default();
+
+        // Create bus with Any* components
+        // Note: Taking liberties here as requested since not all CRTC and Gate Array variants are implemented
+        let bus = StandardBus::default();
+
+        AmstradCpc {
+            cpu,
+            memory,
+            bus,
+            master_clock: 0,
+            disk_drives: config.disk_drives,
+        }
     }
 }

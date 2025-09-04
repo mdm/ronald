@@ -138,3 +138,58 @@ impl CrtController for HitachiHd6845s {
         (0..16 * 8).contains(&scan_lines_since_start) // should be 16, not 16 * 8 - TODO: find out why shortening this messes with Fruity Frank colors
     }
 }
+
+#[derive(Serialize, Deserialize)]
+pub enum AnyCrtController {
+    HitachiHd6845s(HitachiHd6845s),
+}
+
+impl Default for AnyCrtController {
+    fn default() -> Self {
+        AnyCrtController::HitachiHd6845s(HitachiHd6845s::default())
+    }
+}
+
+impl CrtController for AnyCrtController {
+    fn read_byte(&mut self, port: u16) -> u8 {
+        match self {
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_byte(port),
+        }
+    }
+
+    fn write_byte(&mut self, port: u16, value: u8) {
+        match self {
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.write_byte(port, value),
+        }
+    }
+
+    fn step(&mut self) {
+        match self {
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.step(),
+        }
+    }
+
+    fn read_address(&self) -> usize {
+        match self {
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_address(),
+        }
+    }
+
+    fn read_display_enabled(&self) -> bool {
+        match self {
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_display_enabled(),
+        }
+    }
+
+    fn read_horizontal_sync(&self) -> bool {
+        match self {
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_horizontal_sync(),
+        }
+    }
+
+    fn read_vertical_sync(&self) -> bool {
+        match self {
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_vertical_sync(),
+        }
+    }
+}
