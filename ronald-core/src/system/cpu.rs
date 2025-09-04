@@ -2,6 +2,9 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::event::CpuDebugEvent;
+use crate::debug::view::CpuDebugView;
+use crate::debug::{DebugSource, Debuggable, Snapshotable};
 use crate::system::bus::Bus;
 use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
 use crate::system::memory::{MemManage, MemRead, MemWrite};
@@ -36,7 +39,7 @@ pub enum Register16 {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct RegisterFile {
+struct RegisterFile {
     #[serde(rename = "registers")]
     data: Vec<u16>,
 }
@@ -73,46 +76,190 @@ impl RegisterFile {
 
         match register {
             Register8::A => {
+                let was = self.data[0];
                 self.data[0] = (value << 8) + (self.data[0] & 0xff);
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::A,
+                    is: value as u8,
+                    was: (was >> 8) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::AF,
+                    is: self.data[0],
+                    was,
+                });
             }
             Register8::F => {
+                let was = self.data[0];
                 self.data[0] = (self.data[0] & 0xff00) + value;
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::F,
+                    is: value as u8,
+                    was: (was & 0xff) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::AF,
+                    is: self.data[0],
+                    was,
+                });
             }
             Register8::B => {
+                let was = self.data[1];
                 self.data[1] = (value << 8) + (self.data[1] & 0xff);
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::B,
+                    is: value as u8,
+                    was: (was >> 8) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::BC,
+                    is: self.data[1],
+                    was,
+                });
             }
             Register8::C => {
+                let was = self.data[1];
                 self.data[1] = (self.data[1] & 0xff00) + value;
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::C,
+                    is: value as u8,
+                    was: (was & 0xff) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::BC,
+                    is: self.data[1],
+                    was,
+                });
             }
             Register8::D => {
+                let was = self.data[2];
                 self.data[2] = (value << 8) + (self.data[2] & 0xff);
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::D,
+                    is: value as u8,
+                    was: (was >> 8) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::DE,
+                    is: self.data[2],
+                    was,
+                });
             }
             Register8::E => {
+                let was = self.data[2];
                 self.data[2] = (self.data[2] & 0xff00) + value;
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::E,
+                    is: value as u8,
+                    was: (was & 0xff) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::DE,
+                    is: self.data[2],
+                    was,
+                });
             }
             Register8::H => {
+                let was = self.data[3];
                 self.data[3] = (value << 8) + (self.data[3] & 0xff);
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::H,
+                    is: value as u8,
+                    was: (was >> 8) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::HL,
+                    is: self.data[3],
+                    was,
+                });
             }
             Register8::L => {
+                let was = self.data[3];
                 self.data[3] = (self.data[3] & 0xff00) + value;
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::L,
+                    is: value as u8,
+                    was: (was & 0xff) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::HL,
+                    is: self.data[3],
+                    was,
+                });
             }
             Register8::I => {
+                let was = self.data[8];
                 self.data[8] = (self.data[8] & 0xff00) + value;
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::I,
+                    is: value as u8,
+                    was: (was & 0xff) as u8,
+                });
             }
             Register8::R => {
+                let was = self.data[9];
                 self.data[9] = (self.data[9] & 0xff00) + value;
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::R,
+                    is: value as u8,
+                    was: (was & 0xff) as u8,
+                });
             }
             Register8::IXH => {
+                let was = self.data[10];
                 self.data[10] = (value << 8) + (self.data[10] & 0xff);
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::IXH,
+                    is: value as u8,
+                    was: (was >> 8) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::IX,
+                    is: self.data[10],
+                    was,
+                });
             }
             Register8::IXL => {
+                let was = self.data[10];
                 self.data[10] = (self.data[10] & 0xff00) + value;
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::IXL,
+                    is: value as u8,
+                    was: (was & 0xff) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::IX,
+                    is: self.data[10],
+                    was,
+                });
             }
             Register8::IYH => {
+                let was = self.data[11];
                 self.data[11] = (value << 8) + (self.data[11] & 0xff);
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::IYH,
+                    is: value as u8,
+                    was: (was >> 8) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::IY,
+                    is: self.data[11],
+                    was,
+                });
             }
             Register8::IYL => {
+                let was = self.data[11];
                 self.data[11] = (self.data[11] & 0xff00) + value;
+                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                    register: Register8::IYL,
+                    is: value as u8,
+                    was: (was & 0xff) as u8,
+                });
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::IY,
+                    is: self.data[11],
+                    was,
+                });
             }
         }
     }
@@ -133,38 +280,114 @@ impl RegisterFile {
     fn write_word(&mut self, register: &Register16, value: u16) {
         match register {
             Register16::AF => {
+                let was = self.data[0];
                 self.data[0] = value;
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::AF,
+                    is: self.data[0],
+                    was,
+                });
             }
             Register16::BC => {
+                let was = self.data[1];
                 self.data[1] = value;
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::BC,
+                    is: self.data[1],
+                    was,
+                });
             }
             Register16::DE => {
+                let was = self.data[2];
                 self.data[2] = value;
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::DE,
+                    is: self.data[2],
+                    was,
+                });
             }
             Register16::HL => {
+                let was = self.data[3];
                 self.data[3] = value;
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::HL,
+                    is: self.data[3],
+                    was,
+                });
             }
             Register16::IX => {
+                let was = self.data[10];
                 self.data[10] = value;
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::IX,
+                    is: self.data[10],
+                    was,
+                });
             }
             Register16::IY => {
+                let was = self.data[11];
                 self.data[11] = value;
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::IY,
+                    is: self.data[11],
+                    was,
+                });
             }
             Register16::SP => {
+                let was = self.data[12];
                 self.data[12] = value;
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::SP,
+                    is: self.data[12],
+                    was,
+                });
             }
             Register16::PC => {
+                let was = self.data[13];
                 self.data[13] = value;
+                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                    register: Register16::PC,
+                    is: self.data[13],
+                    was,
+                });
             }
         }
     }
 
     fn swap_word(&mut self, register: &Register16) {
         match register {
-            Register16::AF => self.data.swap(0, 4),
-            Register16::BC => self.data.swap(1, 5),
-            Register16::DE => self.data.swap(2, 6),
-            Register16::HL => self.data.swap(3, 7),
+            Register16::AF => {
+                self.data.swap(0, 4);
+                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Swapped {
+                    register: Register16::AF,
+                    is: self.data[4],
+                    was: self.data[0],
+                });
+            }
+            Register16::BC => {
+                self.data.swap(1, 5);
+                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Swapped {
+                    register: Register16::AF,
+                    is: self.data[5],
+                    was: self.data[1],
+                });
+            }
+            Register16::DE => {
+                self.data.swap(2, 6);
+                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Swapped {
+                    register: Register16::AF,
+                    is: self.data[6],
+                    was: self.data[2],
+                });
+            }
+            Register16::HL => {
+                self.data.swap(3, 7);
+                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Swapped {
+                    register: Register16::AF,
+                    is: self.data[7],
+                    was: self.data[3],
+                });
+            }
             _ => unreachable!(),
         }
     }
@@ -187,6 +410,101 @@ impl fmt::Display for RegisterFile {
         writeln!(f, "SP: {:#06x}", self.data[12])?;
         writeln!(f, "PC: {:#06x}", self.data[13])
     }
+}
+
+struct RegisterFileDebugView {
+    pub register_a: u8,
+    pub register_f: u8,
+    pub register_b: u8,
+    pub register_c: u8,
+    pub register_d: u8,
+    pub register_e: u8,
+    pub register_h: u8,
+    pub register_l: u8,
+    pub shadow_register_a: u8,
+    pub shadow_register_f: u8,
+    pub shadow_register_b: u8,
+    pub shadow_register_c: u8,
+    pub shadow_register_d: u8,
+    pub shadow_register_e: u8,
+    pub shadow_register_h: u8,
+    pub shadow_register_l: u8,
+    pub register_i: u8,
+    pub register_r: u8,
+    pub register_ixh: u8,
+    pub register_ixl: u8,
+    pub register_iyh: u8,
+    pub register_iyl: u8,
+    pub register_sp: u16,
+    pub register_pc: u16,
+}
+
+impl Snapshotable for RegisterFile {
+    type View = RegisterFileDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        let mut registers = self.clone();
+        let register_a = registers.read_byte(&Register8::A);
+        let register_f = registers.read_byte(&Register8::F);
+        let register_b = registers.read_byte(&Register8::B);
+        let register_c = registers.read_byte(&Register8::C);
+        let register_d = registers.read_byte(&Register8::D);
+        let register_e = registers.read_byte(&Register8::E);
+        let register_h = registers.read_byte(&Register8::H);
+        let register_l = registers.read_byte(&Register8::L);
+        registers.swap_word(&Register16::AF);
+        registers.swap_word(&Register16::BC);
+        registers.swap_word(&Register16::DE);
+        registers.swap_word(&Register16::HL);
+        let shadow_register_a = registers.read_byte(&Register8::A);
+        let shadow_register_f = registers.read_byte(&Register8::F);
+        let shadow_register_b = registers.read_byte(&Register8::B);
+        let shadow_register_c = registers.read_byte(&Register8::C);
+        let shadow_register_d = registers.read_byte(&Register8::D);
+        let shadow_register_e = registers.read_byte(&Register8::E);
+        let shadow_register_h = registers.read_byte(&Register8::H);
+        let shadow_register_l = registers.read_byte(&Register8::L);
+        let register_i = registers.read_byte(&Register8::I);
+        let register_r = registers.read_byte(&Register8::R);
+        let register_ixh = registers.read_byte(&Register8::IXH);
+        let register_ixl = registers.read_byte(&Register8::IXL);
+        let register_iyh = registers.read_byte(&Register8::IYH);
+        let register_iyl = registers.read_byte(&Register8::IYL);
+        let register_sp = registers.read_word(&Register16::SP);
+        let register_pc = registers.read_word(&Register16::PC);
+
+        Self::View {
+            register_a,
+            register_f,
+            register_b,
+            register_c,
+            register_d,
+            register_e,
+            register_h,
+            register_l,
+            shadow_register_a,
+            shadow_register_f,
+            shadow_register_b,
+            shadow_register_c,
+            shadow_register_d,
+            shadow_register_e,
+            shadow_register_h,
+            shadow_register_l,
+            register_i,
+            register_r,
+            register_ixh,
+            register_ixl,
+            register_iyh,
+            register_iyl,
+            register_sp,
+            register_pc,
+        }
+    }
+}
+
+impl Debuggable for RegisterFile {
+    const SOURCE: DebugSource = DebugSource::Cpu;
+    type Event = CpuDebugEvent;
 }
 
 enum Flag {
@@ -232,8 +550,8 @@ where
     D: Decoder,
 {
     #[serde(flatten)]
-    pub registers: RegisterFile, // TODO: make this private
-    pub decoder: D, // TODO: make this private
+    registers: RegisterFile, // TODO: make this private, public because of ZexHarness reads it, use debug view instead?
+    decoder: D, // TODO: make this private
     iff1: bool,
     iff2: bool,
     halted: bool,
@@ -1689,6 +2007,64 @@ where
 
         assembly
     }
+}
+
+impl<D> Snapshotable for ZilogZ80<D>
+where
+    D: Decoder,
+{
+    type View = CpuDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        let registers = self.registers.debug_view();
+        let iff1 = self.iff1;
+        let iff2 = self.iff2;
+        let halted = self.halted;
+        let interrupt_mode = self.interrupt_mode;
+        let enable_interrupt = self.enable_interrupt;
+        let irq_received = self.irq_received;
+
+        Self::View {
+            register_a: registers.register_a,
+            register_f: registers.register_f,
+            register_b: registers.register_b,
+            register_c: registers.register_c,
+            register_d: registers.register_d,
+            register_e: registers.register_e,
+            register_h: registers.register_h,
+            register_l: registers.register_l,
+            shadow_register_a: registers.shadow_register_a,
+            shadow_register_f: registers.shadow_register_f,
+            shadow_register_b: registers.shadow_register_b,
+            shadow_register_c: registers.shadow_register_c,
+            shadow_register_d: registers.shadow_register_d,
+            shadow_register_e: registers.shadow_register_e,
+            shadow_register_h: registers.shadow_register_h,
+            shadow_register_l: registers.shadow_register_l,
+            register_i: registers.register_i,
+            register_r: registers.register_r,
+            register_ixh: registers.register_ixh,
+            register_ixl: registers.register_ixl,
+            register_iyh: registers.register_iyh,
+            register_iyl: registers.register_iyl,
+            register_sp: registers.register_sp,
+            register_pc: registers.register_pc,
+            iff1,
+            iff2,
+            halted,
+            interrupt_mode,
+            enable_interrupt,
+            irq_received,
+        }
+    }
+}
+
+impl<D> Debuggable for ZilogZ80<D>
+where
+    D: Decoder,
+{
+    const SOURCE: DebugSource = DebugSource::Cpu;
+    type Event = CpuDebugEvent;
 }
 
 #[cfg(test)]
