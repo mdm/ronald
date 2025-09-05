@@ -15,17 +15,17 @@ pub enum DebugEvent {
 
 #[derive(Debug, Clone)]
 pub enum CpuDebugEvent {
-    Register8Changed {
+    Register8Written {
         register: Register8,
         is: u8,
         was: u8,
     },
-    Register16Changed {
+    Register16Written {
         register: Register16,
         is: u16,
         was: u16,
     },
-    ShadowRegister16Swapped {
+    ShadowRegister16Written {
         register: Register16,
         is: u16,
         was: u16,

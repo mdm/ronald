@@ -80,12 +80,12 @@ impl RegisterFile {
             Register8::A => {
                 let was = self.data[0];
                 self.data[0] = (value << 8) + (self.data[0] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::A,
                     is: value as u8,
                     was: (was >> 8) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::AF,
                     is: self.data[0],
                     was,
@@ -94,12 +94,12 @@ impl RegisterFile {
             Register8::F => {
                 let was = self.data[0];
                 self.data[0] = (self.data[0] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::F,
                     is: value as u8,
                     was: (was & 0xff) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::AF,
                     is: self.data[0],
                     was,
@@ -108,12 +108,12 @@ impl RegisterFile {
             Register8::B => {
                 let was = self.data[1];
                 self.data[1] = (value << 8) + (self.data[1] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::B,
                     is: value as u8,
                     was: (was >> 8) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::BC,
                     is: self.data[1],
                     was,
@@ -122,12 +122,12 @@ impl RegisterFile {
             Register8::C => {
                 let was = self.data[1];
                 self.data[1] = (self.data[1] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::C,
                     is: value as u8,
                     was: (was & 0xff) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::BC,
                     is: self.data[1],
                     was,
@@ -136,12 +136,12 @@ impl RegisterFile {
             Register8::D => {
                 let was = self.data[2];
                 self.data[2] = (value << 8) + (self.data[2] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::D,
                     is: value as u8,
                     was: (was >> 8) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::DE,
                     is: self.data[2],
                     was,
@@ -150,12 +150,12 @@ impl RegisterFile {
             Register8::E => {
                 let was = self.data[2];
                 self.data[2] = (self.data[2] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::E,
                     is: value as u8,
                     was: (was & 0xff) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::DE,
                     is: self.data[2],
                     was,
@@ -164,12 +164,12 @@ impl RegisterFile {
             Register8::H => {
                 let was = self.data[3];
                 self.data[3] = (value << 8) + (self.data[3] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::H,
                     is: value as u8,
                     was: (was >> 8) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::HL,
                     is: self.data[3],
                     was,
@@ -178,12 +178,12 @@ impl RegisterFile {
             Register8::L => {
                 let was = self.data[3];
                 self.data[3] = (self.data[3] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::L,
                     is: value as u8,
                     was: (was & 0xff) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::HL,
                     is: self.data[3],
                     was,
@@ -192,7 +192,7 @@ impl RegisterFile {
             Register8::I => {
                 let was = self.data[8];
                 self.data[8] = (self.data[8] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::I,
                     is: value as u8,
                     was: (was & 0xff) as u8,
@@ -201,7 +201,7 @@ impl RegisterFile {
             Register8::R => {
                 let was = self.data[9];
                 self.data[9] = (self.data[9] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::R,
                     is: value as u8,
                     was: (was & 0xff) as u8,
@@ -210,12 +210,12 @@ impl RegisterFile {
             Register8::IXH => {
                 let was = self.data[10];
                 self.data[10] = (value << 8) + (self.data[10] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::IXH,
                     is: value as u8,
                     was: (was >> 8) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::IX,
                     is: self.data[10],
                     was,
@@ -224,12 +224,12 @@ impl RegisterFile {
             Register8::IXL => {
                 let was = self.data[10];
                 self.data[10] = (self.data[10] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::IXL,
                     is: value as u8,
                     was: (was & 0xff) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::IX,
                     is: self.data[10],
                     was,
@@ -238,12 +238,12 @@ impl RegisterFile {
             Register8::IYH => {
                 let was = self.data[11];
                 self.data[11] = (value << 8) + (self.data[11] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::IYH,
                     is: value as u8,
                     was: (was >> 8) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::IY,
                     is: self.data[11],
                     was,
@@ -252,12 +252,12 @@ impl RegisterFile {
             Register8::IYL => {
                 let was = self.data[11];
                 self.data[11] = (self.data[11] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Changed {
+                self.emit_debug_event(CpuDebugEvent::Register8Written {
                     register: Register8::IYL,
                     is: value as u8,
                     was: (was & 0xff) as u8,
                 });
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::IY,
                     is: self.data[11],
                     was,
@@ -284,7 +284,7 @@ impl RegisterFile {
             Register16::AF => {
                 let was = self.data[0];
                 self.data[0] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::AF,
                     is: self.data[0],
                     was,
@@ -293,7 +293,7 @@ impl RegisterFile {
             Register16::BC => {
                 let was = self.data[1];
                 self.data[1] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::BC,
                     is: self.data[1],
                     was,
@@ -302,7 +302,7 @@ impl RegisterFile {
             Register16::DE => {
                 let was = self.data[2];
                 self.data[2] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::DE,
                     is: self.data[2],
                     was,
@@ -311,7 +311,7 @@ impl RegisterFile {
             Register16::HL => {
                 let was = self.data[3];
                 self.data[3] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::HL,
                     is: self.data[3],
                     was,
@@ -320,7 +320,7 @@ impl RegisterFile {
             Register16::IX => {
                 let was = self.data[10];
                 self.data[10] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::IX,
                     is: self.data[10],
                     was,
@@ -329,7 +329,7 @@ impl RegisterFile {
             Register16::IY => {
                 let was = self.data[11];
                 self.data[11] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::IY,
                     is: self.data[11],
                     was,
@@ -338,7 +338,7 @@ impl RegisterFile {
             Register16::SP => {
                 let was = self.data[12];
                 self.data[12] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::SP,
                     is: self.data[12],
                     was,
@@ -347,7 +347,7 @@ impl RegisterFile {
             Register16::PC => {
                 let was = self.data[13];
                 self.data[13] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Changed {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
                     register: Register16::PC,
                     is: self.data[13],
                     was,
@@ -360,7 +360,12 @@ impl RegisterFile {
         match register {
             Register16::AF => {
                 self.data.swap(0, 4);
-                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Swapped {
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
+                    register: Register16::AF,
+                    is: self.data[0],
+                    was: self.data[4],
+                });
+                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Written {
                     register: Register16::AF,
                     is: self.data[4],
                     was: self.data[0],
@@ -368,24 +373,39 @@ impl RegisterFile {
             }
             Register16::BC => {
                 self.data.swap(1, 5);
-                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Swapped {
-                    register: Register16::AF,
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
+                    register: Register16::BC,
+                    is: self.data[1],
+                    was: self.data[5],
+                });
+                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Written {
+                    register: Register16::BC,
                     is: self.data[5],
                     was: self.data[1],
                 });
             }
             Register16::DE => {
                 self.data.swap(2, 6);
-                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Swapped {
-                    register: Register16::AF,
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
+                    register: Register16::DE,
+                    is: self.data[2],
+                    was: self.data[6],
+                });
+                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Written {
+                    register: Register16::DE,
                     is: self.data[6],
                     was: self.data[2],
                 });
             }
             Register16::HL => {
                 self.data.swap(3, 7);
-                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Swapped {
-                    register: Register16::AF,
+                self.emit_debug_event(CpuDebugEvent::Register16Written {
+                    register: Register16::HL,
+                    is: self.data[3],
+                    was: self.data[7],
+                });
+                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Written {
+                    register: Register16::HL,
                     is: self.data[7],
                     was: self.data[3],
                 });
@@ -2247,7 +2267,7 @@ mod tests {
 
             // Check for 8-bit register change event
             let has_8bit_event = events.iter().any(|(source, event)| {
-                matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register8Changed {
+                matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register8Written {
                     register: r,
                     is: v,
                     was: 0x00,
@@ -2277,7 +2297,7 @@ mod tests {
 
                 // Check for 16-bit register change event
                 let has_16bit_event = events.iter().any(|(source, event)| {
-                    matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Changed {
+                    matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
                         register: r,
                         is: v,
                         was: 0x0000,
@@ -2322,12 +2342,84 @@ mod tests {
 
             // Check for 16-bit register change event
             assert!(
-                matches!(&events[0], (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Changed {
+                matches!(&events[0], (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
                 register: r,
                 is: v,
                 was: 0x0000,
             })) if *r == register && *v == test_value),
                 "Should emit correct 16-bit register change event for {:?}",
+                register
+            );
+        }
+    }
+
+    #[test]
+    fn test_register_file_swap_word_all_registers() {
+        let test_cases = [
+            (Register16::AF, 0x1234, 0x5678),
+            (Register16::BC, 0x9ABC, 0xDEF0),
+            (Register16::DE, 0x1122, 0x3344),
+            (Register16::HL, 0x5566, 0x7788),
+        ];
+
+        for (register, main_value, shadow_value) in test_cases {
+            let (subscriber, events) = TestSubscriber::new();
+            let _handle = subscribe(DebugSource::Cpu, Box::new(subscriber));
+
+            let mut register_file = RegisterFile::new();
+
+            // Set up initial values - write to main register and shadow register
+            register_file.write_word(&register, main_value);
+
+            // Set shadow register value by direct data manipulation for testing
+            let shadow_index = match register {
+                Register16::AF => 4,
+                Register16::BC => 5,
+                Register16::DE => 6,
+                Register16::HL => 7,
+                _ => unreachable!(),
+            };
+            register_file.data[shadow_index] = shadow_value;
+
+            // Clear events from setup
+            events.borrow_mut().clear();
+
+            // Perform the swap
+            register_file.swap_word(&register);
+
+            let events = events.borrow();
+            assert_eq!(
+                events.len(),
+                2,
+                "Should emit both Register16Written and ShadowRegister16Written events for {:?}",
+                register
+            );
+
+            // Check for Register16Written event (main register gets shadow value)
+            let has_main_event = events.iter().any(|(source, event)| {
+                matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: r,
+                    is: v,
+                    was: old_v,
+                })) if r == &register && v == &shadow_value && old_v == &main_value)
+            });
+            assert!(
+                has_main_event,
+                "Should emit Register16Written event for {:?}",
+                register
+            );
+
+            // Check for ShadowRegister16Written event (shadow register gets main value)
+            let has_shadow_event = events.iter().any(|(source, event)| {
+                matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::ShadowRegister16Written {
+                    register: r,
+                    is: v,
+                    was: old_v,
+                })) if r == &register && v == &main_value && old_v == &shadow_value)
+            });
+            assert!(
+                has_shadow_event,
+                "Should emit ShadowRegister16Written event for {:?}",
                 register
             );
         }
