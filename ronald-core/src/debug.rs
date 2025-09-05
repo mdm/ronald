@@ -148,7 +148,7 @@ mod tests {
 
         emit_event(
             DebugSource::Cpu,
-            DebugEvent::Cpu(event::CpuDebugEvent::Register8Changed {
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
                 register: crate::system::cpu::Register8::A,
                 is: 0x42,
                 was: 0x00,
@@ -187,7 +187,7 @@ mod tests {
 
         emit_event(
             DebugSource::Cpu,
-            DebugEvent::Cpu(event::CpuDebugEvent::Register8Changed {
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
                 register: crate::system::cpu::Register8::A,
                 is: 0x42,
                 was: 0x00,
@@ -218,7 +218,7 @@ mod tests {
 
         emit_event(
             DebugSource::Cpu,
-            DebugEvent::Cpu(event::CpuDebugEvent::Register8Changed {
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
                 register: crate::system::cpu::Register8::A,
                 is: 0x42,
                 was: 0x00,
@@ -230,7 +230,7 @@ mod tests {
 
         emit_event(
             DebugSource::Cpu,
-            DebugEvent::Cpu(event::CpuDebugEvent::Register8Changed {
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
                 register: crate::system::cpu::Register8::A,
                 is: 0x43,
                 was: 0x42,
@@ -251,7 +251,7 @@ mod tests {
 
         emit_event(
             DebugSource::Cpu,
-            DebugEvent::Cpu(event::CpuDebugEvent::Register8Changed {
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
                 register: crate::system::cpu::Register8::A,
                 is: 0x42,
                 was: 0x00,
@@ -275,7 +275,7 @@ mod tests {
     fn test_emit_with_no_subscribers() {
         emit_event(
             DebugSource::Cpu,
-            DebugEvent::Cpu(event::CpuDebugEvent::Register8Changed {
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
                 register: crate::system::cpu::Register8::A,
                 is: 0x42,
                 was: 0x00,
