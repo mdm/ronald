@@ -111,30 +111,34 @@ pub enum DebugSource {
 }
 
 #[cfg(test)]
+use std::rc::Rc;
+
+#[cfg(test)]
+pub struct TestSubscriber {
+    events: Rc<RefCell<Vec<(DebugSource, DebugEvent)>>>,
+}
+
+#[cfg(test)]
+impl TestSubscriber {
+    pub fn new() -> (Self, Rc<RefCell<Vec<(DebugSource, DebugEvent)>>>) {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let subscriber = Self {
+            events: events.clone(),
+        };
+        (subscriber, events)
+    }
+}
+
+#[cfg(test)]
+impl DebugEventSubscriber for TestSubscriber {
+    fn on_event(&self, source: DebugSource, event: &DebugEvent) {
+        self.events.borrow_mut().push((source, event.clone()));
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    struct TestSubscriber {
-        events: Rc<RefCell<Vec<(DebugSource, DebugEvent)>>>,
-    }
-
-    impl TestSubscriber {
-        fn new() -> (Self, Rc<RefCell<Vec<(DebugSource, DebugEvent)>>>) {
-            let events = Rc::new(RefCell::new(Vec::new()));
-            let subscriber = Self {
-                events: events.clone(),
-            };
-            (subscriber, events)
-        }
-    }
-
-    impl DebugEventSubscriber for TestSubscriber {
-        fn on_event(&self, source: DebugSource, event: &DebugEvent) {
-            self.events.borrow_mut().push((source, event.clone()));
-        }
-    }
 
     #[test]
     fn test_subscribe_single_subscriber() {
@@ -241,7 +245,7 @@ mod tests {
         let (subscriber2, events2) = TestSubscriber::new();
 
         let handle1 = subscribe(DebugSource::Cpu, Box::new(subscriber1));
-        let handle2 = subscribe(DebugSource::Cpu, Box::new(subscriber2));
+        let _handle2 = subscribe(DebugSource::Cpu, Box::new(subscriber2));
 
         unsubscribe(handle1);
 

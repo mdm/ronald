@@ -2076,7 +2076,7 @@ mod tests {
     use std::rc::Rc;
 
     use crate::{
-        debug::{event::DebugEvent, subscribe, DebugEventSubscriber, DebugSource},
+        debug::{event::DebugEvent, subscribe, DebugEventSubscriber, DebugSource, TestSubscriber},
         system::{
             bus::Bus,
             instruction::AlgorithmicDecoder,
@@ -2206,27 +2206,6 @@ mod tests {
         }
     }
 
-    struct TestSubscriber {
-        // TODO: There's another one of these in the debug module; unify them
-        events: Rc<RefCell<Vec<(DebugSource, DebugEvent)>>>,
-    }
-
-    impl TestSubscriber {
-        fn new() -> (Self, Rc<RefCell<Vec<(DebugSource, DebugEvent)>>>) {
-            let events = Rc::new(RefCell::new(Vec::new()));
-            let subscriber = Self {
-                events: events.clone(),
-            };
-            (subscriber, events)
-        }
-    }
-
-    impl DebugEventSubscriber for TestSubscriber {
-        fn on_event(&self, source: DebugSource, event: &DebugEvent) {
-            self.events.borrow_mut().push((source, event.clone()));
-        }
-    }
-
     // tests start here
 
     #[test]
@@ -2269,7 +2248,7 @@ mod tests {
             // Check for 8-bit register change event
             let has_8bit_event = events.iter().any(|(source, event)| {
                 matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register8Changed {
-                    register: ref r,
+                    register: r,
                     is: v,
                     was: 0x00,
                 })) if *r == register && *v == test_value)
@@ -2299,7 +2278,7 @@ mod tests {
                 // Check for 16-bit register change event
                 let has_16bit_event = events.iter().any(|(source, event)| {
                     matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Changed {
-                        register: ref r,
+                        register: r,
                         is: v,
                         was: 0x0000,
                     })) if *r == expected_16bit_reg && *v == expected_16bit_value)
@@ -2344,7 +2323,7 @@ mod tests {
             // Check for 16-bit register change event
             assert!(
                 matches!(&events[0], (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Changed {
-                register: ref r,
+                register: r,
                 is: v,
                 was: 0x0000,
             })) if *r == register && *v == test_value),
