@@ -10,7 +10,7 @@ use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, 
 use crate::system::memory::{MemManage, MemRead, MemWrite};
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Register8 {
     A,
     F,
@@ -28,7 +28,7 @@ pub enum Register8 {
     IYL,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Register16 {
     AF,
     BC,
@@ -2071,9 +2071,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
     use std::path::PathBuf;
+    use std::rc::Rc;
 
     use crate::{
+        debug::{event::DebugEvent, subscribe, DebugEventSubscriber, DebugSource},
         system::{
             bus::Bus,
             instruction::AlgorithmicDecoder,
@@ -2083,6 +2086,8 @@ mod tests {
     };
 
     use super::*;
+
+    // helper structs
 
     struct ZexHarness {
         cpu: ZilogZ80<AlgorithmicDecoder>,
@@ -2201,11 +2206,151 @@ mod tests {
         }
     }
 
+    struct TestSubscriber {
+        // TODO: There's another one of these in the debug module; unify them
+        events: Rc<RefCell<Vec<(DebugSource, DebugEvent)>>>,
+    }
+
+    impl TestSubscriber {
+        fn new() -> (Self, Rc<RefCell<Vec<(DebugSource, DebugEvent)>>>) {
+            let events = Rc::new(RefCell::new(Vec::new()));
+            let subscriber = Self {
+                events: events.clone(),
+            };
+            (subscriber, events)
+        }
+    }
+
+    impl DebugEventSubscriber for TestSubscriber {
+        fn on_event(&self, source: DebugSource, event: &DebugEvent) {
+            self.events.borrow_mut().push((source, event.clone()));
+        }
+    }
+
+    // tests start here
+
     #[test]
     #[ignore = "this is an extremely slow test"]
     fn test_zexdoc_slow() {
         let rom = include_bytes!("../../rom/zexdoc.rom");
         let mut harness = ZexHarness::new(rom);
         assert_eq!(harness.emulate(), 67);
+    }
+
+    #[test]
+    fn test_register_file_write_byte_all_registers() {
+        let test_cases = [
+            // (register, test_value, expected_16bit_reg, expected_16bit_value)
+            (Register8::A, 0x42, Register16::AF, 0x4200),
+            (Register8::F, 0x80, Register16::AF, 0x0080),
+            (Register8::B, 0x12, Register16::BC, 0x1200),
+            (Register8::C, 0x34, Register16::BC, 0x0034),
+            (Register8::D, 0x56, Register16::DE, 0x5600),
+            (Register8::E, 0x78, Register16::DE, 0x0078),
+            (Register8::H, 0x9A, Register16::HL, 0x9A00),
+            (Register8::L, 0xBC, Register16::HL, 0x00BC),
+            (Register8::I, 0xDE, Register16::AF, 0x0000), // I doesn't affect 16-bit pairs
+            (Register8::R, 0xF0, Register16::AF, 0x0000), // R doesn't affect 16-bit pairs
+            (Register8::IXH, 0x11, Register16::IX, 0x1100),
+            (Register8::IXL, 0x22, Register16::IX, 0x0022),
+            (Register8::IYH, 0x33, Register16::IY, 0x3300),
+            (Register8::IYL, 0x44, Register16::IY, 0x0044),
+        ];
+
+        for (register, test_value, expected_16bit_reg, expected_16bit_value) in test_cases {
+            let (subscriber, events) = TestSubscriber::new();
+            let _handle = subscribe(DebugSource::Cpu, Box::new(subscriber));
+
+            let mut register_file = RegisterFile::new();
+            register_file.write_byte(&register, test_value);
+
+            let events = events.borrow();
+
+            // Check for 8-bit register change event
+            let has_8bit_event = events.iter().any(|(source, event)| {
+                matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register8Changed {
+                    register: ref r,
+                    is: v,
+                    was: 0x00,
+                })) if *r == register && *v == test_value)
+            });
+            assert!(
+                has_8bit_event,
+                "Should emit 8-bit register change event for {:?}",
+                register
+            );
+
+            // For I and R registers, no 16-bit event should be emitted
+            if matches!(register, Register8::I | Register8::R) {
+                assert_eq!(
+                    events.len(),
+                    1,
+                    "I and R registers should only emit 8-bit events"
+                );
+            } else {
+                // Should emit both 8-bit and 16-bit events
+                assert_eq!(
+                    events.len(),
+                    2,
+                    "Should emit both 8-bit and 16-bit events for {:?}",
+                    register
+                );
+
+                // Check for 16-bit register change event
+                let has_16bit_event = events.iter().any(|(source, event)| {
+                    matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Changed {
+                        register: ref r,
+                        is: v,
+                        was: 0x0000,
+                    })) if *r == expected_16bit_reg && *v == expected_16bit_value)
+                });
+                assert!(
+                    has_16bit_event,
+                    "Should emit 16-bit register change event for {:?} -> {:?}",
+                    register, expected_16bit_reg
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_register_file_write_word_all_registers() {
+        let test_cases = [
+            (Register16::AF, 0x1234),
+            (Register16::BC, 0x5678),
+            (Register16::DE, 0x9ABC),
+            (Register16::HL, 0xDEF0),
+            (Register16::IX, 0x1122),
+            (Register16::IY, 0x3344),
+            (Register16::SP, 0x5566),
+            (Register16::PC, 0x7788),
+        ];
+
+        for (register, test_value) in test_cases {
+            let (subscriber, events) = TestSubscriber::new();
+            let _handle = subscribe(DebugSource::Cpu, Box::new(subscriber));
+
+            let mut register_file = RegisterFile::new();
+            register_file.write_word(&register, test_value);
+
+            let events = events.borrow();
+            assert_eq!(
+                events.len(),
+                1,
+                "Should emit only 16-bit register event for {:?}",
+                register
+            );
+
+            // Check for 16-bit register change event
+            assert!(
+                matches!(&events[0], (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Changed {
+                register: ref r,
+                is: v,
+                was: 0x0000,
+            })) if *r == register && *v == test_value),
+                "Should emit correct 16-bit register change event for {:?}",
+                register
+            );
+        }
     }
 }
