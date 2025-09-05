@@ -1,6 +1,7 @@
 use crate::system::cpu::{Register16, Register8};
 
 /// A DebugEvent is any internal state change and any input or output
+#[derive(Debug, Clone)]
 pub enum DebugEvent {
     Cpu(CpuDebugEvent),
     Memory(MemoryDebugEvent),
@@ -12,6 +13,7 @@ pub enum DebugEvent {
     Tape(TapeDebugEvent),
 }
 
+#[derive(Debug, Clone)]
 pub enum CpuDebugEvent {
     Register8Changed {
         register: Register8,
@@ -36,16 +38,26 @@ impl From<CpuDebugEvent> for DebugEvent {
     }
 }
 
-pub enum MemoryDebugEvent {}
+#[derive(Debug, Clone)]
+pub enum MemoryDebugEvent {
+    #[cfg(test)]
+    Test,
+}
 
+#[derive(Debug, Clone)]
 pub enum CrtcDebugEvent {}
 
+#[derive(Debug, Clone)]
 pub enum GateArrayDebugEvent {}
 
+#[derive(Debug, Clone)]
 pub enum FdcDebugEvent {}
 
+#[derive(Debug, Clone)]
 pub enum PpiDebugEvent {}
 
+#[derive(Debug, Clone)]
 pub enum PsgDebugEvent {}
 
+#[derive(Debug, Clone)]
 pub enum TapeDebugEvent {}
