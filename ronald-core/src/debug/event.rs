@@ -40,8 +40,14 @@ impl From<CpuDebugEvent> for DebugEvent {
 
 #[derive(Debug, Clone)]
 pub enum MemoryDebugEvent {
-    #[cfg(test)]
-    Test,
+    MemoryRead { address: usize, value: u8 },
+    MemoryWritten { address: usize, is: u8, was: u8 },
+}
+
+impl From<MemoryDebugEvent> for DebugEvent {
+    fn from(event: MemoryDebugEvent) -> Self {
+        DebugEvent::Memory(event)
+    }
 }
 
 #[derive(Debug, Clone)]

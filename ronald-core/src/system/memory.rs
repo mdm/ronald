@@ -4,6 +4,13 @@ use std::io;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::event::DebugEvent;
+use crate::debug::event::MemoryDebugEvent;
+use crate::debug::view::MemoryDebugView;
+use crate::debug::DebugSource;
+use crate::debug::Debuggable;
+use crate::debug::Snapshotable;
+
 pub trait MemRead {
     fn read_byte(&self, address: usize) -> u8;
 
@@ -52,8 +59,30 @@ impl Rom {
 
 impl MemRead for Rom {
     fn read_byte(&self, address: usize) -> u8 {
-        self.data[address]
+        let value = self.data[address];
+        self.emit_debug_event(MemoryDebugEvent::MemoryRead { address, value });
+
+        value
     }
+}
+
+pub struct RomDebugView {
+    data: Vec<u8>,
+}
+
+impl Snapshotable for Rom {
+    type View = RomDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        Self::View {
+            data: self.data.clone(),
+        }
+    }
+}
+
+impl Debuggable for Rom {
+    const SOURCE: DebugSource = DebugSource::Memory;
+    type Event = MemoryDebugEvent;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -84,16 +113,26 @@ impl Ram {
 
 impl MemRead for Ram {
     fn read_byte(&self, address: usize) -> u8 {
-        self.data[address]
+        let value = self.data[address];
+        self.emit_debug_event(MemoryDebugEvent::MemoryRead { address, value });
+
+        value
     }
 }
 
 impl MemWrite for Ram {
     fn write_byte(&mut self, address: usize, value: u8) {
+        let was = self.data[address];
         self.data[address] = value;
+        self.emit_debug_event(MemoryDebugEvent::MemoryWritten {
+            address,
+            is: value,
+            was,
+        });
     }
 }
 
+// TODO: can we get rid of this empty impl? Currently required for bus writes.
 impl MemManage for Ram {
     fn enable_lower_rom(&mut self, enable: bool) {}
 
@@ -102,6 +141,25 @@ impl MemManage for Ram {
     fn select_upper_rom(&mut self, upper_rom_nr: u8) {}
 
     fn force_ram_read(&mut self, force: bool) {}
+}
+
+pub struct RamDebugView {
+    data: Vec<u8>,
+}
+
+impl Snapshotable for Ram {
+    type View = RamDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        Self::View {
+            data: self.data.clone(),
+        }
+    }
+}
+
+impl Debuggable for Ram {
+    const SOURCE: DebugSource = DebugSource::Memory;
+    type Event = MemoryDebugEvent;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -199,6 +257,32 @@ impl MemManage for MemoryCpcX64 {
     }
 }
 
+impl Snapshotable for MemoryCpcX64 {
+    type View = MemoryDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        let mut upper_roms = HashMap::new();
+        for (key, rom) in &self.upper_roms {
+            upper_roms.insert(*key, rom.debug_view().data);
+        }
+
+        MemoryDebugView {
+            ram: self.ram.debug_view().data,
+            ram_extension: vec![],
+            lower_rom: self.lower_rom.debug_view().data,
+            lower_rom_enabled: self.lower_rom_enabled,
+            upper_roms,
+            selected_upper_rom: self.selected_upper_rom,
+            upper_rom_enabled: self.upper_rom_enabled,
+        }
+    }
+}
+
+impl Debuggable for MemoryCpcX64 {
+    const SOURCE: DebugSource = DebugSource::Memory;
+    type Event = MemoryDebugEvent;
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct MemoryCpc6128 {
     memory: MemoryCpcX64,
@@ -253,6 +337,14 @@ impl MemManage for MemoryCpc6128 {
 
     fn force_ram_read(&mut self, force: bool) {
         self.memory.force_ram_read(force);
+    }
+}
+
+impl Snapshotable for MemoryCpc6128 {
+    type View = MemoryDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        self.memory.debug_view()
     }
 }
 
@@ -326,6 +418,17 @@ impl MemManage for AnyMemory {
         match self {
             AnyMemory::CpcX64(memory) => memory.force_ram_read(force),
             AnyMemory::Cpc6128(memory) => memory.force_ram_read(force),
+        }
+    }
+}
+
+impl Snapshotable for AnyMemory {
+    type View = MemoryDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.debug_view(),
+            AnyMemory::Cpc6128(memory) => memory.debug_view(),
         }
     }
 }

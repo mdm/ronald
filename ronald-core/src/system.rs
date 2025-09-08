@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::view::{CpuDebugView, MemoryDebugView, SystemDebugView};
 use crate::debug::Snapshotable;
 use crate::{AudioSink, VideoSink};
 
@@ -31,7 +32,7 @@ pub struct DisassembledInstruction {
 pub struct AmstradCpc<C, M, B>
 where
     C: Cpu,
-    M: MemRead + MemWrite + MemManage + Default,
+    M: MemRead + MemWrite + MemManage,
     B: Bus,
 {
     cpu: C,
@@ -45,7 +46,7 @@ where
 impl<C, M, B> AmstradCpc<C, M, B>
 where
     C: Cpu,
-    M: MemRead + MemWrite + MemManage + Default,
+    M: MemRead + MemWrite + MemManage,
     B: Bus,
 {
     pub fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
@@ -94,6 +95,22 @@ where
                 instruction,
             })
             .collect()
+    }
+}
+
+impl<C, M, B> Snapshotable for AmstradCpc<C, M, B>
+where
+    C: Cpu + Snapshotable<View = CpuDebugView>,
+    M: MemRead + MemWrite + MemManage + Snapshotable<View = MemoryDebugView> + Default,
+    B: Bus,
+{
+    type View = SystemDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        Self::View {
+            cpu: self.cpu.debug_view(),
+            memory: self.memory.debug_view(),
+        }
     }
 }
 
