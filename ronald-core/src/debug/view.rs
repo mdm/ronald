@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::system::instruction::InterruptMode;
 
 pub struct SystemDebugView {
-    cpu: CpuDebugView,
-    memory: MemoryDebugView,
+    pub cpu: CpuDebugView,
+    pub memory: MemoryDebugView,
 }
 
 pub struct CpuDebugView {
