@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::system::instruction::InterruptMode;
 
 pub struct SystemDebugView {
+    pub master_clock: u64,
     pub cpu: CpuDebugView,
     pub memory: MemoryDebugView,
 }

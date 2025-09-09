@@ -10,6 +10,7 @@ use web_sys;
 use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
+    debug::view::SystemDebugView,
     system::SystemConfig,
 };
 
@@ -420,5 +421,13 @@ impl Frontend {
                 central_panel_size.y,
             )
         }
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    pub fn get_debug_data(&self) -> SystemDebugView {
+        self.driver.debug_view()
     }
 }

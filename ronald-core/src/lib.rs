@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
+use debug::{view::SystemDebugView, Snapshotable};
 use system::bus::{crtc::AnyCrtController, gate_array::AnyGateArray, StandardBus};
 use system::cpu::ZilogZ80;
 use system::instruction::AlgorithmicDecoder;
@@ -101,6 +102,10 @@ impl Driver {
 
     pub fn save_snapshot(&self) -> Vec<u8> {
         todo!()
+    }
+
+    pub fn debug_view(&self) -> SystemDebugView {
+        self.system.debug_view()
     }
 }
 
