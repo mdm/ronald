@@ -18,6 +18,7 @@ impl CpuDebugWindow {
         egui::Window::new("CPU Internals")
             .open(&mut open)
             .default_size([400.0, 600.0])
+            .resizable(false)
             .show(ctx, |ui| {
                 if let Some(data) = data {
                     self.render_cpu_registers(ui, data);

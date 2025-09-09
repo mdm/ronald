@@ -278,7 +278,7 @@ impl Snapshotable for MemoryCpcX64 {
 
         // Create composite ROM/RAM view based on composite_ram
         let mut composite_rom_ram = composite_ram.clone();
-        
+
         if lower_rom_enabled {
             composite_rom_ram[0x0000..0x4000].copy_from_slice(&lower_rom);
         }

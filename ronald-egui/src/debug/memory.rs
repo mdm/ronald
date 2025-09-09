@@ -15,6 +15,9 @@ pub struct MemoryDebugWindow {
 enum MemoryViewMode {
     CompositeRomRam,
     CompositeRam,
+    LowerRomOnly,
+    UpperRomOnly(u8),
+    RamOnly,
     ExtensionRamOnly,
 }
 
@@ -30,14 +33,17 @@ impl Default for MemoryDebugWindow {
 }
 
 impl MemoryDebugWindow {
-    fn render_view_mode_selector(&mut self, ui: &mut egui::Ui) {
+    fn render_view_mode_selector(&mut self, ui: &mut egui::Ui, data: &MemoryDebugView) {
         ui.horizontal(|ui| {
             ui.label("View:");
             egui::ComboBox::from_label("")
-                .selected_text(match self.view_mode {
-                    MemoryViewMode::CompositeRomRam => "Composite ROM/RAM",
-                    MemoryViewMode::CompositeRam => "Composite RAM",
-                    MemoryViewMode::ExtensionRamOnly => "Extension RAM only",
+                .selected_text(match &self.view_mode {
+                    MemoryViewMode::CompositeRomRam => "Composite ROM/RAM".to_string(),
+                    MemoryViewMode::CompositeRam => "Composite RAM".to_string(),
+                    MemoryViewMode::LowerRomOnly => "Lower ROM only".to_string(),
+                    MemoryViewMode::UpperRomOnly(bank) => format!("Upper ROM #{:02X} only", bank),
+                    MemoryViewMode::RamOnly => "RAM only".to_string(),
+                    MemoryViewMode::ExtensionRamOnly => "Extension RAM only".to_string(),
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
@@ -50,6 +56,24 @@ impl MemoryDebugWindow {
                         MemoryViewMode::CompositeRam,
                         "Composite RAM",
                     );
+                    ui.selectable_value(
+                        &mut self.view_mode,
+                        MemoryViewMode::LowerRomOnly,
+                        "Lower ROM only",
+                    );
+
+                    // Display all available upper ROM banks
+                    let mut banks: Vec<_> = data.upper_roms.keys().collect();
+                    banks.sort();
+                    for &bank in banks {
+                        ui.selectable_value(
+                            &mut self.view_mode,
+                            MemoryViewMode::UpperRomOnly(bank),
+                            format!("Upper ROM #{:02X} only", bank),
+                        );
+                    }
+
+                    ui.selectable_value(&mut self.view_mode, MemoryViewMode::RamOnly, "RAM only");
                     ui.selectable_value(
                         &mut self.view_mode,
                         MemoryViewMode::ExtensionRamOnly,
@@ -67,14 +91,14 @@ impl MemoryDebugWindow {
         egui::Window::new("Memory Internals")
             .open(&mut open)
             .default_size([600.0, 500.0])
+            .resizable(false)
             .show(ctx, |ui| {
                 if let Some(data) = data {
-                    self.render_view_mode_selector(ui);
+                    self.render_view_mode_selector(ui, data);
                     ui.separator();
                     self.render_memory_controls(ui);
                     ui.separator();
                     self.render_memory_status(ui, data);
-                    ui.separator();
                     self.render_memory_hex_dump(ui, data);
                 } else {
                     ui.label("No data available - emulator must be paused");
@@ -86,73 +110,191 @@ impl MemoryDebugWindow {
     fn render_memory_controls(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Jump to address:");
-            ui.text_edit_singleline(&mut self.address_input);
-            if ui.button("Go").clicked() {
+            let text_edit = ui.text_edit_singleline(&mut self.address_input);
+            let enter_pressed =
+                text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let go_clicked = ui.button("Go").clicked();
+
+            if enter_pressed || go_clicked {
                 if let Ok(addr) =
                     usize::from_str_radix(&self.address_input.trim_start_matches("0x"), 16)
                 {
+                    log::debug!("Setting scroll target to address: {:04X}", addr);
                     self.scroll_to_address = Some(addr);
+                } else {
+                    log::warn!("Failed to parse address: '{}'", self.address_input);
                 }
             }
         });
     }
 
     fn render_memory_status(&self, ui: &mut egui::Ui, data: &MemoryDebugView) {
-        ui.horizontal(|ui| {
-            ui.label("Lower ROM:");
-            ui.colored_label(
-                if data.lower_rom_enabled {
-                    egui::Color32::GREEN
+        match &self.view_mode {
+            MemoryViewMode::CompositeRomRam => {
+                ui.horizontal(|ui| {
+                    ui.label("Lower ROM:");
+                    ui.colored_label(
+                        if data.lower_rom_enabled {
+                            egui::Color32::GREEN
+                        } else {
+                            egui::Color32::RED
+                        },
+                        if data.lower_rom_enabled {
+                            "ENABLED"
+                        } else {
+                            "DISABLED"
+                        },
+                    );
+                    ui.separator();
+                    ui.label("Upper ROM:");
+                    ui.colored_label(
+                        if data.upper_rom_enabled {
+                            egui::Color32::GREEN
+                        } else {
+                            egui::Color32::RED
+                        },
+                        if data.upper_rom_enabled {
+                            "ENABLED"
+                        } else {
+                            "DISABLED"
+                        },
+                    );
+                    ui.label(format!("(Selected: #{:02X})", data.selected_upper_rom));
+                });
+                ui.separator();
+            }
+            MemoryViewMode::LowerRomOnly => {
+                ui.horizontal(|ui| {
+                    ui.label("Lower ROM:");
+                    ui.colored_label(
+                        if data.lower_rom_enabled {
+                            egui::Color32::GREEN
+                        } else {
+                            egui::Color32::RED
+                        },
+                        if data.lower_rom_enabled {
+                            "ENABLED"
+                        } else {
+                            "DISABLED"
+                        },
+                    );
+                });
+                ui.separator();
+            }
+            MemoryViewMode::UpperRomOnly(bank) => {
+                ui.horizontal(|ui| {
+                    ui.label("Upper ROM:");
+                    ui.colored_label(
+                        if data.upper_rom_enabled {
+                            egui::Color32::GREEN
+                        } else {
+                            egui::Color32::RED
+                        },
+                        if data.upper_rom_enabled {
+                            "ENABLED"
+                        } else {
+                            "DISABLED"
+                        },
+                    );
+                    ui.label(format!(
+                        "(Selected: #{:02X}, Viewing: #{:02X})",
+                        data.selected_upper_rom, bank
+                    ));
+                });
+                ui.separator();
+            }
+            _ => {
+                // No ROM status to show for other view modes
+            }
+        }
+    }
+
+    fn render_memory_hex_dump(&mut self, ui: &mut egui::Ui, data: &MemoryDebugView) {
+        ui.label("Memory Contents:");
+
+        let memory_data = match &self.view_mode {
+            MemoryViewMode::CompositeRomRam => &data.composite_rom_ram,
+            MemoryViewMode::CompositeRam => &data.composite_ram,
+            MemoryViewMode::LowerRomOnly => &data.lower_rom,
+            MemoryViewMode::UpperRomOnly(bank) => {
+                if let Some(upper_rom) = data.upper_roms.get(bank) {
+                    upper_rom
                 } else {
-                    egui::Color32::RED
-                },
-                if data.lower_rom_enabled {
-                    "ENABLED"
-                } else {
-                    "DISABLED"
-                },
-            );
-            ui.separator();
-            ui.label("Upper ROM:");
-            ui.colored_label(
-                if data.upper_rom_enabled {
-                    egui::Color32::GREEN
-                } else {
-                    egui::Color32::RED
-                },
-                if data.upper_rom_enabled {
-                    "ENABLED"
-                } else {
-                    "DISABLED"
-                },
-            );
-            if data.upper_rom_enabled {
-                ui.label(format!("(#{:02X})", data.selected_upper_rom));
+                    &Vec::<u8>::new()[..]
+                }
+            }
+            MemoryViewMode::RamOnly => &data.ram,
+            MemoryViewMode::ExtensionRamOnly => &data.ram_extension,
+        };
+
+        let target_addr = self.scroll_to_address.take();
+
+        let scroll_area = egui::ScrollArea::vertical()
+            .max_height(400.0)
+            .auto_shrink([false, false]);
+
+        scroll_area.show(ui, |ui| {
+            ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
+
+            for (row, chunk) in memory_data.chunks(16).enumerate() {
+                let addr = row * 16;
+                let response = self.render_hex_row(ui, chunk, addr);
+
+                // If this row contains our target address, scroll to it immediately
+                if let Some(target) = target_addr {
+                    if target >= addr && target < addr + 16 {
+                        log::debug!(
+                            "Found target address {:04X} in row {}, forcing scroll",
+                            target,
+                            row
+                        );
+                        // Try multiple scroll methods with TOP alignment to ensure target is at the top
+                        ui.scroll_to_cursor(Some(egui::Align::Min));
+                        response.scroll_to_me(Some(egui::Align::Min));
+                        ui.scroll_to_rect(response.rect, Some(egui::Align::Min));
+                        // Also try to ensure this widget is visible
+                        if ui.is_rect_visible(response.rect) {
+                            log::debug!("Target rect is visible");
+                        } else {
+                            log::debug!("Target rect is NOT visible, rect: {:?}", response.rect);
+                        }
+                    }
+                }
             }
         });
     }
 
-    fn render_memory_hex_dump(&mut self, ui: &mut egui::Ui, data: &MemoryDebugView) {
-        egui::ScrollArea::vertical()
-            .max_height(400.0)
-            .show(ui, |ui| {
-                ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
+    fn render_hex_row(&self, ui: &mut egui::Ui, chunk: &[u8], addr: usize) -> egui::Response {
+        ui.horizontal(|ui| {
+            // Address column
+            ui.colored_label(egui::Color32::YELLOW, format!("{:04X}:", addr));
 
-                let memory_data = match self.view_mode {
-                    MemoryViewMode::CompositeRomRam => &data.composite_rom_ram,
-                    MemoryViewMode::CompositeRam => &data.composite_ram,
-                    MemoryViewMode::ExtensionRamOnly => &data.ram_extension,
-                };
+            // Hex bytes
+            for (i, byte) in chunk.iter().enumerate() {
+                if i == 8 {
+                    ui.label(" ");
+                }
+                ui.label(format!("{:02X}", byte));
+            }
 
-                let label = match self.view_mode {
-                    MemoryViewMode::CompositeRomRam => "=== Composite ROM/RAM ===",
-                    MemoryViewMode::CompositeRam => "=== Composite RAM ===",
-                    MemoryViewMode::ExtensionRamOnly => "=== Extension RAM Only ===",
-                };
+            // Padding for incomplete rows
+            for i in chunk.len()..16 {
+                if i == 8 {
+                    ui.label(" ");
+                }
+                ui.label("  ");
+            }
 
-                ui.colored_label(egui::Color32::LIGHT_BLUE, label);
-                self.render_hex_section(ui, memory_data, 0x0000);
-            });
+            ui.separator();
+
+            // ASCII column
+            let ascii: String = chunk
+                .iter()
+                .map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' })
+                .collect();
+            ui.monospace(ascii);
+        })
+        .response
     }
 
     fn render_hex_section(&self, ui: &mut egui::Ui, data: &[u8], base_addr: usize) {
