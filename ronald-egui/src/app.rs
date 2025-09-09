@@ -31,9 +31,7 @@ where
     key_mapper: KeyMapper<S>,
     #[serde(skip)]
     system_config_modal: SystemConfigModal,
-    #[serde(skip)]
     cpu_debug_window: CpuDebugWindow,
-    #[serde(skip)]
     memory_debug_window: MemoryDebugWindow,
 }
 
@@ -97,7 +95,7 @@ where
 
         // Render debug windows with current debug data when emulator is paused
         let debug_data = match &self.frontend {
-            Some(frontend) if frontend.is_paused() => Some(frontend.get_debug_data()),
+            Some(frontend) if frontend.is_paused() => Some(frontend.debug_view()),
             _ => None,
         };
 

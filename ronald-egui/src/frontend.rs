@@ -28,12 +28,12 @@ struct File {
 }
 
 pub struct Frontend {
+    initialized: bool,
     driver: Driver,
     audio: CpalAudio,
     video: EguiWgpuVideo,
     frame_start: Instant,
     time_available: usize,
-    input_test: String,
     can_interact: bool,
     paused: bool,
     picked_file_disk_a: Shared<Option<File>>,
@@ -63,12 +63,12 @@ impl Frontend {
         let video = EguiWgpuVideo::new(render_state);
 
         Self {
+            initialized: false,
             driver,
             audio,
             video,
             frame_start: Instant::now(),
             time_available: 0,
-            input_test: String::new(),
             can_interact: true,
             paused: false,
             picked_file_disk_a: shared(None),
@@ -93,19 +93,21 @@ impl Frontend {
                 self.run_frame(ctx, ui, size, false, can_interact, key_mapper);
             }
             None => {
-                egui::Window::new("Input Test").show(ctx, |ui| {
-                    ui.text_edit_singleline(&mut self.input_test);
-                });
-
                 let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
 
-                egui::Window::new("Screen")
+                if let Some(window) = egui::Window::new("Screen")
                     .collapsible(false)
                     .resizable(false)
                     .default_size(size)
                     .show(ctx, |ui| {
                         self.run_frame(ctx, ui, size, true, can_interact, key_mapper);
-                    });
+                    })
+                    && !self.initialized
+                {
+                    let layer_id = window.response.layer_id;
+                    ctx.move_to_top(layer_id);
+                    self.initialized = true;
+                }
             }
         }
     }
@@ -427,7 +429,7 @@ impl Frontend {
         self.paused
     }
 
-    pub fn get_debug_data(&self) -> SystemDebugView {
+    pub fn debug_view(&self) -> SystemDebugView {
         self.driver.debug_view()
     }
 }

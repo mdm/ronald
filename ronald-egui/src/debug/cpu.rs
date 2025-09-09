@@ -1,7 +1,9 @@
 use eframe::egui;
+use serde::{Deserialize, Serialize};
+
 use ronald_core::debug::view::CpuDebugView;
 
-#[derive(Default)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct CpuDebugWindow {
     pub show: bool,
 }
@@ -28,60 +30,203 @@ impl CpuDebugWindow {
 
     fn render_cpu_registers(&self, ui: &mut egui::Ui, data: &CpuDebugView) {
         ui.heading("Main Registers");
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.monospace(format!("A: {:02X}", data.register_a));
-                ui.monospace(format!("B: {:02X}", data.register_b));
-                ui.monospace(format!("D: {:02X}", data.register_d));
-                ui.monospace(format!("H: {:02X}", data.register_h));
+        egui_extras::TableBuilder::new(ui)
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .body(|mut body| {
+                body.row(20.0, |mut row| {
+                    row.col(|ui| {
+                        ui.label("A:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_a));
+                    });
+                    row.col(|ui| {
+                        ui.label("F:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_f));
+                    });
+                    row.col(|ui| {
+                        ui.label("B:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_b));
+                    });
+                    row.col(|ui| {
+                        ui.label("C:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_c));
+                    });
+                });
+                body.row(20.0, |mut row| {
+                    row.col(|ui| {
+                        ui.label("D:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_d));
+                    });
+                    row.col(|ui| {
+                        ui.label("E:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_e));
+                    });
+                    row.col(|ui| {
+                        ui.label("H:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_h));
+                    });
+                    row.col(|ui| {
+                        ui.label("L:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_l));
+                    });
+                });
             });
-            ui.vertical(|ui| {
-                ui.monospace(format!("F: {:02X}", data.register_f));
-                ui.monospace(format!("C: {:02X}", data.register_c));
-                ui.monospace(format!("E: {:02X}", data.register_e));
-                ui.monospace(format!("L: {:02X}", data.register_l));
-            });
-        });
 
         ui.separator();
         ui.heading("Shadow Registers");
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.monospace(format!("A': {:02X}", data.shadow_register_a));
-                ui.monospace(format!("B': {:02X}", data.shadow_register_b));
-                ui.monospace(format!("D': {:02X}", data.shadow_register_d));
-                ui.monospace(format!("H': {:02X}", data.shadow_register_h));
+        egui_extras::TableBuilder::new(ui)
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(20.0))
+            .body(|mut body| {
+                body.row(20.0, |mut row| {
+                    row.col(|ui| {
+                        ui.label("A':");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.shadow_register_a));
+                    });
+                    row.col(|ui| {
+                        ui.label("F':");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.shadow_register_f));
+                    });
+                    row.col(|ui| {
+                        ui.label("B':");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.shadow_register_b));
+                    });
+                    row.col(|ui| {
+                        ui.label("C':");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.shadow_register_c));
+                    });
+                });
+                body.row(20.0, |mut row| {
+                    row.col(|ui| {
+                        ui.label("D':");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.shadow_register_d));
+                    });
+                    row.col(|ui| {
+                        ui.label("E':");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.shadow_register_e));
+                    });
+                    row.col(|ui| {
+                        ui.label("H':");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.shadow_register_h));
+                    });
+                    row.col(|ui| {
+                        ui.label("L':");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.shadow_register_l));
+                    });
+                });
             });
-            ui.vertical(|ui| {
-                ui.monospace(format!("F': {:02X}", data.shadow_register_f));
-                ui.monospace(format!("C': {:02X}", data.shadow_register_c));
-                ui.monospace(format!("E': {:02X}", data.shadow_register_e));
-                ui.monospace(format!("L': {:02X}", data.shadow_register_l));
-            });
-        });
 
         ui.separator();
         ui.heading("Index & Special Registers");
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.monospace(format!(
-                    "IX: {:02X}{:02X}",
-                    data.register_ixh, data.register_ixl
-                ));
-                ui.monospace(format!(
-                    "IY: {:02X}{:02X}",
-                    data.register_iyh, data.register_iyl
-                ));
-                ui.monospace(format!("SP: {:04X}", data.register_sp));
-                ui.monospace(format!("PC: {:04X}", data.register_pc));
+        egui_extras::TableBuilder::new(ui)
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(40.0))
+            .column(egui_extras::Column::exact(20.0))
+            .column(egui_extras::Column::exact(40.0))
+            .body(|mut body| {
+                body.row(20.0, |mut row| {
+                    row.col(|ui| {
+                        ui.label("IX:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!(
+                            "{:02X}{:02X}",
+                            data.register_ixh, data.register_ixl
+                        ));
+                    });
+                    row.col(|ui| {
+                        ui.label("IY:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!(
+                            "{:02X}{:02X}",
+                            data.register_iyh, data.register_iyl
+                        ));
+                    });
+                });
+                body.row(20.0, |mut row| {
+                    row.col(|ui| {
+                        ui.label("SP:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:04X}", data.register_sp));
+                    });
+                    row.col(|ui| {
+                        ui.label("PC:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:04X}", data.register_pc));
+                    });
+                });
+                body.row(20.0, |mut row| {
+                    row.col(|ui| {
+                        ui.label("I:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_i));
+                    });
+                    row.col(|ui| {
+                        ui.label("R:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{:02X}", data.register_r));
+                    });
+                });
+                body.row(20.0, |mut row| {
+                    row.col(|ui| {
+                        ui.label("IM:");
+                    });
+                    row.col(|ui| {
+                        ui.monospace(format!("{}", data.interrupt_mode));
+                    });
+                    row.col(|_ui| {});
+                    row.col(|_ui| {});
+                });
             });
-            ui.vertical(|ui| {
-                ui.monospace(format!("I: {:02X}", data.register_i));
-                ui.monospace(format!("R: {:02X}", data.register_r));
-                ui.monospace(format!("IM: {}", data.interrupt_mode));
-                ui.monospace("");
-            });
-        });
 
         ui.separator();
         ui.heading("Flags (F Register)");
