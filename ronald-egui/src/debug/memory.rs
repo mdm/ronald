@@ -3,32 +3,81 @@ use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::view::MemoryDebugView;
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct MemoryDebugWindow {
     pub show: bool,
     scroll_to_address: Option<usize>,
     address_input: String,
+    view_mode: MemoryViewMode,
+}
+
+#[derive(Deserialize, Serialize, PartialEq)]
+enum MemoryViewMode {
+    CompositeRomRam,
+    CompositeRam,
+    ExtensionRamOnly,
+}
+
+impl Default for MemoryDebugWindow {
+    fn default() -> Self {
+        Self {
+            show: false,
+            scroll_to_address: None,
+            address_input: String::new(),
+            view_mode: MemoryViewMode::CompositeRomRam,
+        }
+    }
 }
 
 impl MemoryDebugWindow {
+    fn render_view_mode_selector(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("View:");
+            egui::ComboBox::from_label("")
+                .selected_text(match self.view_mode {
+                    MemoryViewMode::CompositeRomRam => "Composite ROM/RAM",
+                    MemoryViewMode::CompositeRam => "Composite RAM",
+                    MemoryViewMode::ExtensionRamOnly => "Extension RAM only",
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.view_mode,
+                        MemoryViewMode::CompositeRomRam,
+                        "Composite ROM/RAM",
+                    );
+                    ui.selectable_value(
+                        &mut self.view_mode,
+                        MemoryViewMode::CompositeRam,
+                        "Composite RAM",
+                    );
+                    ui.selectable_value(
+                        &mut self.view_mode,
+                        MemoryViewMode::ExtensionRamOnly,
+                        "Extension RAM only",
+                    );
+                });
+        });
+    }
     pub fn ui(&mut self, ctx: &egui::Context, data: Option<&MemoryDebugView>) {
         if !self.show {
             return;
         }
 
         let mut open = self.show;
-        egui::Window::new("Memory Debug")
+        egui::Window::new("Memory Internals")
             .open(&mut open)
             .default_size([600.0, 500.0])
             .show(ctx, |ui| {
                 if let Some(data) = data {
+                    self.render_view_mode_selector(ui);
+                    ui.separator();
                     self.render_memory_controls(ui);
                     ui.separator();
                     self.render_memory_status(ui, data);
                     ui.separator();
                     self.render_memory_hex_dump(ui, data);
                 } else {
-                    ui.label("No debug data available - emulator must be paused");
+                    ui.label("No data available - emulator must be paused");
                 }
             });
         self.show = open;
@@ -89,29 +138,20 @@ impl MemoryDebugWindow {
             .show(ui, |ui| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
 
-                // Show RAM section
-                ui.colored_label(egui::Color32::LIGHT_BLUE, "=== RAM (64KB) ===");
-                self.render_hex_section(ui, &data.ram, 0x0000);
+                let memory_data = match self.view_mode {
+                    MemoryViewMode::CompositeRomRam => &data.composite_rom_ram,
+                    MemoryViewMode::CompositeRam => &data.composite_ram,
+                    MemoryViewMode::ExtensionRamOnly => &data.ram_extension,
+                };
 
-                ui.add_space(10.0);
+                let label = match self.view_mode {
+                    MemoryViewMode::CompositeRomRam => "=== Composite ROM/RAM ===",
+                    MemoryViewMode::CompositeRam => "=== Composite RAM ===",
+                    MemoryViewMode::ExtensionRamOnly => "=== Extension RAM Only ===",
+                };
 
-                // Show Lower ROM if enabled
-                if data.lower_rom_enabled {
-                    ui.colored_label(egui::Color32::LIGHT_GREEN, "=== Lower ROM ===");
-                    self.render_hex_section(ui, &data.lower_rom, 0x0000);
-                    ui.add_space(10.0);
-                }
-
-                // Show Upper ROM if enabled
-                if data.upper_rom_enabled {
-                    if let Some(upper_rom) = data.upper_roms.get(&data.selected_upper_rom) {
-                        ui.colored_label(
-                            egui::Color32::LIGHT_YELLOW,
-                            format!("=== Upper ROM #{:02X} ===", data.selected_upper_rom),
-                        );
-                        self.render_hex_section(ui, upper_rom, 0xC000);
-                    }
-                }
+                ui.colored_label(egui::Color32::LIGHT_BLUE, label);
+                self.render_hex_section(ui, memory_data, 0x0000);
             });
     }
 

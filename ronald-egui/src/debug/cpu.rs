@@ -15,14 +15,14 @@ impl CpuDebugWindow {
         }
 
         let mut open = self.show;
-        egui::Window::new("CPU Debug")
+        egui::Window::new("CPU Internals")
             .open(&mut open)
             .default_size([400.0, 600.0])
             .show(ctx, |ui| {
                 if let Some(data) = data {
                     self.render_cpu_registers(ui, data);
                 } else {
-                    ui.label("No debug data available - emulator must be paused");
+                    ui.label("No data available - emulator must be paused");
                 }
             });
         self.show = open;

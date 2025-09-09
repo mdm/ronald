@@ -49,4 +49,6 @@ pub struct MemoryDebugView {
     pub upper_roms: HashMap<u8, Vec<u8>>,
     pub selected_upper_rom: u8,
     pub upper_rom_enabled: bool,
+    pub composite_rom_ram: Vec<u8>,
+    pub composite_ram: Vec<u8>,
 }

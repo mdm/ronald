@@ -137,9 +137,7 @@ where
                     if self.workbench {
                         ui.separator();
                         if ui
-                            .add(
-                                egui::Button::new("CPU Debug").selected(self.cpu_debug_window.show),
-                            )
+                            .add(egui::Button::new("CPU").selected(self.cpu_debug_window.show))
                             .clicked()
                         {
                             self.cpu_debug_window.show = !self.cpu_debug_window.show;
@@ -147,8 +145,7 @@ where
                         }
                         if ui
                             .add(
-                                egui::Button::new("Memory Debug")
-                                    .selected(self.memory_debug_window.show),
+                                egui::Button::new("Memory").selected(self.memory_debug_window.show),
                             )
                             .clicked()
                         {
