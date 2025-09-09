@@ -82,6 +82,16 @@ pub enum InterruptMode {
     Mode2,
 }
 
+impl fmt::Display for InterruptMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InterruptMode::Mode0 => write!(f, "IM 0"),
+            InterruptMode::Mode1 => write!(f, "IM 1"),
+            InterruptMode::Mode2 => write!(f, "IM 2"),
+        }
+    }
+}
+
 pub enum JumpTest {
     Unconditional,
     NonZero,

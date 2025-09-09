@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use ronald_core::system::AmstradCpc;
 
+use crate::debug::{CpuDebugWindow, MemoryDebugWindow};
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
@@ -30,6 +31,10 @@ where
     key_mapper: KeyMapper<S>,
     #[serde(skip)]
     system_config_modal: SystemConfigModal,
+    #[serde(skip)]
+    cpu_debug_window: CpuDebugWindow,
+    #[serde(skip)]
+    memory_debug_window: MemoryDebugWindow,
 }
 
 impl<S> Default for RonaldApp<S>
@@ -45,6 +50,8 @@ where
             key_map_editor: KeyMapEditor::default(),
             key_mapper: KeyMapper::default(),
             system_config_modal: SystemConfigModal::default(),
+            cpu_debug_window: CpuDebugWindow::default(),
+            memory_debug_window: MemoryDebugWindow::default(),
         }
     }
 }
@@ -88,6 +95,17 @@ where
             }
         }
 
+        // Render debug windows with current debug data when emulator is paused
+        let debug_data = match &self.frontend {
+            Some(frontend) if frontend.is_paused() => Some(frontend.get_debug_data()),
+            _ => None,
+        };
+
+        self.cpu_debug_window
+            .ui(ctx, debug_data.as_ref().map(|d| &d.cpu));
+        self.memory_debug_window
+            .ui(ctx, debug_data.as_ref().map(|d| &d.memory));
+
         ctx.request_repaint();
     }
 
@@ -119,6 +137,26 @@ where
                         ui.close_menu();
                     }
                     if self.workbench {
+                        ui.separator();
+                        if ui
+                            .add(
+                                egui::Button::new("CPU Debug").selected(self.cpu_debug_window.show),
+                            )
+                            .clicked()
+                        {
+                            self.cpu_debug_window.show = !self.cpu_debug_window.show;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new("Memory Debug")
+                                    .selected(self.memory_debug_window.show),
+                            )
+                            .clicked()
+                        {
+                            self.memory_debug_window.show = !self.memory_debug_window.show;
+                            ui.close_menu();
+                        }
                         ui.separator();
                         if ui.button("Organize Windows").clicked() {
                             ui.ctx().memory_mut(|mem| mem.reset_areas());

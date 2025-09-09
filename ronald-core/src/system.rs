@@ -108,6 +108,7 @@ where
 
     fn debug_view(&self) -> Self::View {
         Self::View {
+            master_clock: self.master_clock,
             cpu: self.cpu.debug_view(),
             memory: self.memory.debug_view(),
         }
