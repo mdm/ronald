@@ -266,14 +266,39 @@ impl Snapshotable for MemoryCpcX64 {
             upper_roms.insert(*key, rom.debug_view().data);
         }
 
+        let ram = self.ram.debug_view().data;
+        let ram_extension = vec![];
+        let lower_rom = self.lower_rom.debug_view().data;
+        let lower_rom_enabled = self.lower_rom_enabled;
+        let selected_upper_rom = self.selected_upper_rom;
+        let upper_rom_enabled = self.upper_rom_enabled;
+
+        // Create composite RAM view first (just RAM for now, extension RAM not implemented yet)
+        let composite_ram = ram.clone();
+
+        // Create composite ROM/RAM view based on composite_ram
+        let mut composite_rom_ram = composite_ram.clone();
+        
+        if lower_rom_enabled {
+            composite_rom_ram[0x0000..0x4000].copy_from_slice(&lower_rom);
+        }
+
+        if upper_rom_enabled {
+            if let Some(upper_rom_data) = upper_roms.get(&selected_upper_rom) {
+                composite_rom_ram[0xC000..0x10000].copy_from_slice(upper_rom_data);
+            }
+        }
+
         MemoryDebugView {
-            ram: self.ram.debug_view().data,
-            ram_extension: vec![],
-            lower_rom: self.lower_rom.debug_view().data,
-            lower_rom_enabled: self.lower_rom_enabled,
+            ram,
+            ram_extension,
+            lower_rom,
+            lower_rom_enabled,
             upper_roms,
-            selected_upper_rom: self.selected_upper_rom,
-            upper_rom_enabled: self.upper_rom_enabled,
+            selected_upper_rom,
+            upper_rom_enabled,
+            composite_rom_ram,
+            composite_ram,
         }
     }
 }
