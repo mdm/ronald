@@ -81,6 +81,7 @@ impl MemoryDebugWindow {
                     );
                 });
         });
+        ui.separator();
     }
     pub fn ui(&mut self, ctx: &egui::Context, data: Option<&MemoryDebugView>) {
         if !self.show {
@@ -95,9 +96,7 @@ impl MemoryDebugWindow {
             .show(ctx, |ui| {
                 if let Some(data) = data {
                     self.render_view_mode_selector(ui, data);
-                    ui.separator();
                     self.render_memory_controls(ui);
-                    ui.separator();
                     self.render_memory_status(ui, data);
                     self.render_memory_hex_dump(ui, data);
                 } else {
@@ -117,7 +116,7 @@ impl MemoryDebugWindow {
 
             if enter_pressed || go_clicked {
                 if let Ok(addr) =
-                    usize::from_str_radix(&self.address_input.trim_start_matches("0x"), 16)
+                    usize::from_str_radix(self.address_input.trim_start_matches("0x"), 16)
                 {
                     log::debug!("Setting scroll target to address: {:04X}", addr);
                     self.scroll_to_address = Some(addr);
@@ -126,6 +125,7 @@ impl MemoryDebugWindow {
                 }
             }
         });
+        ui.separator();
     }
 
     fn render_memory_status(&self, ui: &mut egui::Ui, data: &MemoryDebugView) {
@@ -227,41 +227,26 @@ impl MemoryDebugWindow {
             MemoryViewMode::ExtensionRamOnly => &data.ram_extension,
         };
 
-        let target_addr = self.scroll_to_address.take();
-
-        let scroll_area = egui::ScrollArea::vertical()
+        egui::ScrollArea::vertical()
             .max_height(400.0)
-            .auto_shrink([false, false]);
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
 
-        scroll_area.show(ui, |ui| {
-            ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
+                let target_addr = self.scroll_to_address.take();
+                for (row, chunk) in memory_data.chunks(16).enumerate() {
+                    let addr = row * 16;
+                    let response = self.render_hex_row(ui, chunk, addr);
 
-            for (row, chunk) in memory_data.chunks(16).enumerate() {
-                let addr = row * 16;
-                let response = self.render_hex_row(ui, chunk, addr);
-
-                // If this row contains our target address, scroll to it immediately
-                if let Some(target) = target_addr {
-                    if target >= addr && target < addr + 16 {
-                        log::debug!(
-                            "Found target address {:04X} in row {}, forcing scroll",
-                            target,
-                            row
-                        );
-                        // Try multiple scroll methods with TOP alignment to ensure target is at the top
-                        ui.scroll_to_cursor(Some(egui::Align::Min));
+                    // If this row contains our target address, scroll to it immediately
+                    if let Some(target) = target_addr
+                        && target >= addr
+                        && target < addr + 16
+                    {
                         response.scroll_to_me(Some(egui::Align::Min));
-                        ui.scroll_to_rect(response.rect, Some(egui::Align::Min));
-                        // Also try to ensure this widget is visible
-                        if ui.is_rect_visible(response.rect) {
-                            log::debug!("Target rect is visible");
-                        } else {
-                            log::debug!("Target rect is NOT visible, rect: {:?}", response.rect);
-                        }
                     }
                 }
-            }
-        });
+            });
     }
 
     fn render_hex_row(&self, ui: &mut egui::Ui, chunk: &[u8], addr: usize) -> egui::Response {
@@ -290,46 +275,16 @@ impl MemoryDebugWindow {
             // ASCII column
             let ascii: String = chunk
                 .iter()
-                .map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' })
+                .map(|&b| {
+                    if (32..127).contains(&b) {
+                        b as char
+                    } else {
+                        '.'
+                    }
+                })
                 .collect();
             ui.monospace(ascii);
         })
         .response
-    }
-
-    fn render_hex_section(&self, ui: &mut egui::Ui, data: &[u8], base_addr: usize) {
-        for (row, chunk) in data.chunks(16).enumerate() {
-            let addr = base_addr + (row * 16);
-
-            ui.horizontal(|ui| {
-                // Address column
-                ui.colored_label(egui::Color32::YELLOW, format!("{:04X}:", addr));
-
-                // Hex bytes
-                for (i, byte) in chunk.iter().enumerate() {
-                    if i == 8 {
-                        ui.label(" ");
-                    }
-                    ui.label(format!("{:02X}", byte));
-                }
-
-                // Padding for incomplete rows
-                for i in chunk.len()..16 {
-                    if i == 8 {
-                        ui.label(" ");
-                    }
-                    ui.label("  ");
-                }
-
-                ui.separator();
-
-                // ASCII column
-                let ascii: String = chunk
-                    .iter()
-                    .map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' })
-                    .collect();
-                ui.monospace(ascii);
-            });
-        }
     }
 }
