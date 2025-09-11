@@ -3,7 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::debug::event::CpuDebugEvent;
-use crate::debug::view::CpuDebugView;
+use crate::debug::view::{CpuDebugView, DisassembledInstruction};
 use crate::debug::{DebugSource, Debuggable, Snapshotable};
 use crate::system::bus::Bus;
 use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
@@ -558,11 +558,6 @@ pub trait Cpu: Default {
         bus: &mut impl Bus,
     ) -> (u8, bool);
     fn request_interrupt(&mut self);
-    fn disassemble(
-        &mut self,
-        memory: &mut (impl MemRead + MemWrite + MemManage),
-        count: usize,
-    ) -> Vec<(u16, String)>;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -2011,23 +2006,6 @@ where
 
     fn request_interrupt(&mut self) {
         self.irq_received = true;
-    }
-
-    fn disassemble(
-        &mut self,
-        memory: &mut (impl MemRead + MemWrite + MemManage),
-        count: usize,
-    ) -> Vec<(u16, String)> {
-        let mut address = self.registers.read_word(&Register16::PC);
-
-        let mut assembly = Vec::with_capacity(count);
-        for _ in 0..count {
-            let (instruction, next_address) = self.decoder.decode(memory, address as usize);
-            assembly.push((address, format!("{instruction}")));
-            address = next_address as u16;
-        }
-
-        assembly
     }
 }
 

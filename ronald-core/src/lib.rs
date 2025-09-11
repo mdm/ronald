@@ -87,11 +87,6 @@ impl Driver {
         serde_json::to_string(&self.system)
     }
 
-    pub fn disassemble(&mut self, count: usize) -> serde_json::Result<String> {
-        let disassembly = self.system.disassemble(count);
-        serde_json::to_string(&disassembly)
-    }
-
     pub fn save_rom(&self) -> Vec<u8> {
         todo!()
     }
