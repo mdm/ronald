@@ -13,6 +13,7 @@ pub struct MemoryDebugWindow {
 
 #[derive(Deserialize, Serialize, PartialEq)]
 enum MemoryViewMode {
+    Disassembly,
     CompositeRomRam,
     CompositeRam,
     LowerRomOnly,
@@ -38,6 +39,7 @@ impl MemoryDebugWindow {
             ui.label("View:");
             egui::ComboBox::from_label("")
                 .selected_text(match &self.view_mode {
+                    MemoryViewMode::Disassembly => "Disassembly".to_string(),
                     MemoryViewMode::CompositeRomRam => "Composite ROM/RAM".to_string(),
                     MemoryViewMode::CompositeRam => "Composite RAM".to_string(),
                     MemoryViewMode::LowerRomOnly => "Lower ROM only".to_string(),
@@ -213,6 +215,7 @@ impl MemoryDebugWindow {
         ui.label("Memory Contents:");
 
         let memory_data = match &self.view_mode {
+            MemoryViewMode::Disassembly => todo!("Disassembly view not implemented yet"),
             MemoryViewMode::CompositeRomRam => &data.composite_rom_ram,
             MemoryViewMode::CompositeRam => &data.composite_ram,
             MemoryViewMode::LowerRomOnly => &data.lower_rom,

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::view::{CpuDebugView, MemoryDebugView, SystemDebugView};
+use crate::debug::view::{CpuDebugView, DisassembledInstruction, MemoryDebugView, SystemDebugView};
 use crate::debug::Snapshotable;
 use crate::{AudioSink, VideoSink};
 
@@ -16,12 +16,6 @@ use bus::gate_array::AnyGateArray;
 use bus::{Bus, StandardBus};
 use cpu::Cpu;
 use memory::{AnyMemory, MemManage, MemRead, MemWrite, MemoryCpc6128, MemoryCpcX64};
-
-#[derive(Serialize, Deserialize)]
-pub struct DisassembledInstruction {
-    address: u16,
-    instruction: String,
-}
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(bound(
@@ -85,17 +79,6 @@ where
         // TODO: allow loading tapes as well
         self.bus.load_disk(drive, rom, path);
     }
-
-    pub fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
-        self.cpu
-            .disassemble(&mut self.memory, count)
-            .into_iter()
-            .map(|(address, instruction)| DisassembledInstruction {
-                address,
-                instruction,
-            })
-            .collect()
-    }
 }
 
 impl<C, M, B> Snapshotable for AmstradCpc<C, M, B>
@@ -107,10 +90,28 @@ where
     type View = SystemDebugView;
 
     fn debug_view(&self) -> Self::View {
+        const COUNT: usize = 20;
+        let cpu = self.cpu.debug_view();
+        let mut decoder = AlgorithmicDecoder::default();
+        let mut disassembly = Vec::with_capacity(COUNT);
+        let mut address = cpu.register_pc;
+        for _ in 0..COUNT {
+            let (instruction, next_address) = decoder.decode(&self.memory, address as usize);
+            let instruction = instruction.to_string();
+            let length = next_address - address as usize;
+            disassembly.push(DisassembledInstruction {
+                address,
+                instruction,
+                length,
+            });
+            address = next_address as u16;
+        }
+
         Self::View {
             master_clock: self.master_clock,
-            cpu: self.cpu.debug_view(),
+            cpu,
             memory: self.memory.debug_view(),
+            disassembly,
         }
     }
 }
