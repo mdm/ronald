@@ -219,6 +219,10 @@ impl MemoryDebugWindow {
     }
 
     fn render_memory_controls(&mut self, ui: &mut egui::Ui) {
+        if self.view_mode == MemoryViewMode::Disassembly {
+            return;
+        }
+
         ui.horizontal(|ui| {
             ui.label("Jump to address:");
             let text_edit = ui.text_edit_singleline(&mut self.address_input);
