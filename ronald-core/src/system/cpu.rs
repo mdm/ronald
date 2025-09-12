@@ -1690,3 +1690,144 @@ where
         assembly
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use crate::{
+        system::{
+            bus::Bus,
+            instruction::AlgorithmicDecoder,
+            memory::{MemManage, Ram},
+        },
+        AudioSink, VideoSink,
+    };
+
+    use super::*;
+
+    struct ZexHarness {
+        cpu: ZilogZ80<AlgorithmicDecoder>,
+        memory: Ram,
+        bus: BlackHole,
+    }
+
+    impl ZexHarness {
+        pub fn new(rom: &[u8]) -> ZexHarness {
+            let mut memory = Ram::from_bytes(0x10000, rom, 0x100);
+            memory.write_byte(0x0005, 0xc9); // patch with RET instruction
+            memory.write_word(0x0006, 0xe400); // patch with initial SP
+
+            ZexHarness {
+                cpu: ZilogZ80::new(0x100),
+                memory,
+                bus: BlackHole::new(),
+            }
+        }
+
+        pub fn emulate(&mut self) -> usize {
+            let mut output = String::new();
+
+            let start = std::time::Instant::now();
+            let mut total_cycles = 0;
+
+            loop {
+                match self.cpu.registers.read_word(&Register16::PC) {
+                    0x0000 => break,
+                    0x0005 => {
+                        match self.cpu.registers.read_byte(&Register8::C) {
+                            2 => {
+                                print!("{}", self.cpu.registers.read_byte(&Register8::E) as char);
+                                output.push(self.cpu.registers.read_byte(&Register8::E) as char);
+                            }
+                            9 => {
+                                let mut address =
+                                    self.cpu.registers.read_word(&Register16::DE) as usize;
+                                loop {
+                                    let character = self.memory.read_byte(address) as char;
+                                    if character == '$' {
+                                        break;
+                                    } else {
+                                        print!("{character}");
+                                        output.push(character);
+                                    }
+                                    address += 1;
+                                }
+                            }
+                            _ => unreachable!(),
+                        }
+                        let (cycles, _) =
+                            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                        total_cycles += cycles as usize;
+                    }
+                    _ => {
+                        let (cycles, _) =
+                            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                        total_cycles += cycles as usize;
+                    }
+                }
+            }
+            println!();
+
+            let elapsed_seconds = start.elapsed().as_secs_f64();
+            println!(
+                "Executed {total_cycles} in {elapsed_seconds} seconds ({} MHz).",
+                total_cycles as f64 / 1_000_000.0 / elapsed_seconds
+            );
+
+            output.matches("OK").count()
+        }
+    }
+
+    #[derive(Default)]
+    struct BlackHole {}
+
+    impl BlackHole {
+        pub fn new() -> BlackHole {
+            BlackHole {}
+        }
+    }
+
+    impl Bus for BlackHole {
+        fn read_byte(&mut self, _port: u16) -> u8 {
+            unimplemented!()
+        }
+
+        fn write_byte(&mut self, _memory: &mut impl MemManage, _port: u16, _value: u8) {
+            unimplemented!();
+        }
+
+        fn step(
+            &mut self,
+            _memory: &mut impl MemManage,
+            _video: &mut impl VideoSink,
+            _audio: &mut impl AudioSink,
+        ) -> bool {
+            unimplemented!();
+        }
+
+        fn acknowledge_interrupt(&mut self) {
+            unimplemented!();
+        }
+
+        fn set_key(&mut self, _line: usize, _bit: u8) {
+            unimplemented!();
+        }
+
+        fn unset_key(&mut self, _line: usize, _bit: u8) {
+            unimplemented!();
+        }
+
+        fn load_disk(&mut self, _drive: usize, _rom: Vec<u8>, _path: PathBuf) {
+            unimplemented!();
+        }
+    }
+
+    #[test]
+    #[ignore = "this is an extremely slow test"]
+    fn test_zexdoc_slow() {
+        let rom = include_bytes!("../../rom/zexdoc.rom");
+        let mut harness = ZexHarness::new(rom);
+        assert_eq!(harness.emulate(), 67);
+    }
+}
