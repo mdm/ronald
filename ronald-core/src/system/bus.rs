@@ -39,50 +39,6 @@ pub trait Bus: Default {
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf);
 }
 
-#[derive(Default)]
-pub struct DummyBus {} // TODO: rename to BlackHole
-
-impl DummyBus {
-    pub fn new() -> DummyBus {
-        DummyBus {}
-    }
-}
-
-impl Bus for DummyBus {
-    fn read_byte(&mut self, _port: u16) -> u8 {
-        unimplemented!()
-    }
-
-    fn write_byte(&mut self, _memory: &mut impl MemManage, _port: u16, _value: u8) {
-        unimplemented!();
-    }
-
-    fn step(
-        &mut self,
-        _memory: &mut impl MemManage,
-        _video: &mut impl VideoSink,
-        _audio: &mut impl AudioSink,
-    ) -> bool {
-        unimplemented!();
-    }
-
-    fn acknowledge_interrupt(&mut self) {
-        unimplemented!();
-    }
-
-    fn set_key(&mut self, _line: usize, _bit: u8) {
-        unimplemented!();
-    }
-
-    fn unset_key(&mut self, _line: usize, _bit: u8) {
-        unimplemented!();
-    }
-
-    fn load_disk(&mut self, _drive: usize, _rom: Vec<u8>, _path: PathBuf) {
-        unimplemented!();
-    }
-}
-
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StandardBus<C, G>
