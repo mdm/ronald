@@ -239,27 +239,27 @@ impl CpuDebugWindow {
             ui.label("IFF1:");
             ui.colored_label(
                 if data.iff1 {
-                    egui::Color32::GREEN
+                    egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
                 } else {
-                    egui::Color32::RED
+                    egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
                 },
                 if data.iff1 { "ON" } else { "OFF" },
             );
             ui.label("IFF2:");
             ui.colored_label(
                 if data.iff2 {
-                    egui::Color32::GREEN
+                    egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
                 } else {
-                    egui::Color32::RED
+                    egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
                 },
                 if data.iff2 { "ON" } else { "OFF" },
             );
             ui.label("Halted:");
             ui.colored_label(
                 if data.halted {
-                    egui::Color32::YELLOW
+                    egui::Color32::from_rgb(200, 150, 0) // Dark yellow/gold - better contrast
                 } else {
-                    egui::Color32::GREEN
+                    egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
                 },
                 if data.halted { "YES" } else { "NO" },
             );
@@ -281,9 +281,9 @@ impl CpuDebugWindow {
                 let is_set = (flags >> bit) & 1 != 0;
                 ui.colored_label(
                     if is_set {
-                        egui::Color32::GREEN
+                        egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
                     } else {
-                        egui::Color32::GRAY
+                        egui::Color32::from_gray(120) // Darker gray - better contrast
                     },
                     format!("{}: {}", name, if is_set { "1" } else { "0" }),
                 );
