@@ -1,7 +1,7 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use ronald_core::debug::view::MemoryDebugView;
+use ronald_core::debug::view::{MemoryDebugView, SystemDebugView};
 
 #[derive(Deserialize, Serialize)]
 pub struct MemoryDebugWindow {
@@ -50,6 +50,12 @@ impl MemoryDebugWindow {
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut self.view_mode,
+                        MemoryViewMode::Disassembly,
+                        "Disassembly",
+                    );
+                    ui.separator();
+                    ui.selectable_value(
+                        &mut self.view_mode,
                         MemoryViewMode::CompositeRomRam,
                         "Composite ROM/RAM",
                     );
@@ -85,7 +91,7 @@ impl MemoryDebugWindow {
         });
         ui.separator();
     }
-    pub fn ui(&mut self, ctx: &egui::Context, data: Option<&MemoryDebugView>) {
+    pub fn ui(&mut self, ctx: &egui::Context, data: Option<&SystemDebugView>) {
         if !self.show {
             return;
         }
@@ -97,10 +103,10 @@ impl MemoryDebugWindow {
             .resizable(false)
             .show(ctx, |ui| {
                 if let Some(data) = data {
-                    self.render_view_mode_selector(ui, data);
+                    self.render_view_mode_selector(ui, &data.memory);
                     self.render_memory_controls(ui);
-                    self.render_memory_status(ui, data);
-                    self.render_memory_hex_dump(ui, data);
+                    self.render_memory_status(ui, &data.memory);
+                    self.render_memory_view(ui, data);
                 } else {
                     ui.label("No data available - emulator must be paused");
                 }
@@ -211,11 +217,24 @@ impl MemoryDebugWindow {
         }
     }
 
+    fn render_memory_view(&mut self, ui: &mut egui::Ui, data: &SystemDebugView) {
+        match &self.view_mode {
+            MemoryViewMode::Disassembly => {
+                self.render_disassembly_view(ui, data);
+            }
+            _ => {
+                self.render_memory_hex_dump(ui, &data.memory);
+            }
+        }
+    }
+
     fn render_memory_hex_dump(&mut self, ui: &mut egui::Ui, data: &MemoryDebugView) {
         ui.label("Memory Contents:");
 
         let memory_data = match &self.view_mode {
-            MemoryViewMode::Disassembly => todo!("Disassembly view not implemented yet"),
+            MemoryViewMode::Disassembly => {
+                unreachable!("Disassembly mode should be handled separately")
+            }
             MemoryViewMode::CompositeRomRam => &data.composite_rom_ram,
             MemoryViewMode::CompositeRam => &data.composite_ram,
             MemoryViewMode::LowerRomOnly => &data.lower_rom,
@@ -289,5 +308,83 @@ impl MemoryDebugWindow {
             ui.monospace(ascii);
         })
         .response
+    }
+
+    fn render_disassembly_view(&mut self, ui: &mut egui::Ui, data: &SystemDebugView) {
+        ui.label("Disassembly:");
+
+        egui::ScrollArea::vertical()
+            .max_height(400.0)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
+
+                let target_addr = self.scroll_to_address.take();
+
+                use egui_extras::{Column, TableBuilder};
+                TableBuilder::new(ui)
+                    .column(Column::auto())
+                    .column(Column::auto())
+                    .column(Column::remainder())
+                    .body(|mut body| {
+                        for instruction in &data.disassembly {
+                            let is_current_instruction =
+                                instruction.address == data.cpu.register_pc;
+
+                            body.row(18.0, |mut row| {
+                                // Highlight the entire row if it's the current instruction
+                                if is_current_instruction {
+                                    row.set_selected(true);
+                                }
+
+                                row.col(|ui| {
+                                    let color = if is_current_instruction {
+                                        egui::Color32::WHITE
+                                    } else {
+                                        egui::Color32::YELLOW
+                                    };
+                                    ui.colored_label(
+                                        color,
+                                        format!("{:04X}:", instruction.address),
+                                    );
+                                });
+                                row.col(|ui| {
+                                    let color = if is_current_instruction {
+                                        egui::Color32::WHITE
+                                    } else {
+                                        egui::Color32::LIGHT_BLUE
+                                    };
+                                    ui.colored_label(color, &instruction.instruction);
+                                });
+                                row.col(|ui| {
+                                    let mut hex_bytes = String::new();
+                                    for i in 0..instruction.length {
+                                        if i > 0 {
+                                            hex_bytes.push(' ');
+                                        }
+                                        let addr = instruction.address as usize + i;
+                                        if let Some(byte) = data.memory.composite_rom_ram.get(addr)
+                                        {
+                                            hex_bytes.push_str(&format!("{:02X}", byte));
+                                        } else {
+                                            hex_bytes.push_str("??");
+                                        }
+                                    }
+                                    let response = if is_current_instruction {
+                                        ui.colored_label(egui::Color32::WHITE, hex_bytes)
+                                    } else {
+                                        ui.monospace(hex_bytes)
+                                    };
+
+                                    if let Some(target) = target_addr
+                                        && target as u16 == instruction.address
+                                    {
+                                        response.scroll_to_me(Some(egui::Align::Min));
+                                    }
+                                });
+                            });
+                        }
+                    });
+            });
     }
 }
