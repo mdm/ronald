@@ -46,10 +46,10 @@ impl Default for MemoryDebugWindow {
 impl Default for MemorySourceColors {
     fn default() -> Self {
         Self {
-            lower_rom: egui::Color32::from_rgb(255, 165, 0), // Orange
-            upper_rom: egui::Color32::from_rgb(255, 20, 147), // Deep pink
-            ram: egui::Color32::from_rgb(50, 205, 50),       // Lime green
-            extension_ram: egui::Color32::from_rgb(135, 206, 235), // Sky blue
+            lower_rom: egui::Color32::from_rgb(255, 140, 0), // Dark orange - good contrast in both themes
+            upper_rom: egui::Color32::from_rgb(220, 20, 120), // Deep magenta - better contrast than pink
+            ram: egui::Color32::from_rgb(0, 150, 0), // Forest green - better contrast than lime
+            extension_ram: egui::Color32::from_rgb(30, 144, 255), // Dodger blue - better contrast than sky blue
         }
     }
 }
@@ -61,16 +61,15 @@ impl MemorySourceColors {
             MemoryViewMode::UpperRomOnly(_) => self.upper_rom,
             MemoryViewMode::RamOnly => self.ram,
             MemoryViewMode::ExtensionRamOnly => self.extension_ram,
-            _ => egui::Color32::from_gray(200), // Default text color for composite modes and disassembly
+            _ => egui::Color32::from_gray(160), // Better contrast - darker gray for both themes
         }
     }
 }
 
 impl MemoryDebugWindow {
     fn get_memory_source_color(&self, addr: usize, data: &MemoryDebugView) -> egui::Color32 {
-        // Only apply source-based coloring for composite modes
         match &self.view_mode {
-            MemoryViewMode::CompositeRomRam => {
+            MemoryViewMode::Disassembly | MemoryViewMode::CompositeRomRam => {
                 // CPC 464 memory map:
                 // 0x0000-0x3FFF: Lower ROM (if enabled) or RAM
                 // 0x4000-0x7FFF: RAM
@@ -248,9 +247,9 @@ impl MemoryDebugWindow {
                     ui.label("Lower ROM:");
                     ui.colored_label(
                         if data.lower_rom_enabled {
-                            egui::Color32::GREEN
+                            egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
                         } else {
-                            egui::Color32::RED
+                            egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
                         },
                         if data.lower_rom_enabled {
                             "ENABLED"
@@ -262,9 +261,9 @@ impl MemoryDebugWindow {
                     ui.label("Upper ROM:");
                     ui.colored_label(
                         if data.upper_rom_enabled {
-                            egui::Color32::GREEN
+                            egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
                         } else {
-                            egui::Color32::RED
+                            egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
                         },
                         if data.upper_rom_enabled {
                             "ENABLED"
@@ -281,9 +280,9 @@ impl MemoryDebugWindow {
                     ui.label("Lower ROM:");
                     ui.colored_label(
                         if data.lower_rom_enabled {
-                            egui::Color32::GREEN
+                            egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
                         } else {
-                            egui::Color32::RED
+                            egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
                         },
                         if data.lower_rom_enabled {
                             "ENABLED"
@@ -299,9 +298,9 @@ impl MemoryDebugWindow {
                     ui.label("Upper ROM:");
                     ui.colored_label(
                         if data.upper_rom_enabled {
-                            egui::Color32::GREEN
+                            egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
                         } else {
-                            egui::Color32::RED
+                            egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
                         },
                         if data.upper_rom_enabled {
                             "ENABLED"
@@ -447,7 +446,10 @@ impl MemoryDebugWindow {
                                     let color = if is_current_instruction {
                                         egui::Color32::WHITE
                                     } else {
-                                        egui::Color32::YELLOW
+                                        self.get_memory_source_color(
+                                            instruction.address as usize,
+                                            &data.memory,
+                                        )
                                     };
                                     ui.colored_label(
                                         color,
@@ -458,7 +460,7 @@ impl MemoryDebugWindow {
                                     let color = if is_current_instruction {
                                         egui::Color32::WHITE
                                     } else {
-                                        egui::Color32::LIGHT_BLUE
+                                        egui::Color32::from_rgb(70, 130, 180) // Steel blue - better contrast
                                     };
                                     ui.colored_label(color, &instruction.instruction);
                                 });
