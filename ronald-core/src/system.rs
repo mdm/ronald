@@ -15,6 +15,7 @@ use bus::crtc::AnyCrtController;
 use bus::gate_array::AnyGateArray;
 use bus::{Bus, StandardBus};
 use cpu::Cpu;
+use instruction::{AlgorithmicDecoder, Decoder};
 use memory::{AnyMemory, MemManage, MemRead, MemWrite, MemoryCpc6128, MemoryCpcX64};
 
 #[derive(Default, Serialize, Deserialize)]
