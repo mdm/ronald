@@ -45,20 +45,24 @@ pub trait MemManage {
 pub struct Rom {
     #[serde(rename = "rom")]
     data: Vec<u8>,
+    address_mask: usize,
 }
 
 impl Rom {
     pub fn from_bytes(bytes: &[u8]) -> Rom {
         // TODO: better error handling
         // TODO: check ROM size (should be 16k)
-        Rom {
-            data: bytes.to_vec(),
-        }
+        let data = bytes.to_vec();
+        debug_assert!(data.len().is_power_of_two());
+        let address_mask = data.len() - 1;
+
+        Rom { data, address_mask }
     }
 }
 
 impl MemRead for Rom {
     fn read_byte(&self, address: usize) -> u8 {
+        let address = address & self.address_mask;
         let value = self.data[address];
         self.emit_debug_event(MemoryDebugEvent::MemoryRead { address, value });
 
@@ -89,13 +93,16 @@ impl Debuggable for Rom {
 pub struct Ram {
     #[serde(rename = "ram")]
     data: Vec<u8>,
+    address_mask: usize,
 }
 
 impl Ram {
     pub fn new(size: usize) -> Ram {
-        Ram {
-            data: vec![0; size],
-        }
+        let data = vec![0; size];
+        debug_assert!(data.len().is_power_of_two());
+        let address_mask = data.len() - 1;
+
+        Ram { data, address_mask }
     }
 
     pub fn from_bytes(size: usize, bytes: &[u8], offset: usize) -> Ram {
@@ -113,6 +120,7 @@ impl Ram {
 
 impl MemRead for Ram {
     fn read_byte(&self, address: usize) -> u8 {
+        let address = address & self.address_mask;
         let value = self.data[address];
         self.emit_debug_event(MemoryDebugEvent::MemoryRead { address, value });
 
@@ -122,6 +130,7 @@ impl MemRead for Ram {
 
 impl MemWrite for Ram {
     fn write_byte(&mut self, address: usize, value: u8) {
+        let address = address & self.address_mask;
         let was = self.data[address];
         self.data[address] = value;
         self.emit_debug_event(MemoryDebugEvent::MemoryWritten {

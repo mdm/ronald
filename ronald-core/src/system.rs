@@ -90,7 +90,7 @@ where
     type View = SystemDebugView;
 
     fn debug_view(&self) -> Self::View {
-        const COUNT: usize = 20;
+        const COUNT: usize = 100;
         let cpu = self.cpu.debug_view();
         let mut decoder = AlgorithmicDecoder::default();
         let mut disassembly = Vec::with_capacity(COUNT);

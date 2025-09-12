@@ -101,8 +101,7 @@ where
 
         self.cpu_debug_window
             .ui(ctx, debug_data.as_ref().map(|d| &d.cpu));
-        self.memory_debug_window
-            .ui(ctx, debug_data.as_ref().map(|d| &d.memory));
+        self.memory_debug_window.ui(ctx, debug_data.as_ref());
 
         ctx.request_repaint();
     }
