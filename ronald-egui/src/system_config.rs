@@ -1,6 +1,6 @@
 use eframe::egui;
 
-pub use ronald_core::system::{SystemConfig, CpcModel, CrtcType, DiskDrives};
+pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig};
 
 #[derive(Default)]
 pub struct SystemConfigModal {
@@ -13,7 +13,7 @@ impl SystemConfigModal {
         if !self.show {
             return false;
         }
-        
+
         let mut config_changed = false;
 
         // Initialize temp config if not already set
@@ -161,7 +161,7 @@ impl SystemConfigModal {
                 ui.add_space(10.0);
             });
         });
-        
+
         config_changed
     }
 }

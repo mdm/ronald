@@ -1,10 +1,4 @@
 [workspace]
 resolver = "2"
-members = [
-  "ronald-core",
-  "ronald-legacy-pixels",
-  "ronald-egui",
-  "ronald-legacy-web/ronald-wasm",
-]
+members = ["ronald-core", "ronald-egui"]
 default-members = ["ronald-egui"]
-
