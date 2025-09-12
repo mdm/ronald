@@ -165,6 +165,36 @@ impl MemoryDebugWindow {
         });
         ui.separator();
     }
+
+    fn render_color_configuration(&mut self, ui: &mut egui::Ui) {
+        ui.collapsing("Color Configuration", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Lower ROM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.lower_rom);
+
+                ui.separator();
+
+                ui.label("Upper ROM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.upper_rom);
+
+                ui.separator();
+
+                ui.label("RAM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.ram);
+
+                ui.separator();
+
+                ui.label("Extension RAM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.extension_ram);
+            });
+
+            if ui.button("Reset to defaults").clicked() {
+                self.memory_colors = MemorySourceColors::default();
+            }
+        });
+        ui.separator();
+    }
+
     pub fn ui(&mut self, ctx: &egui::Context, data: Option<&SystemDebugView>) {
         if !self.show {
             return;
@@ -178,6 +208,7 @@ impl MemoryDebugWindow {
             .show(ctx, |ui| {
                 if let Some(data) = data {
                     self.render_view_mode_selector(ui, &data.memory);
+                    self.render_color_configuration(ui);
                     self.render_memory_controls(ui);
                     self.render_memory_status(ui, &data.memory);
                     self.render_memory_view(ui, data);
