@@ -386,15 +386,15 @@ impl MemoryDebugWindow {
         let row_color = self.get_memory_source_color(addr, data);
 
         ui.horizontal(|ui| {
-            // Address column
-            ui.colored_label(egui::Color32::YELLOW, format!("{:04X}:", addr));
+            // Address column with color coding
+            ui.colored_label(row_color, format!("{:04X}:", addr));
 
             // Hex bytes
             for (i, byte) in chunk.iter().enumerate() {
                 if i == 8 {
                     ui.label(" ");
                 }
-                ui.colored_label(row_color, format!("{:02X}", byte));
+                ui.label(format!("{:02X}", byte));
             }
 
             ui.separator();
@@ -411,7 +411,7 @@ impl MemoryDebugWindow {
                 })
                 .collect();
 
-            ui.label(ascii);
+            ui.monospace(ascii);
         })
         .response
     }
