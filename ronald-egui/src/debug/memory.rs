@@ -9,6 +9,15 @@ pub struct MemoryDebugWindow {
     scroll_to_address: Option<usize>,
     address_input: String,
     view_mode: MemoryViewMode,
+    memory_colors: MemorySourceColors,
+}
+
+#[derive(Deserialize, Serialize)]
+struct MemorySourceColors {
+    lower_rom: egui::Color32,
+    upper_rom: egui::Color32,
+    ram: egui::Color32,
+    extension_ram: egui::Color32,
 }
 
 #[derive(Deserialize, Serialize, PartialEq)]
@@ -29,11 +38,62 @@ impl Default for MemoryDebugWindow {
             scroll_to_address: None,
             address_input: String::new(),
             view_mode: MemoryViewMode::CompositeRomRam,
+            memory_colors: MemorySourceColors::default(),
+        }
+    }
+}
+
+impl Default for MemorySourceColors {
+    fn default() -> Self {
+        Self {
+            lower_rom: egui::Color32::from_rgb(255, 165, 0), // Orange
+            upper_rom: egui::Color32::from_rgb(255, 20, 147), // Deep pink
+            ram: egui::Color32::from_rgb(50, 205, 50),       // Lime green
+            extension_ram: egui::Color32::from_rgb(135, 206, 235), // Sky blue
+        }
+    }
+}
+
+impl MemorySourceColors {
+    fn get_color_for_mode(&self, mode: &MemoryViewMode) -> egui::Color32 {
+        match mode {
+            MemoryViewMode::LowerRomOnly => self.lower_rom,
+            MemoryViewMode::UpperRomOnly(_) => self.upper_rom,
+            MemoryViewMode::RamOnly => self.ram,
+            MemoryViewMode::ExtensionRamOnly => self.extension_ram,
+            _ => egui::Color32::from_gray(200), // Default text color for composite modes and disassembly
         }
     }
 }
 
 impl MemoryDebugWindow {
+    fn get_memory_source_color(&self, addr: usize, data: &MemoryDebugView) -> egui::Color32 {
+        // Only apply source-based coloring for composite modes
+        match &self.view_mode {
+            MemoryViewMode::CompositeRomRam => {
+                // CPC 464 memory map:
+                // 0x0000-0x3FFF: Lower ROM (if enabled) or RAM
+                // 0x4000-0x7FFF: RAM
+                // 0x8000-0xBFFF: RAM
+                // 0xC000-0xFFFF: Upper ROM (if enabled) or RAM
+                if addr < 0x4000 && data.lower_rom_enabled {
+                    self.memory_colors.lower_rom
+                } else if addr >= 0xC000 && data.upper_rom_enabled {
+                    self.memory_colors.upper_rom
+                } else {
+                    self.memory_colors.ram
+                }
+            }
+            MemoryViewMode::CompositeRam => {
+                // All composite RAM uses RAM color
+                self.memory_colors.ram
+            }
+            _ => {
+                // For single-source modes, use the mode's color
+                self.memory_colors.get_color_for_mode(&self.view_mode)
+            }
+        }
+    }
     fn render_view_mode_selector(&mut self, ui: &mut egui::Ui, data: &MemoryDebugView) {
         ui.horizontal(|ui| {
             ui.label("View:");
@@ -64,28 +124,42 @@ impl MemoryDebugWindow {
                         MemoryViewMode::CompositeRam,
                         "Composite RAM",
                     );
+                    let lower_rom_mode = MemoryViewMode::LowerRomOnly;
+                    let color = self.memory_colors.get_color_for_mode(&lower_rom_mode);
                     ui.selectable_value(
                         &mut self.view_mode,
-                        MemoryViewMode::LowerRomOnly,
-                        "Lower ROM only",
+                        lower_rom_mode,
+                        egui::RichText::new("Lower ROM only").color(color),
                     );
 
                     // Display all available upper ROM banks
                     let mut banks: Vec<_> = data.upper_roms.keys().collect();
                     banks.sort();
                     for &bank in banks {
+                        let upper_rom_mode = MemoryViewMode::UpperRomOnly(bank);
+                        let color = self.memory_colors.get_color_for_mode(&upper_rom_mode);
                         ui.selectable_value(
                             &mut self.view_mode,
-                            MemoryViewMode::UpperRomOnly(bank),
-                            format!("Upper ROM #{:02X} only", bank),
+                            upper_rom_mode,
+                            egui::RichText::new(format!("Upper ROM #{:02X} only", bank))
+                                .color(color),
                         );
                     }
 
-                    ui.selectable_value(&mut self.view_mode, MemoryViewMode::RamOnly, "RAM only");
+                    let ram_mode = MemoryViewMode::RamOnly;
+                    let color = self.memory_colors.get_color_for_mode(&ram_mode);
                     ui.selectable_value(
                         &mut self.view_mode,
-                        MemoryViewMode::ExtensionRamOnly,
-                        "Extension RAM only",
+                        ram_mode,
+                        egui::RichText::new("RAM only").color(color),
+                    );
+
+                    let ext_ram_mode = MemoryViewMode::ExtensionRamOnly;
+                    let color = self.memory_colors.get_color_for_mode(&ext_ram_mode);
+                    ui.selectable_value(
+                        &mut self.view_mode,
+                        ext_ram_mode,
+                        egui::RichText::new("Extension RAM only").color(color),
                     );
                 });
         });
@@ -258,7 +332,7 @@ impl MemoryDebugWindow {
                 let target_addr = self.scroll_to_address.take();
                 for (row, chunk) in memory_data.chunks(16).enumerate() {
                     let addr = row * 16;
-                    let response = self.render_hex_row(ui, chunk, addr);
+                    let response = self.render_hex_row(ui, chunk, addr, data);
 
                     // If this row contains our target address, scroll to it immediately
                     if let Some(target) = target_addr
@@ -271,7 +345,15 @@ impl MemoryDebugWindow {
             });
     }
 
-    fn render_hex_row(&self, ui: &mut egui::Ui, chunk: &[u8], addr: usize) -> egui::Response {
+    fn render_hex_row(
+        &self,
+        ui: &mut egui::Ui,
+        chunk: &[u8],
+        addr: usize,
+        data: &MemoryDebugView,
+    ) -> egui::Response {
+        let row_color = self.get_memory_source_color(addr, data);
+
         ui.horizontal(|ui| {
             // Address column
             ui.colored_label(egui::Color32::YELLOW, format!("{:04X}:", addr));
@@ -281,15 +363,7 @@ impl MemoryDebugWindow {
                 if i == 8 {
                     ui.label(" ");
                 }
-                ui.label(format!("{:02X}", byte));
-            }
-
-            // Padding for incomplete rows
-            for i in chunk.len()..16 {
-                if i == 8 {
-                    ui.label(" ");
-                }
-                ui.label("  ");
+                ui.colored_label(row_color, format!("{:02X}", byte));
             }
 
             ui.separator();
@@ -305,7 +379,8 @@ impl MemoryDebugWindow {
                     }
                 })
                 .collect();
-            ui.monospace(ascii);
+
+            ui.label(ascii);
         })
         .response
     }
