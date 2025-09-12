@@ -69,22 +69,16 @@ impl Ram {
         }
     }
 
-    pub fn from_file(size: usize, path: &str, offset: usize) -> Ram {
+    pub fn from_bytes(size: usize, bytes: &[u8], offset: usize) -> Ram {
         // TODO: better error handling
         // TODO: check if ROM fits
         let mut ram = Ram::new(size);
-        let rom = read(path).unwrap_or_else(|_| panic!("ROM file \"{path}\" could not be read."));
 
-        for (i, byte) in rom.into_iter().enumerate() {
-            ram.write_byte(offset + i, byte);
+        for (i, byte) in bytes.iter().enumerate() {
+            ram.write_byte(offset + i, *byte);
         }
 
         ram
-    }
-
-    pub fn write_to_file(&self, file: &mut File) -> io::Result<()> {
-        // TODO: better error handling
-        io::Write::write_all(file, &self.data)
     }
 }
 
