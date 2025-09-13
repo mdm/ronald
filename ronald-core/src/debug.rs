@@ -64,6 +64,12 @@ impl SubscriberRegistry {
                 entry.subscriber.on_event(source, &event);
             }
         }
+
+        if let Some(list) = self.subscribers.get_mut(&DebugSource::Any) {
+            for entry in list {
+                entry.subscriber.on_event(source, &event);
+            }
+        }
     }
 }
 

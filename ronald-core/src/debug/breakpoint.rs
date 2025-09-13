@@ -14,6 +14,8 @@ pub trait Breakpoint {
     fn set_enabled(&mut self, enabled: bool);
     fn one_shot(&self) -> bool;
     fn set_one_shot(&mut self, one_shot: bool);
+    fn triggered(&self) -> bool;
+    fn set_triggered(&mut self, triggered: bool);
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +24,7 @@ pub struct Register8Breakpoint {
     pub value: Option<u8>,
     pub enabled: bool,
     pub one_shot: bool,
+    pub triggered: bool,
 }
 
 impl Register8Breakpoint {
@@ -31,6 +34,7 @@ impl Register8Breakpoint {
             value,
             enabled: true,
             one_shot: false,
+            triggered: false,
         }
     }
 }
@@ -64,6 +68,14 @@ impl Breakpoint for Register8Breakpoint {
     fn set_one_shot(&mut self, one_shot: bool) {
         self.one_shot = one_shot;
     }
+
+    fn triggered(&self) -> bool {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: bool) {
+        self.triggered = triggered;
+    }
 }
 
 impl fmt::Display for Register8Breakpoint {
@@ -81,6 +93,7 @@ pub struct Register16Breakpoint {
     pub value: Option<u16>,
     pub enabled: bool,
     pub one_shot: bool,
+    pub triggered: bool,
 }
 
 impl Register16Breakpoint {
@@ -90,6 +103,7 @@ impl Register16Breakpoint {
             value,
             enabled: true,
             one_shot: false,
+            triggered: false,
         }
     }
 
@@ -133,6 +147,14 @@ impl Breakpoint for Register16Breakpoint {
     fn set_one_shot(&mut self, one_shot: bool) {
         self.one_shot = one_shot;
     }
+
+    fn triggered(&self) -> bool {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: bool) {
+        self.triggered = triggered;
+    }
 }
 
 impl fmt::Display for Register16Breakpoint {
@@ -152,6 +174,7 @@ pub struct MemoryBreakpoint {
     pub value: Option<u8>,
     pub enabled: bool,
     pub one_shot: bool,
+    pub triggered: bool,
 }
 
 impl MemoryBreakpoint {
@@ -163,6 +186,7 @@ impl MemoryBreakpoint {
             value,
             enabled: true,
             one_shot: false,
+            triggered: false,
         }
     }
 }
@@ -202,6 +226,14 @@ impl Breakpoint for MemoryBreakpoint {
 
     fn set_one_shot(&mut self, one_shot: bool) {
         self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> bool {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: bool) {
+        self.triggered = triggered;
     }
 }
 
@@ -295,6 +327,22 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::Memory(bp) => bp.set_one_shot(one_shot),
         }
     }
+
+    fn triggered(&self) -> bool {
+        match self {
+            AnyBreakpoint::Register8(bp) => bp.triggered(),
+            AnyBreakpoint::Register16(bp) => bp.triggered(),
+            AnyBreakpoint::Memory(bp) => bp.triggered(),
+        }
+    }
+
+    fn set_triggered(&mut self, triggered: bool) {
+        match self {
+            AnyBreakpoint::Register8(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::Register16(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::Memory(bp) => bp.set_triggered(triggered),
+        }
+    }
 }
 
 impl fmt::Display for AnyBreakpoint {
@@ -367,6 +415,12 @@ impl BreakpointManager {
     pub fn clear_break_callback(&mut self) {
         self.break_callback = None;
     }
+
+    pub fn clear_triggered_flags(&mut self) {
+        for breakpoint in self.breakpoints.values_mut() {
+            breakpoint.set_triggered(false);
+        }
+    }
 }
 
 impl DebugEventSubscriber for BreakpointManager {
@@ -382,6 +436,11 @@ impl DebugEventSubscriber for BreakpointManager {
         }
 
         if let Some(id) = triggered_id {
+            // Mark this breakpoint as triggered
+            if let Some(breakpoint) = self.breakpoints.get_mut(&id) {
+                breakpoint.set_triggered(true);
+            }
+
             // Handle one-shot breakpoint removal
             let should_remove = self
                 .breakpoints

@@ -10,7 +10,7 @@ use web_sys;
 use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
-    debug::view::SystemDebugView,
+    debug::{breakpoint::BreakpointManager, view::SystemDebugView},
     system::SystemConfig,
 };
 
@@ -354,15 +354,28 @@ impl Frontend {
         // TODO: Allow running at 60Hz??? Does CPC really support that?
         while self.time_available >= 20_000 {
             log::trace!("Stepping emulator for 20_000 microseconds");
-            self.driver.step(20_000, &mut self.video, &mut self.audio);
+            let breakpoint_hit = self.driver.step(20_000, &mut self.video, &mut self.audio);
             self.time_available -= 20_000; // TODO:: take into account actually executed cycles
+
+            if breakpoint_hit {
+                log::debug!("Breakpoint hit, pausing emulation");
+                self.pause();
+                return;
+            }
         }
 
         if self.time_available > 0 {
             log::trace!("Stepping emulator for {} microseconds", self.time_available);
-            self.driver
-                .step(self.time_available, &mut self.video, &mut self.audio);
+            let breakpoint_hit =
+                self.driver
+                    .step(self.time_available, &mut self.video, &mut self.audio);
             self.time_available = 0; // TODO:: take into account actually executed cycles
+
+            if breakpoint_hit {
+                log::debug!("Breakpoint hit, pausing emulation");
+                self.pause();
+                return;
+            }
         }
 
         log::trace!(
@@ -431,5 +444,9 @@ impl Frontend {
 
     pub fn debug_view(&self) -> SystemDebugView {
         self.driver.debug_view()
+    }
+
+    pub fn breakpoint_manager(&mut self) -> &mut BreakpointManager {
+        self.driver.breakpoint_manager()
     }
 }

@@ -99,8 +99,9 @@ where
             _ => None,
         };
 
+        let breakpoint_manager = self.frontend.as_mut().map(|f| f.breakpoint_manager());
         self.cpu_debug_window
-            .ui(ctx, debug_data.as_ref().map(|d| &d.cpu));
+            .ui(ctx, debug_data.as_ref().map(|d| &d.cpu), breakpoint_manager);
         self.memory_debug_window.ui(ctx, debug_data.as_ref());
 
         ctx.request_repaint();

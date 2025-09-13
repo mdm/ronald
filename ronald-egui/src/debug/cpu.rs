@@ -1,15 +1,33 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use ronald_core::debug::view::CpuDebugView;
+use ronald_core::debug::{
+    breakpoint::{AnyBreakpoint, Breakpoint, BreakpointManager},
+    view::CpuDebugView,
+};
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct CpuDebugWindow {
     pub show: bool,
+    pc_breakpoint_input: String,
+}
+
+impl Default for CpuDebugWindow {
+    fn default() -> Self {
+        Self {
+            show: false,
+            pc_breakpoint_input: String::new(),
+        }
+    }
 }
 
 impl CpuDebugWindow {
-    pub fn ui(&mut self, ctx: &egui::Context, data: Option<&CpuDebugView>) {
+    pub fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        data: Option<&CpuDebugView>,
+        breakpoint_manager: Option<&mut BreakpointManager>,
+    ) {
         if !self.show {
             return;
         }
@@ -22,6 +40,11 @@ impl CpuDebugWindow {
             .show(ctx, |ui| {
                 if let Some(data) = data {
                     self.render_cpu_registers(ui, data);
+
+                    if let Some(bp_manager) = breakpoint_manager {
+                        ui.separator();
+                        self.render_breakpoints_section(ui, data, bp_manager);
+                    }
                 } else {
                     ui.label("No data available - emulator must be paused");
                 }
@@ -289,5 +312,87 @@ impl CpuDebugWindow {
                 );
             }
         });
+    }
+
+    fn render_breakpoints_section(
+        &mut self,
+        ui: &mut egui::Ui,
+        _data: &CpuDebugView,
+        breakpoint_manager: &mut BreakpointManager,
+    ) {
+        ui.heading("Breakpoints");
+
+        // PC breakpoint input
+        ui.horizontal(|ui| {
+            ui.label("PC:");
+            let text_edit = ui.text_edit_singleline(&mut self.pc_breakpoint_input);
+            let enter_pressed =
+                text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let add_clicked = ui.button("Add").clicked();
+
+            if enter_pressed || add_clicked {
+                if let Ok(addr) =
+                    u16::from_str_radix(self.pc_breakpoint_input.trim_start_matches("0x"), 16)
+                {
+                    breakpoint_manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(addr));
+                    self.pc_breakpoint_input.clear();
+                }
+            }
+        });
+
+        // List active CPU breakpoints only
+        ui.separator();
+        ui.label("Active CPU Breakpoints:");
+
+        let mut cpu_breakpoint_found = false;
+        let mut to_remove = None;
+        let mut to_toggle = None;
+
+        for (id, breakpoint) in
+            breakpoint_manager
+                .list_breakpoints()
+                .into_iter()
+                .filter(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::Register8(_) | AnyBreakpoint::Register16(_)
+                    )
+                })
+        {
+            cpu_breakpoint_found = true;
+
+            ui.horizontal(|ui| {
+                // Show red dot if breakpoint was triggered
+                if breakpoint.triggered() {
+                    ui.colored_label(egui::Color32::RED, "●");
+                }
+
+                // Toggle enabled/disabled
+                let mut enabled = breakpoint.enabled();
+                if ui.checkbox(&mut enabled, "").changed() {
+                    to_toggle = Some((id, enabled));
+                }
+
+                // Breakpoint description
+                ui.label(breakpoint.to_string());
+
+                // Remove button
+                if ui.button("Remove").clicked() {
+                    to_remove = Some(id);
+                }
+            });
+        }
+
+        if !cpu_breakpoint_found {
+            ui.label("No CPU breakpoints set");
+        }
+
+        // Apply changes (done outside the loop to avoid borrow issues)
+        if let Some((id, enabled)) = to_toggle {
+            breakpoint_manager.enable_breakpoint(id, enabled);
+        }
+        if let Some(id) = to_remove {
+            breakpoint_manager.remove_breakpoint(id);
+        }
     }
 }
