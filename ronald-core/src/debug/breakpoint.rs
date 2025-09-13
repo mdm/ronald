@@ -1,8 +1,10 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
+use std::rc::Rc;
 
 use crate::debug::event::{CpuDebugEvent, MemoryDebugEvent};
-use crate::debug::{DebugEvent, DebugEventSubscriber, DebugSource};
+use crate::debug::{subscribe, DebugEvent, DebugEventSubscriber, DebugSource, SubscriptionHandle};
 use crate::system::cpu::{Register16, Register8};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -19,7 +21,7 @@ pub trait Breakpoint {
 }
 
 #[derive(Debug, Clone)]
-pub struct Register8Breakpoint {
+pub struct CpuRegister8Breakpoint {
     pub register: Register8,
     pub value: Option<u8>,
     pub enabled: bool,
@@ -27,7 +29,7 @@ pub struct Register8Breakpoint {
     pub triggered: bool,
 }
 
-impl Register8Breakpoint {
+impl CpuRegister8Breakpoint {
     pub fn new(register: Register8, value: Option<u8>) -> Self {
         Self {
             register,
@@ -39,7 +41,7 @@ impl Register8Breakpoint {
     }
 }
 
-impl Breakpoint for Register8Breakpoint {
+impl Breakpoint for CpuRegister8Breakpoint {
     fn should_break(&self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Cpu {
             return false;
@@ -47,7 +49,7 @@ impl Breakpoint for Register8Breakpoint {
 
         match event {
             DebugEvent::Cpu(CpuDebugEvent::Register8Written { register, is, .. }) => {
-                *register == self.register && (self.value.is_none() || self.value == Some(*is))
+                *register == self.register && self.value.map_or(true, |v| v == *is)
             }
             _ => false,
         }
@@ -78,7 +80,7 @@ impl Breakpoint for Register8Breakpoint {
     }
 }
 
-impl fmt::Display for Register8Breakpoint {
+impl fmt::Display for CpuRegister8Breakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.value {
             Some(val) => write!(f, "{:?} = 0x{:02X}", self.register, val),
@@ -88,7 +90,7 @@ impl fmt::Display for Register8Breakpoint {
 }
 
 #[derive(Debug, Clone)]
-pub struct Register16Breakpoint {
+pub struct CpuRegister16Breakpoint {
     pub register: Register16,
     pub value: Option<u16>,
     pub enabled: bool,
@@ -96,7 +98,7 @@ pub struct Register16Breakpoint {
     pub triggered: bool,
 }
 
-impl Register16Breakpoint {
+impl CpuRegister16Breakpoint {
     pub fn new(register: Register16, value: Option<u16>) -> Self {
         Self {
             register,
@@ -118,7 +120,7 @@ impl Register16Breakpoint {
     }
 }
 
-impl Breakpoint for Register16Breakpoint {
+impl Breakpoint for CpuRegister16Breakpoint {
     fn should_break(&self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Cpu {
             return false;
@@ -126,7 +128,7 @@ impl Breakpoint for Register16Breakpoint {
 
         match event {
             DebugEvent::Cpu(CpuDebugEvent::Register16Written { register, is, .. }) => {
-                *register == self.register && (self.value.is_none() || self.value == Some(*is))
+                *register == self.register && self.value.map_or(true, |v| v == *is)
             }
             _ => false,
         }
@@ -157,7 +159,7 @@ impl Breakpoint for Register16Breakpoint {
     }
 }
 
-impl fmt::Display for Register16Breakpoint {
+impl fmt::Display for CpuRegister16Breakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.value {
             Some(val) => write!(f, "{:?} = 0x{:04X}", self.register, val),
@@ -201,12 +203,12 @@ impl Breakpoint for MemoryBreakpoint {
             DebugEvent::Memory(MemoryDebugEvent::MemoryRead { address, value, .. }) => {
                 self.on_read
                     && *address == self.address as usize
-                    && (self.value.is_none() || self.value == Some(*value))
+                    && self.value.map_or(true, |v| v == *value)
             }
             DebugEvent::Memory(MemoryDebugEvent::MemoryWritten { address, is, .. }) => {
                 self.on_write
                     && *address == self.address as usize
-                    && (self.value.is_none() || self.value == Some(*is))
+                    && self.value.map_or(true, |v| v == *is)
             }
             _ => false,
         }
@@ -255,26 +257,26 @@ impl fmt::Display for MemoryBreakpoint {
 
 #[derive(Debug, Clone)]
 pub enum AnyBreakpoint {
-    Register8(Register8Breakpoint),
-    Register16(Register16Breakpoint),
+    CpuRegister8(CpuRegister8Breakpoint),
+    CpuRegister16(CpuRegister16Breakpoint),
     Memory(MemoryBreakpoint),
 }
 
 impl AnyBreakpoint {
     pub fn pc_breakpoint(address: u16) -> Self {
-        Self::Register16(Register16Breakpoint::pc_breakpoint(address))
+        Self::CpuRegister16(CpuRegister16Breakpoint::pc_breakpoint(address))
     }
 
     pub fn pc_step() -> Self {
-        Self::Register16(Register16Breakpoint::pc_step())
+        Self::CpuRegister16(CpuRegister16Breakpoint::pc_step())
     }
 
     pub fn register8_breakpoint(register: Register8, value: Option<u8>) -> Self {
-        Self::Register8(Register8Breakpoint::new(register, value))
+        Self::CpuRegister8(CpuRegister8Breakpoint::new(register, value))
     }
 
     pub fn register16_breakpoint(register: Register16, value: Option<u16>) -> Self {
-        Self::Register16(Register16Breakpoint::new(register, value))
+        Self::CpuRegister16(CpuRegister16Breakpoint::new(register, value))
     }
 
     pub fn memory_breakpoint(
@@ -290,56 +292,56 @@ impl AnyBreakpoint {
 impl Breakpoint for AnyBreakpoint {
     fn should_break(&self, source: DebugSource, event: &DebugEvent) -> bool {
         match self {
-            AnyBreakpoint::Register8(bp) => bp.should_break(source, event),
-            AnyBreakpoint::Register16(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CpuRegister8(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CpuRegister16(bp) => bp.should_break(source, event),
             AnyBreakpoint::Memory(bp) => bp.should_break(source, event),
         }
     }
 
     fn enabled(&self) -> bool {
         match self {
-            AnyBreakpoint::Register8(bp) => bp.enabled(),
-            AnyBreakpoint::Register16(bp) => bp.enabled(),
+            AnyBreakpoint::CpuRegister8(bp) => bp.enabled(),
+            AnyBreakpoint::CpuRegister16(bp) => bp.enabled(),
             AnyBreakpoint::Memory(bp) => bp.enabled(),
         }
     }
 
     fn set_enabled(&mut self, enabled: bool) {
         match self {
-            AnyBreakpoint::Register8(bp) => bp.set_enabled(enabled),
-            AnyBreakpoint::Register16(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CpuRegister8(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CpuRegister16(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::Memory(bp) => bp.set_enabled(enabled),
         }
     }
 
     fn one_shot(&self) -> bool {
         match self {
-            AnyBreakpoint::Register8(bp) => bp.one_shot(),
-            AnyBreakpoint::Register16(bp) => bp.one_shot(),
+            AnyBreakpoint::CpuRegister8(bp) => bp.one_shot(),
+            AnyBreakpoint::CpuRegister16(bp) => bp.one_shot(),
             AnyBreakpoint::Memory(bp) => bp.one_shot(),
         }
     }
 
     fn set_one_shot(&mut self, one_shot: bool) {
         match self {
-            AnyBreakpoint::Register8(bp) => bp.set_one_shot(one_shot),
-            AnyBreakpoint::Register16(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CpuRegister8(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CpuRegister16(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::Memory(bp) => bp.set_one_shot(one_shot),
         }
     }
 
     fn triggered(&self) -> bool {
         match self {
-            AnyBreakpoint::Register8(bp) => bp.triggered(),
-            AnyBreakpoint::Register16(bp) => bp.triggered(),
+            AnyBreakpoint::CpuRegister8(bp) => bp.triggered(),
+            AnyBreakpoint::CpuRegister16(bp) => bp.triggered(),
             AnyBreakpoint::Memory(bp) => bp.triggered(),
         }
     }
 
     fn set_triggered(&mut self, triggered: bool) {
         match self {
-            AnyBreakpoint::Register8(bp) => bp.set_triggered(triggered),
-            AnyBreakpoint::Register16(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CpuRegister8(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CpuRegister16(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::Memory(bp) => bp.set_triggered(triggered),
         }
     }
@@ -348,51 +350,49 @@ impl Breakpoint for AnyBreakpoint {
 impl fmt::Display for AnyBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AnyBreakpoint::Register8(bp) => bp.fmt(f),
-            AnyBreakpoint::Register16(bp) => bp.fmt(f),
+            AnyBreakpoint::CpuRegister8(bp) => bp.fmt(f),
+            AnyBreakpoint::CpuRegister16(bp) => bp.fmt(f),
             AnyBreakpoint::Memory(bp) => bp.fmt(f),
         }
     }
 }
 
-pub type BreakCallback = fn(BreakpointId, &DebugEvent);
+type SharedBreakpoints = Rc<RefCell<HashMap<BreakpointId, AnyBreakpoint>>>;
 
 pub struct BreakpointManager {
-    breakpoints: HashMap<BreakpointId, AnyBreakpoint>,
+    breakpoints: SharedBreakpoints,
     next_id: usize,
-    break_callback: Option<BreakCallback>,
+    subscription: SubscriptionHandle,
 }
 
 impl BreakpointManager {
     pub fn new() -> Self {
+        let breakpoints = Rc::new(RefCell::new(HashMap::new()));
+        let subscriber = BreakpointSubscriber {
+            breakpoints: breakpoints.clone(),
+        };
+        let subscription = subscribe(DebugSource::Any, Box::new(subscriber));
+
         Self {
-            breakpoints: HashMap::new(),
+            breakpoints,
             next_id: 0,
-            break_callback: None,
+            subscription,
         }
     }
 
     pub fn add_breakpoint(&mut self, breakpoint: AnyBreakpoint) -> BreakpointId {
         let id = BreakpointId(self.next_id);
         self.next_id += 1;
-        self.breakpoints.insert(id, breakpoint);
+        self.breakpoints.borrow_mut().insert(id, breakpoint);
         id
     }
 
     pub fn remove_breakpoint(&mut self, id: BreakpointId) -> bool {
-        self.breakpoints.remove(&id).is_some()
-    }
-
-    pub fn get_breakpoint(&self, id: BreakpointId) -> Option<&AnyBreakpoint> {
-        self.breakpoints.get(&id)
-    }
-
-    pub fn get_breakpoint_mut(&mut self, id: BreakpointId) -> Option<&mut AnyBreakpoint> {
-        self.breakpoints.get_mut(&id)
+        self.breakpoints.borrow_mut().remove(&id).is_some()
     }
 
     pub fn enable_breakpoint(&mut self, id: BreakpointId, enabled: bool) -> bool {
-        if let Some(breakpoint) = self.breakpoints.get_mut(&id) {
+        if let Some(breakpoint) = self.breakpoints.borrow_mut().get_mut(&id) {
             breakpoint.set_enabled(enabled);
             true
         } else {
@@ -400,62 +400,36 @@ impl BreakpointManager {
         }
     }
 
-    pub fn list_breakpoints(&self) -> Vec<(BreakpointId, &AnyBreakpoint)> {
-        self.breakpoints.iter().map(|(&id, bp)| (id, bp)).collect()
+    pub fn with_breakpoint(
+        &self,
+        id: BreakpointId,
+        mut callback: impl FnMut((BreakpointId, Option<&AnyBreakpoint>)),
+    ) {
+        callback((id, self.breakpoints.borrow().get(&id)));
+    }
+
+    pub fn with_breakpoints(&self, mut callback: impl FnMut((BreakpointId, &AnyBreakpoint))) {
+        for (id, bp) in self.breakpoints.borrow().iter() {
+            callback((*id, bp));
+        }
     }
 
     pub fn clear_all(&mut self) {
-        self.breakpoints.clear();
+        self.breakpoints.borrow_mut().clear();
     }
 
-    pub fn set_break_callback(&mut self, callback: BreakCallback) {
-        self.break_callback = Some(callback);
+    pub fn any_triggered(&self) -> bool {
+        self.breakpoints.borrow().values().any(|bp| bp.triggered())
     }
 
-    pub fn clear_break_callback(&mut self) {
-        self.break_callback = None;
-    }
+    pub fn prepare_breakpoints(&mut self) {
+        // Remove triggered one-shot breakpoints
+        self.breakpoints
+            .borrow_mut()
+            .retain(|_id, bp| !bp.triggered() || !bp.one_shot());
 
-    pub fn clear_triggered_flags(&mut self) {
-        for breakpoint in self.breakpoints.values_mut() {
+        for (_id, breakpoint) in self.breakpoints.borrow_mut().iter_mut() {
             breakpoint.set_triggered(false);
-        }
-    }
-}
-
-impl DebugEventSubscriber for BreakpointManager {
-    fn on_event(&mut self, source: DebugSource, event: &DebugEvent) {
-        let mut triggered_id = None;
-
-        // Find the first triggered breakpoint
-        for (&id, breakpoint) in &self.breakpoints {
-            if breakpoint.should_break(source, event) {
-                triggered_id = Some(id);
-                break;
-            }
-        }
-
-        if let Some(id) = triggered_id {
-            // Mark this breakpoint as triggered
-            if let Some(breakpoint) = self.breakpoints.get_mut(&id) {
-                breakpoint.set_triggered(true);
-            }
-
-            // Handle one-shot breakpoint removal
-            let should_remove = self
-                .breakpoints
-                .get(&id)
-                .map(|bp| bp.one_shot())
-                .unwrap_or(false);
-
-            if should_remove {
-                self.breakpoints.remove(&id);
-            }
-
-            // Call the callback
-            if let Some(callback) = self.break_callback {
-                callback(id, event);
-            }
         }
     }
 }
@@ -463,6 +437,20 @@ impl DebugEventSubscriber for BreakpointManager {
 impl Default for BreakpointManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+struct BreakpointSubscriber {
+    breakpoints: SharedBreakpoints,
+}
+
+impl DebugEventSubscriber for BreakpointSubscriber {
+    fn on_event(&mut self, source: DebugSource, event: &DebugEvent) {
+        for (_id, breakpoint) in self.breakpoints.borrow_mut().iter_mut() {
+            if breakpoint.should_break(source, event) {
+                breakpoint.set_triggered(true);
+            }
+        }
     }
 }
 
@@ -670,20 +658,20 @@ mod tests {
     #[test]
     fn test_breakpoint_manager_add_remove() {
         let mut manager = BreakpointManager::new();
-        assert_eq!(manager.list_breakpoints().len(), 0);
+        assert_eq!(manager.breakpoints.borrow().len(), 0);
 
         let id1 = manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(0x1000));
         let id2 = manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(0x2000));
-        assert_eq!(manager.list_breakpoints().len(), 2);
+        assert_eq!(manager.breakpoints.borrow().len(), 2);
 
         assert!(manager.remove_breakpoint(id1));
-        assert_eq!(manager.list_breakpoints().len(), 1);
+        assert_eq!(manager.breakpoints.borrow().len(), 1);
 
         assert!(!manager.remove_breakpoint(id1)); // Already removed
-        assert_eq!(manager.list_breakpoints().len(), 1);
+        assert_eq!(manager.breakpoints.borrow().len(), 1);
 
         assert!(manager.remove_breakpoint(id2));
-        assert_eq!(manager.list_breakpoints().len(), 0);
+        assert_eq!(manager.breakpoints.borrow().len(), 0);
     }
 
     #[test]
@@ -750,12 +738,8 @@ mod tests {
         let mut manager = BreakpointManager::new();
         let mut callback_called = false;
 
-        manager.set_break_callback(|_, _| {
-            // Can't capture mutable reference in this context for the test
-        });
-
         let id = manager.add_breakpoint(AnyBreakpoint::pc_step());
-        assert_eq!(manager.list_breakpoints().len(), 1);
+        assert_eq!(manager.breakpoints.borrow().len(), 1);
         assert!(manager.get_breakpoint(id).unwrap().one_shot());
 
         let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
@@ -767,7 +751,7 @@ mod tests {
         manager.on_event(DebugSource::Cpu, &event);
 
         // One-shot breakpoint should be removed after triggering
-        assert_eq!(manager.list_breakpoints().len(), 0);
+        assert_eq!(manager.breakpoints.borrow().len(), 0);
         assert!(manager.get_breakpoint(id).is_none());
     }
 }

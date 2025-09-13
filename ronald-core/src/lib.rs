@@ -3,9 +3,8 @@ use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 use constants::KeyDefinition;
 use debug::{
     breakpoint::{Breakpoint, BreakpointManager},
-    subscribe,
     view::SystemDebugView,
-    DebugSource, Snapshotable,
+    Snapshotable,
 };
 use system::bus::{crtc::AnyCrtController, gate_array::AnyGateArray, StandardBus};
 use system::cpu::ZilogZ80;
@@ -35,7 +34,7 @@ pub struct Driver {
         StandardBus<AnyCrtController, AnyGateArray>,
     >,
     keys: HashMap<&'static str, KeyDefinition>,
-    breakpoint_manager: Rc<RefCell<BreakpointManager>>,
+    breakpoint_manager: BreakpointManager,
 }
 
 impl Driver {
@@ -44,7 +43,7 @@ impl Driver {
         Self {
             system: AmstradCpc::default(),
             keys,
-            breakpoint_manager: BreakpointManager::new(),
+            breakpoint_manager: BreakpointManager::default(),
         }
     }
 
@@ -53,7 +52,7 @@ impl Driver {
         Self {
             system: config.clone().into(),
             keys,
-            breakpoint_manager: BreakpointManager::new(),
+            breakpoint_manager: BreakpointManager::default(),
         }
     }
 
@@ -63,43 +62,18 @@ impl Driver {
         video: &mut impl VideoSink,
         audio: &mut impl AudioSink,
     ) -> bool {
-        // Clear triggered flags at the beginning of each step
-        self.breakpoint_manager.clear_triggered_flags();
+        self.breakpoint_manager.prepare_breakpoints();
 
         let mut elapsed_microseconds = 0;
         while elapsed_microseconds < usecs {
             // TODO: tie this to vsync instead of fixed value
             elapsed_microseconds += self.system.emulate(video, audio) as usize;
 
-            // Check if any breakpoint was triggered during emulation
-            let breakpoint_hit = self
-                .breakpoint_manager
-                .list_breakpoints()
-                .iter()
-                .any(|(_, bp)| bp.triggered());
-
-            if breakpoint_hit {
+            if self.breakpoint_manager.any_triggered() {
                 return true;
             }
         }
         false // No breakpoint hit
-    }
-
-    pub fn step_single(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> bool {
-        // Clear triggered flags
-        self.breakpoint_manager.clear_triggered_flags();
-
-        self.system.emulate(video, audio);
-
-        // Check if any breakpoint was triggered during emulation
-        self.breakpoint_manager
-            .list_breakpoints()
-            .iter()
-            .any(|(_, bp)| bp.triggered())
-    }
-
-    pub fn activate_debugger(&self) {
-        todo!()
     }
 
     pub fn press_key(&mut self, key: &str) {
