@@ -166,7 +166,7 @@ impl MemoryDebugWindow {
     }
 
     fn render_color_configuration(&mut self, ui: &mut egui::Ui) {
-        ui.collapsing("Color Configuration", |ui| {
+        ui.collapsing("Address Color Coding", |ui| {
             ui.horizontal(|ui| {
                 ui.label("Lower ROM:");
                 ui.color_edit_button_srgba(&mut self.memory_colors.lower_rom);
@@ -187,7 +187,7 @@ impl MemoryDebugWindow {
                 ui.color_edit_button_srgba(&mut self.memory_colors.extension_ram);
             });
 
-            if ui.button("Reset to defaults").clicked() {
+            if ui.button("Restore Defaults").clicked() {
                 self.memory_colors = MemorySourceColors::default();
             }
         });
