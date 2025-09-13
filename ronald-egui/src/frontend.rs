@@ -36,6 +36,7 @@ pub struct Frontend {
     time_available: usize,
     can_interact: bool,
     paused: bool,
+    breakpoint_hit: bool,
     picked_file_disk_a: Shared<Option<File>>,
     picked_file_disk_b: Shared<Option<File>>,
     picked_file_tape: Shared<Option<File>>,
@@ -71,6 +72,7 @@ impl Frontend {
             time_available: 0,
             can_interact: true,
             paused: false,
+            breakpoint_hit: false,
             picked_file_disk_a: shared(None),
             picked_file_disk_b: shared(None),
             picked_file_tape: shared(None),
@@ -226,13 +228,13 @@ impl Frontend {
         self.handle_picked_files();
 
         #[cfg(target_arch = "wasm32")]
-        if self.has_window_focus() && self.can_interact {
+        if self.has_window_focus() && self.can_interact && !self.breakpoint_hit {
             self.resume();
         } else {
             self.pause();
         }
         #[cfg(not(target_arch = "wasm32"))]
-        if self.can_interact {
+        if self.can_interact && !self.breakpoint_hit {
             self.resume();
         } else {
             self.pause();
@@ -354,28 +356,16 @@ impl Frontend {
         // TODO: Allow running at 60Hz??? Does CPC really support that?
         while self.time_available >= 20_000 {
             log::trace!("Stepping emulator for 20_000 microseconds");
-            let breakpoint_hit = self.driver.step(20_000, &mut self.video, &mut self.audio);
+            self.breakpoint_hit = self.driver.step(20_000, &mut self.video, &mut self.audio);
             self.time_available -= 20_000; // TODO:: take into account actually executed cycles
-
-            if breakpoint_hit {
-                log::debug!("Breakpoint hit, pausing emulation");
-                self.pause();
-                return;
-            }
         }
 
         if self.time_available > 0 {
             log::trace!("Stepping emulator for {} microseconds", self.time_available);
-            let breakpoint_hit =
+            self.breakpoint_hit =
                 self.driver
                     .step(self.time_available, &mut self.video, &mut self.audio);
             self.time_available = 0; // TODO:: take into account actually executed cycles
-
-            if breakpoint_hit {
-                log::debug!("Breakpoint hit, pausing emulation");
-                self.pause();
-                return;
-            }
         }
 
         log::trace!(

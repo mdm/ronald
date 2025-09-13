@@ -348,17 +348,14 @@ impl CpuDebugWindow {
         let mut to_remove = None;
         let mut to_toggle = None;
 
-        for (id, breakpoint) in
-            breakpoint_manager
-                .list_breakpoints()
-                .into_iter()
-                .filter(|(_, bp)| {
-                    matches!(
-                        bp,
-                        AnyBreakpoint::Register8(_) | AnyBreakpoint::Register16(_)
-                    )
-                })
-        {
+        breakpoint_manager.with_breakpoints(|(id, breakpoint)| {
+            if !matches!(
+                breakpoint,
+                AnyBreakpoint::CpuRegister8(_) | AnyBreakpoint::CpuRegister16(_)
+            ) {
+                return;
+            }
+
             cpu_breakpoint_found = true;
 
             ui.horizontal(|ui| {
@@ -381,7 +378,7 @@ impl CpuDebugWindow {
                     to_remove = Some(id);
                 }
             });
-        }
+        });
 
         if !cpu_breakpoint_found {
             ui.label("No CPU breakpoints set");
