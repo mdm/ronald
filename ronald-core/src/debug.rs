@@ -2,11 +2,12 @@ use std::{cell::RefCell, collections::HashMap};
 
 use event::DebugEvent;
 
+pub mod breakpoint;
 pub mod event;
 pub mod view;
 
 pub trait DebugEventSubscriber {
-    fn on_event(&self, source: DebugSource, event: &DebugEvent);
+    fn on_event(&mut self, source: DebugSource, event: &DebugEvent);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,8 +58,8 @@ impl SubscriberRegistry {
         }
     }
 
-    fn emit(&self, source: DebugSource, event: DebugEvent) {
-        if let Some(list) = self.subscribers.get(&source) {
+    fn emit(&mut self, source: DebugSource, event: DebugEvent) {
+        if let Some(list) = self.subscribers.get_mut(&source) {
             for entry in list {
                 entry.subscriber.on_event(source, &event);
             }
@@ -71,7 +72,7 @@ thread_local! {
 }
 
 fn emit_event(source: DebugSource, event: DebugEvent) {
-    REGISTRY.with(|reg| reg.borrow().emit(source, event));
+    REGISTRY.with(|reg| reg.borrow_mut().emit(source, event));
 }
 
 pub fn subscribe(source: DebugSource, sub: Box<dyn DebugEventSubscriber>) -> SubscriptionHandle {
@@ -131,7 +132,7 @@ impl TestSubscriber {
 
 #[cfg(test)]
 impl DebugEventSubscriber for TestSubscriber {
-    fn on_event(&self, source: DebugSource, event: &DebugEvent) {
+    fn on_event(&mut self, source: DebugSource, event: &DebugEvent) {
         self.events.borrow_mut().push((source, event.clone()));
     }
 }
@@ -170,7 +171,10 @@ mod tests {
 
         emit_event(
             DebugSource::Memory,
-            DebugEvent::Memory(event::MemoryDebugEvent::Test),
+            DebugEvent::Memory(event::MemoryDebugEvent::MemoryRead {
+                address: 0x1000,
+                value: 0x42,
+            }),
         );
 
         assert_eq!(events1.borrow().len(), 1);
@@ -195,7 +199,10 @@ mod tests {
         );
         emit_event(
             DebugSource::Memory,
-            DebugEvent::Memory(event::MemoryDebugEvent::Test),
+            DebugEvent::Memory(event::MemoryDebugEvent::MemoryRead {
+                address: 0x1000,
+                value: 0x42,
+            }),
         );
 
         let events = events.borrow();
