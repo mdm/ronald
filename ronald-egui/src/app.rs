@@ -1,7 +1,6 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
-
-use ronald_core::system::AmstradCpc;
+use web_time::Instant;
 
 use crate::debug::{CpuDebugWindow, MemoryDebugWindow};
 use crate::frontend::Frontend;
@@ -11,7 +10,7 @@ use crate::system_config::SystemConfigModal;
 
 pub use ronald_core::system::SystemConfig;
 
-pub use crate::key_mapper::{KeyMap, KeyMapStore};
+pub use crate::key_mapper::KeyMapStore;
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 
 #[derive(Deserialize, Serialize)]
@@ -77,6 +76,7 @@ where
     S: KeyMapStore,
 {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        // let start = Instant::now();
         egui_extras::install_image_loaders(ctx);
 
         self.render_menu_bar(ctx);
@@ -94,17 +94,21 @@ where
         }
 
         // Render debug windows with current debug data when emulator is paused
-        let debug_data = match &self.frontend {
-            Some(frontend) if frontend.is_paused() => Some(frontend.debug_view()),
-            _ => None,
-        };
+        if let Some(frontend) = &mut self.frontend {
+            // if frontend.is_paused() {
+            let debug_data = frontend.debug_view();
+            let breakpoint_manager = frontend.breakpoint_manager();
 
-        let breakpoint_manager = self.frontend.as_mut().map(|f| f.breakpoint_manager());
-        self.cpu_debug_window
-            .ui(ctx, debug_data.as_ref().map(|d| &d.cpu), breakpoint_manager);
-        self.memory_debug_window.ui(ctx, debug_data.as_ref());
+            self.cpu_debug_window
+                .ui(ctx, &debug_data.cpu, breakpoint_manager);
+            self.memory_debug_window
+                .ui(ctx, &debug_data, breakpoint_manager);
+            // }
+        }
 
         ctx.request_repaint();
+        // let elapsed = Instant::now() - start;
+        // log::debug!("Frame time: {} ms", elapsed.as_micros());
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

@@ -1,7 +1,10 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use ronald_core::debug::view::{MemoryDebugView, SystemDebugView};
+use ronald_core::debug::{
+    breakpoint::{AnyBreakpoint, Breakpoint, BreakpointId, BreakpointManager},
+    view::{MemoryDebugView, SystemDebugView},
+};
 
 #[derive(Deserialize, Serialize)]
 pub struct MemoryDebugWindow {
@@ -10,6 +13,7 @@ pub struct MemoryDebugWindow {
     address_input: String,
     view_mode: MemoryViewMode,
     memory_colors: MemorySourceColors,
+    pc_breakpoint_input: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -39,6 +43,7 @@ impl Default for MemoryDebugWindow {
             address_input: String::new(),
             view_mode: MemoryViewMode::CompositeRomRam,
             memory_colors: MemorySourceColors::default(),
+            pc_breakpoint_input: String::new(),
         }
     }
 }
@@ -194,7 +199,12 @@ impl MemoryDebugWindow {
         ui.separator();
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, data: Option<&SystemDebugView>) {
+    pub fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        data: &SystemDebugView,
+        breakpoint_manager: &mut BreakpointManager,
+    ) {
         if !self.show {
             return;
         }
@@ -205,15 +215,11 @@ impl MemoryDebugWindow {
             .default_size([600.0, 500.0])
             .resizable(false)
             .show(ctx, |ui| {
-                if let Some(data) = data {
-                    self.render_view_mode_selector(ui, &data.memory);
-                    self.render_color_configuration(ui);
-                    self.render_memory_controls(ui);
-                    self.render_memory_status(ui, &data.memory);
-                    self.render_memory_view(ui, data);
-                } else {
-                    ui.label("No data available - emulator must be paused");
-                }
+                self.render_view_mode_selector(ui, &data.memory);
+                self.render_color_configuration(ui);
+                self.render_memory_controls(ui);
+                self.render_memory_status(ui, &data.memory);
+                self.render_memory_view(ui, data, breakpoint_manager);
             });
         self.show = open;
     }
@@ -325,10 +331,15 @@ impl MemoryDebugWindow {
         }
     }
 
-    fn render_memory_view(&mut self, ui: &mut egui::Ui, data: &SystemDebugView) {
+    fn render_memory_view(
+        &mut self,
+        ui: &mut egui::Ui,
+        data: &SystemDebugView,
+        breakpoint_manager: &mut BreakpointManager,
+    ) {
         match &self.view_mode {
             MemoryViewMode::Disassembly => {
-                self.render_disassembly_view(ui, data);
+                self.render_disassembly_view(ui, data, breakpoint_manager);
             }
             _ => {
                 self.render_memory_hex_dump(ui, &data.memory);
@@ -419,16 +430,39 @@ impl MemoryDebugWindow {
         .response
     }
 
-    fn render_disassembly_view(&mut self, ui: &mut egui::Ui, data: &SystemDebugView) {
+    fn render_disassembly_view(
+        &mut self,
+        ui: &mut egui::Ui,
+        data: &SystemDebugView,
+        breakpoint_manager: &mut BreakpointManager,
+    ) {
         ui.label("Disassembly:");
 
+        // Add PC breakpoint controls
+        self.render_pc_breakpoint_controls(ui, breakpoint_manager);
+        ui.separator();
+
+        // Build a HashMap from PC addresses to BreakpointIds for efficient lookup
+        let mut pc_breakpoints: std::collections::HashMap<u16, BreakpointId> =
+            std::collections::HashMap::new();
+        breakpoint_manager.with_breakpoints(|(id, breakpoint)| {
+            if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
+                && let Some(addr) = bp.value
+            {
+                pc_breakpoints.insert(addr, id);
+            }
+        });
+
+        ui.label("💡 Click on addresses to toggle PC breakpoints");
+
         egui::ScrollArea::vertical()
-            .max_height(400.0)
+            .max_height(350.0)
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
 
                 let target_addr = self.scroll_to_address.take();
+                let mut to_toggle = None;
 
                 use egui_extras::{Column, TableBuilder};
                 TableBuilder::new(ui)
@@ -439,6 +473,7 @@ impl MemoryDebugWindow {
                         for instruction in &data.disassembly {
                             let is_current_instruction =
                                 instruction.address == data.cpu.register_pc;
+                            let has_breakpoint = pc_breakpoints.contains_key(&instruction.address);
 
                             body.row(18.0, |mut row| {
                                 // Highlight the entire row if it's the current instruction
@@ -447,7 +482,7 @@ impl MemoryDebugWindow {
                                 }
 
                                 row.col(|ui| {
-                                    let color = if is_current_instruction {
+                                    let mut color = if is_current_instruction {
                                         egui::Color32::WHITE
                                     } else {
                                         self.get_memory_source_color(
@@ -455,11 +490,23 @@ impl MemoryDebugWindow {
                                             &data.memory,
                                         )
                                     };
-                                    ui.colored_label(
-                                        color,
-                                        format!("{:04X}:", instruction.address),
-                                    );
+
+                                    let mut addr_text = format!("  {:04X}:", instruction.address);
+
+                                    // Add breakpoint indicator and change color
+                                    if has_breakpoint {
+                                        addr_text = format!("● {:04X}:", instruction.address);
+                                        if !is_current_instruction {
+                                            color = egui::Color32::from_rgb(255, 100, 100); // Light red
+                                        }
+                                    }
+
+                                    // Make address clickable to toggle breakpoint
+                                    if ui.colored_label(color, &addr_text).clicked() {
+                                        to_toggle = Some(instruction.address);
+                                    }
                                 });
+
                                 row.col(|ui| {
                                     let color = if is_current_instruction {
                                         egui::Color32::WHITE
@@ -468,6 +515,7 @@ impl MemoryDebugWindow {
                                     };
                                     ui.colored_label(color, &instruction.instruction);
                                 });
+
                                 row.col(|ui| {
                                     let mut hex_bytes = String::new();
                                     for i in 0..instruction.length {
@@ -497,6 +545,85 @@ impl MemoryDebugWindow {
                             });
                         }
                     });
+
+                // Handle breakpoint toggling after the table to avoid borrowing issues
+                if let Some(addr) = to_toggle {
+                    if let Some(&id) = pc_breakpoints.get(&addr) {
+                        // Remove existing breakpoint
+                        breakpoint_manager.remove_breakpoint(id);
+                    } else {
+                        // Add new breakpoint
+                        breakpoint_manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(addr));
+                    }
+                }
             });
+    }
+
+    fn render_pc_breakpoint_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        breakpoint_manager: &mut BreakpointManager,
+    ) {
+        ui.heading("PC Breakpoints");
+
+        // PC breakpoint input
+        ui.horizontal(|ui| {
+            ui.label("PC:");
+            let text_edit = ui.text_edit_singleline(&mut self.pc_breakpoint_input);
+            let enter_pressed =
+                text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let add_clicked = ui.button("Add").clicked();
+
+            if (enter_pressed || add_clicked)
+                && let Ok(addr) =
+                    u16::from_str_radix(self.pc_breakpoint_input.trim_start_matches("0x"), 16)
+            {
+                breakpoint_manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(addr));
+                self.pc_breakpoint_input.clear();
+            }
+        });
+
+        // List active PC breakpoints
+        ui.separator();
+        ui.label("Active PC Breakpoints:");
+
+        let mut pc_breakpoint_found = false;
+        let mut to_remove = None;
+        let mut to_toggle = None;
+
+        breakpoint_manager.with_breakpoints(|(id, breakpoint)| {
+            if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
+                && bp.value.is_some()
+            {
+                pc_breakpoint_found = true;
+
+                ui.horizontal(|ui| {
+                    if breakpoint.triggered() {
+                        ui.colored_label(egui::Color32::RED, "●");
+                    }
+
+                    let mut enabled = breakpoint.enabled();
+                    if ui.checkbox(&mut enabled, breakpoint.to_string()).changed() {
+                        to_toggle = Some((id, enabled));
+                    }
+
+                    if ui.button("Remove").clicked() {
+                        to_remove = Some(id);
+                    }
+                });
+            }
+        });
+
+        if !pc_breakpoint_found {
+            ui.label("No PC breakpoints set");
+        }
+
+        // Apply changes outside the with_breakpoints closure
+        if let Some((id, enabled)) = to_toggle {
+            breakpoint_manager.enable_breakpoint(id, !enabled);
+        }
+        if let Some(id) = to_remove {
+            breakpoint_manager.remove_breakpoint(id);
+        }
     }
 }
