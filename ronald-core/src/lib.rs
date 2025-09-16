@@ -35,6 +35,7 @@ pub struct Driver {
     >,
     keys: HashMap<&'static str, KeyDefinition>,
     breakpoint_manager: BreakpointManager,
+    cached_debug_view: Option<SystemDebugView>,
 }
 
 impl Driver {
@@ -44,6 +45,7 @@ impl Driver {
             system: AmstradCpc::default(),
             keys,
             breakpoint_manager: BreakpointManager::default(),
+            cached_debug_view: None,
         }
     }
 
@@ -53,6 +55,7 @@ impl Driver {
             system: config.clone().into(),
             keys,
             breakpoint_manager: BreakpointManager::default(),
+            cached_debug_view: None,
         }
     }
 
@@ -62,6 +65,7 @@ impl Driver {
         video: &mut impl VideoSink,
         audio: &mut impl AudioSink,
     ) -> bool {
+        self.cached_debug_view = None;
         self.breakpoint_manager.prepare_breakpoints();
 
         let mut elapsed_microseconds = 0;
@@ -110,8 +114,20 @@ impl Driver {
         todo!()
     }
 
-    pub fn debug_view(&self) -> SystemDebugView {
-        self.system.debug_view()
+    pub fn debug_view(&mut self) -> &SystemDebugView {
+        if self.cached_debug_view.is_none() {
+            self.cached_debug_view = Some(self.system.debug_view());
+        }
+
+        self.cached_debug_view.as_ref().unwrap()
+    }
+
+    pub fn disassemble(
+        &self,
+        start_address: u16,
+        count: usize,
+    ) -> Vec<debug::view::DisassembledInstruction> {
+        self.system.disassemble(start_address, count)
     }
 
     pub fn breakpoint_manager(&mut self) -> &mut BreakpointManager {

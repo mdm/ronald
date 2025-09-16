@@ -6,6 +6,8 @@ use ronald_core::debug::{
     view::CpuDebugView,
 };
 
+use crate::frontend::Frontend;
+
 #[derive(Deserialize, Serialize)]
 pub struct CpuDebugWindow {
     pub show: bool,
@@ -22,12 +24,7 @@ impl Default for CpuDebugWindow {
 }
 
 impl CpuDebugWindow {
-    pub fn ui(
-        &mut self,
-        ctx: &egui::Context,
-        data: &CpuDebugView,
-        breakpoint_manager: &mut BreakpointManager,
-    ) {
+    pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
         if !self.show {
             return;
         }
@@ -38,14 +35,15 @@ impl CpuDebugWindow {
             .default_size([400.0, 600.0])
             .resizable(false)
             .show(ctx, |ui| {
-                self.render_cpu_registers(ui, data);
+                self.render_cpu_registers(ui, frontend);
                 ui.separator();
-                self.render_breakpoints_section(ui, data, breakpoint_manager);
+                self.render_breakpoints_section(ui, frontend);
             });
         self.show = open;
     }
 
-    fn render_cpu_registers(&self, ui: &mut egui::Ui, data: &CpuDebugView) {
+    fn render_cpu_registers(&self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+        let data = &frontend.debug_view().cpu;
         ui.heading("Main Registers");
         egui_extras::TableBuilder::new(ui)
             .column(egui_extras::Column::exact(20.0))
@@ -307,12 +305,8 @@ impl CpuDebugWindow {
         });
     }
 
-    fn render_breakpoints_section(
-        &mut self,
-        ui: &mut egui::Ui,
-        _data: &CpuDebugView,
-        breakpoint_manager: &mut BreakpointManager,
-    ) {
+    fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+        let breakpoint_manager = frontend.breakpoint_manager();
         ui.heading("Breakpoints");
 
         // PC breakpoint input

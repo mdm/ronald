@@ -6,7 +6,6 @@ pub struct SystemDebugView {
     pub master_clock: u64,
     pub cpu: CpuDebugView,
     pub memory: MemoryDebugView,
-    pub disassembly: Vec<DisassembledInstruction>,
 }
 
 pub struct DisassembledInstruction {
