@@ -645,7 +645,7 @@ impl MemoryDebugWindow {
 
         // Apply changes outside the with_breakpoints closure
         if let Some((id, enabled)) = to_toggle {
-            breakpoint_manager.enable_breakpoint(id, !enabled);
+            breakpoint_manager.enable_breakpoint(id, enabled);
         }
         if let Some(id) = to_remove {
             breakpoint_manager.remove_breakpoint(id);

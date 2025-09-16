@@ -367,7 +367,7 @@ impl CpuDebugWindow {
 
         // Apply changes (done outside the loop to avoid borrow issues)
         if let Some((id, enabled)) = to_toggle {
-            breakpoint_manager.enable_breakpoint(id, !enabled);
+            breakpoint_manager.enable_breakpoint(id, enabled);
         }
         if let Some(id) = to_remove {
             breakpoint_manager.remove_breakpoint(id);
