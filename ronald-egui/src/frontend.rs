@@ -10,7 +10,10 @@ use web_sys;
 use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
-    debug::{breakpoint::BreakpointManager, view::SystemDebugView},
+    debug::{
+        breakpoint::BreakpointManager,
+        view::{DisassembledInstruction, SystemDebugView},
+    },
     system::SystemConfig,
 };
 
@@ -432,8 +435,12 @@ impl Frontend {
         self.paused
     }
 
-    pub fn debug_view(&self) -> SystemDebugView {
+    pub fn debug_view(&mut self) -> &SystemDebugView {
         self.driver.debug_view()
+    }
+
+    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DisassembledInstruction> {
+        self.driver.disassemble(start_address, count)
     }
 
     pub fn breakpoint_manager(&mut self) -> &mut BreakpointManager {

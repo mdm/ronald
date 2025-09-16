@@ -96,13 +96,8 @@ where
         // Render debug windows with current debug data when emulator is paused
         if let Some(frontend) = &mut self.frontend {
             // if frontend.is_paused() {
-            let debug_data = frontend.debug_view();
-            let breakpoint_manager = frontend.breakpoint_manager();
-
-            self.cpu_debug_window
-                .ui(ctx, &debug_data.cpu, breakpoint_manager);
-            self.memory_debug_window
-                .ui(ctx, &debug_data, breakpoint_manager);
+            self.cpu_debug_window.ui(ctx, frontend);
+            self.memory_debug_window.ui(ctx, frontend);
             // }
         }
 

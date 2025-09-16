@@ -82,21 +82,17 @@ where
     }
 }
 
-impl<C, M, B> Snapshotable for AmstradCpc<C, M, B>
+impl<C, M, B> AmstradCpc<C, M, B>
 where
-    C: Cpu + Snapshotable<View = CpuDebugView>,
-    M: MemRead + MemWrite + MemManage + Snapshotable<View = MemoryDebugView> + Default,
+    C: Cpu,
+    M: MemRead + MemWrite + MemManage,
     B: Bus,
 {
-    type View = SystemDebugView;
-
-    fn debug_view(&self) -> Self::View {
-        const COUNT: usize = 100;
-        let cpu = self.cpu.debug_view();
+    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DisassembledInstruction> {
         let mut decoder = AlgorithmicDecoder::default();
-        let mut disassembly = Vec::with_capacity(COUNT);
-        let mut address = cpu.register_pc;
-        for _ in 0..COUNT {
+        let mut disassembly = Vec::with_capacity(count);
+        let mut address = start_address;
+        for _ in 0..count {
             let (instruction, next_address) = decoder.decode(&self.memory, address as usize);
             let instruction = instruction.to_string();
             let length = next_address - address as usize;
@@ -107,12 +103,23 @@ where
             });
             address = next_address as u16;
         }
+        disassembly
+    }
+}
 
+impl<C, M, B> Snapshotable for AmstradCpc<C, M, B>
+where
+    C: Cpu + Snapshotable<View = CpuDebugView>,
+    M: MemRead + MemWrite + MemManage + Snapshotable<View = MemoryDebugView> + Default,
+    B: Bus,
+{
+    type View = SystemDebugView;
+
+    fn debug_view(&self) -> Self::View {
         Self::View {
             master_clock: self.master_clock,
-            cpu,
+            cpu: self.cpu.debug_view(),
             memory: self.memory.debug_view(),
-            disassembly,
         }
     }
 }

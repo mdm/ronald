@@ -1,19 +1,24 @@
-use eframe::egui;
+use eframe::{WebGlContextOption, egui};
 use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::{
     breakpoint::{AnyBreakpoint, Breakpoint, BreakpointId, BreakpointManager},
-    view::{MemoryDebugView, SystemDebugView},
+    view::{DisassembledInstruction, MemoryDebugView, SystemDebugView},
 };
+
+use crate::frontend::Frontend;
 
 #[derive(Deserialize, Serialize)]
 pub struct MemoryDebugWindow {
     pub show: bool,
-    scroll_to_address: Option<usize>,
+    jump_to_address: Option<usize>,
     address_input: String,
     view_mode: MemoryViewMode,
     memory_colors: MemorySourceColors,
     pc_breakpoint_input: String,
+    disassembly_start: Option<u16>,
+    #[serde(skip)]
+    cached_disassembly: Option<Vec<DisassembledInstruction>>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -39,11 +44,13 @@ impl Default for MemoryDebugWindow {
     fn default() -> Self {
         Self {
             show: false,
-            scroll_to_address: None,
+            jump_to_address: None,
             address_input: String::new(),
             view_mode: MemoryViewMode::CompositeRomRam,
             memory_colors: MemorySourceColors::default(),
             pc_breakpoint_input: String::new(),
+            disassembly_start: None,
+            cached_disassembly: None,
         }
     }
 }
@@ -98,7 +105,8 @@ impl MemoryDebugWindow {
             }
         }
     }
-    fn render_view_mode_selector(&mut self, ui: &mut egui::Ui, data: &MemoryDebugView) {
+    fn render_view_mode_selector(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+        let data = &frontend.debug_view().memory;
         ui.horizontal(|ui| {
             ui.label("View:");
             egui::ComboBox::from_label("")
@@ -199,12 +207,7 @@ impl MemoryDebugWindow {
         ui.separator();
     }
 
-    pub fn ui(
-        &mut self,
-        ctx: &egui::Context,
-        data: &SystemDebugView,
-        breakpoint_manager: &mut BreakpointManager,
-    ) {
+    pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
         if !self.show {
             return;
         }
@@ -215,20 +218,17 @@ impl MemoryDebugWindow {
             .default_size([600.0, 500.0])
             .resizable(false)
             .show(ctx, |ui| {
-                self.render_view_mode_selector(ui, &data.memory);
+                ui.heading("View Config");
+                self.render_view_mode_selector(ui, frontend);
                 self.render_color_configuration(ui);
                 self.render_memory_controls(ui);
-                self.render_memory_status(ui, &data.memory);
-                self.render_memory_view(ui, data, breakpoint_manager);
+                self.render_memory_status(ui, frontend);
+                self.render_memory_view(ui, frontend);
             });
         self.show = open;
     }
 
     fn render_memory_controls(&mut self, ui: &mut egui::Ui) {
-        if self.view_mode == MemoryViewMode::Disassembly {
-            return;
-        }
-
         ui.horizontal(|ui| {
             ui.label("Jump to address:");
             let text_edit = ui.text_edit_singleline(&mut self.address_input);
@@ -237,20 +237,37 @@ impl MemoryDebugWindow {
             let go_clicked = ui.button("Go").clicked();
 
             if enter_pressed || go_clicked {
-                if let Ok(addr) =
+                if self.view_mode == MemoryViewMode::Disassembly {
+                    if let Ok(addr) =
+                        u16::from_str_radix(self.address_input.trim_start_matches("0x"), 16)
+                    {
+                        log::debug!("Setting disassembly start address: {:04X}", addr);
+                        self.disassembly_start = Some(addr);
+                        self.cached_disassembly = None; // Invalidate cache
+                    } else {
+                        log::warn!("Failed to parse address: '{}'", self.address_input);
+                    }
+                } else if let Ok(addr) =
                     usize::from_str_radix(self.address_input.trim_start_matches("0x"), 16)
                 {
                     log::debug!("Setting scroll target to address: {:04X}", addr);
-                    self.scroll_to_address = Some(addr);
+                    self.jump_to_address = Some(addr);
                 } else {
                     log::warn!("Failed to parse address: '{}'", self.address_input);
                 }
+            }
+
+            if self.view_mode == MemoryViewMode::Disassembly
+                && ui.button("Track Current PC").clicked()
+            {
+                self.disassembly_start = None;
             }
         });
         ui.separator();
     }
 
-    fn render_memory_status(&self, ui: &mut egui::Ui, data: &MemoryDebugView) {
+    fn render_memory_status(&self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+        let data = &frontend.debug_view().memory;
         match &self.view_mode {
             MemoryViewMode::CompositeRomRam => {
                 ui.horizontal(|ui| {
@@ -331,24 +348,20 @@ impl MemoryDebugWindow {
         }
     }
 
-    fn render_memory_view(
-        &mut self,
-        ui: &mut egui::Ui,
-        data: &SystemDebugView,
-        breakpoint_manager: &mut BreakpointManager,
-    ) {
+    fn render_memory_view(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
         match &self.view_mode {
             MemoryViewMode::Disassembly => {
-                self.render_disassembly_view(ui, data, breakpoint_manager);
+                self.render_disassembly_view(ui, frontend);
             }
             _ => {
-                self.render_memory_hex_dump(ui, &data.memory);
+                self.render_memory_hex_dump(ui, frontend);
             }
         }
     }
 
-    fn render_memory_hex_dump(&mut self, ui: &mut egui::Ui, data: &MemoryDebugView) {
-        ui.label("Memory Contents:");
+    fn render_memory_hex_dump(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+        let data = &frontend.debug_view().memory;
+        ui.heading("Memory Contents:");
 
         let memory_data = match &self.view_mode {
             MemoryViewMode::Disassembly => {
@@ -374,7 +387,7 @@ impl MemoryDebugWindow {
             .show(ui, |ui| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
 
-                let target_addr = self.scroll_to_address.take();
+                let target_addr = self.jump_to_address.take();
                 for (row, chunk) in memory_data.chunks(16).enumerate() {
                     let addr = row * 16;
                     let response = self.render_hex_row(ui, chunk, addr, data);
@@ -430,47 +443,58 @@ impl MemoryDebugWindow {
         .response
     }
 
-    fn render_disassembly_view(
-        &mut self,
-        ui: &mut egui::Ui,
-        data: &SystemDebugView,
-        breakpoint_manager: &mut BreakpointManager,
-    ) {
-        ui.label("Disassembly:");
+    fn render_disassembly_view(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+        // Generate disassembly if we are tracking the current PC or if cache is empty
+        if self.disassembly_start.is_none() || self.cached_disassembly.is_none() {
+            let current_pc = frontend.debug_view().cpu.register_pc;
+            let start_addr = self.disassembly_start.unwrap_or(current_pc);
+            self.cached_disassembly = Some(frontend.disassemble(start_addr, 100));
+        }
 
         // Add PC breakpoint controls
-        self.render_pc_breakpoint_controls(ui, breakpoint_manager);
+        // let breakpoint_manager = frontend.breakpoint_manager();
+        self.render_pc_breakpoint_controls(ui, frontend.breakpoint_manager());
         ui.separator();
 
         // Build a HashMap from PC addresses to BreakpointIds for efficient lookup
         let mut pc_breakpoints: std::collections::HashMap<u16, BreakpointId> =
             std::collections::HashMap::new();
-        breakpoint_manager.with_breakpoints(|(id, breakpoint)| {
-            if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
-                && let Some(addr) = bp.value
-            {
-                pc_breakpoints.insert(addr, id);
-            }
-        });
+        frontend
+            .breakpoint_manager()
+            .with_breakpoints(|(id, breakpoint)| {
+                if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
+                    && let Some(addr) = bp.value
+                {
+                    pc_breakpoints.insert(addr, id);
+                }
+            });
 
         ui.label("💡 Click on addresses to toggle PC breakpoints");
+        ui.separator();
 
+        ui.heading("Disassembly");
         egui::ScrollArea::vertical()
             .max_height(350.0)
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
 
-                let target_addr = self.scroll_to_address.take();
+                let target_addr = self.jump_to_address.take();
                 let mut to_toggle = None;
 
                 use egui_extras::{Column, TableBuilder};
                 TableBuilder::new(ui)
                     .column(Column::auto())
-                    .column(Column::auto())
+                    .column(Column::remainder())
                     .column(Column::remainder())
                     .body(|mut body| {
-                        for instruction in &data.disassembly {
+                        let data = frontend.debug_view();
+
+                        for instruction in self
+                            .cached_disassembly
+                            .as_ref()
+                            .expect("ensured to exist above")
+                        {
                             let is_current_instruction =
                                 instruction.address == data.cpu.register_pc;
                             let has_breakpoint = pc_breakpoints.contains_key(&instruction.address);
@@ -548,6 +572,7 @@ impl MemoryDebugWindow {
 
                 // Handle breakpoint toggling after the table to avoid borrowing issues
                 if let Some(addr) = to_toggle {
+                    let breakpoint_manager = frontend.breakpoint_manager();
                     if let Some(&id) = pc_breakpoints.get(&addr) {
                         // Remove existing breakpoint
                         breakpoint_manager.remove_breakpoint(id);
