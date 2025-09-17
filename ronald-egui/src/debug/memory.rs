@@ -258,7 +258,12 @@ impl MemoryDebugWindow {
             }
 
             if self.view_mode == MemoryViewMode::Disassembly
-                && ui.button("Track Current PC").clicked()
+                && ui
+                    .add(
+                        egui::Button::new("Track Current PC")
+                            .selected(self.disassembly_start.is_none()),
+                    )
+                    .clicked()
             {
                 self.disassembly_start = None;
             }
