@@ -24,9 +24,9 @@ pub trait Breakpoint {
 pub struct CpuRegister8Breakpoint {
     pub register: Register8,
     pub value: Option<u8>,
-    pub enabled: bool,
-    pub one_shot: bool,
-    pub triggered: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: bool,
 }
 
 impl CpuRegister8Breakpoint {
@@ -93,9 +93,9 @@ impl fmt::Display for CpuRegister8Breakpoint {
 pub struct CpuRegister16Breakpoint {
     pub register: Register16,
     pub value: Option<u16>,
-    pub enabled: bool,
-    pub one_shot: bool,
-    pub triggered: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: bool,
 }
 
 impl CpuRegister16Breakpoint {
@@ -174,9 +174,9 @@ pub struct MemoryBreakpoint {
     pub on_read: bool,
     pub on_write: bool,
     pub value: Option<u8>,
-    pub enabled: bool,
-    pub one_shot: bool,
-    pub triggered: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: bool,
 }
 
 impl MemoryBreakpoint {
