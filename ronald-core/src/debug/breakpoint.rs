@@ -49,7 +49,7 @@ impl Breakpoint for CpuRegister8Breakpoint {
 
         match event {
             DebugEvent::Cpu(CpuDebugEvent::Register8Written { register, is, .. }) => {
-                *register == self.register && self.value.map_or(true, |v| v == *is)
+                *register == self.register && self.value.is_none_or(|v| v == *is)
             }
             _ => false,
         }
@@ -128,7 +128,7 @@ impl Breakpoint for CpuRegister16Breakpoint {
 
         match event {
             DebugEvent::Cpu(CpuDebugEvent::Register16Written { register, is, .. }) => {
-                *register == self.register && self.value.map_or(true, |v| v == *is)
+                *register == self.register && self.value.is_none_or(|v| v == *is)
             }
             _ => false,
         }
@@ -203,12 +203,12 @@ impl Breakpoint for MemoryBreakpoint {
             DebugEvent::Memory(MemoryDebugEvent::MemoryRead { address, value, .. }) => {
                 self.on_read
                     && *address == self.address as usize
-                    && self.value.map_or(true, |v| v == *value)
+                    && self.value.is_none_or(|v| v == *value)
             }
             DebugEvent::Memory(MemoryDebugEvent::MemoryWritten { address, is, .. }) => {
                 self.on_write
                     && *address == self.address as usize
-                    && self.value.map_or(true, |v| v == *is)
+                    && self.value.is_none_or(|v| v == *is)
             }
             _ => false,
         }
