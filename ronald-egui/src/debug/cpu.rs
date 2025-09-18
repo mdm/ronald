@@ -335,10 +335,12 @@ impl CpuDebugWindow {
         let mut to_toggle = None;
 
         breakpoint_manager.with_breakpoints(|(id, breakpoint)| {
-            if !matches!(
-                breakpoint,
-                AnyBreakpoint::CpuRegister8(_) | AnyBreakpoint::CpuRegister16(_)
-            ) {
+            if breakpoint.one_shot()
+                || !matches!(
+                    breakpoint,
+                    AnyBreakpoint::CpuRegister8(_) | AnyBreakpoint::CpuRegister16(_)
+                )
+            {
                 return;
             }
 
