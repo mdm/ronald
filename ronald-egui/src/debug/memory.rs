@@ -1,9 +1,12 @@
 use eframe::{WebGlContextOption, egui};
 use serde::{Deserialize, Serialize};
 
-use ronald_core::debug::{
-    breakpoint::{AnyBreakpoint, Breakpoint, BreakpointId, BreakpointManager},
-    view::{DisassembledInstruction, MemoryDebugView, SystemDebugView},
+use ronald_core::{
+    debug::{
+        breakpoint::{AnyBreakpoint, Breakpoint, BreakpointId, BreakpointManager},
+        view::{DisassembledInstruction, MemoryDebugView, SystemDebugView},
+    },
+    system::cpu::Register16,
 };
 
 use crate::frontend::Frontend;
@@ -594,7 +597,7 @@ impl MemoryDebugWindow {
         ui: &mut egui::Ui,
         breakpoint_manager: &mut BreakpointManager,
     ) {
-        ui.heading("PC Breakpoints");
+        ui.heading("Breakpoints");
 
         // PC breakpoint input
         ui.horizontal(|ui| {
@@ -622,26 +625,31 @@ impl MemoryDebugWindow {
         let mut to_toggle = None;
 
         breakpoint_manager.with_breakpoints(|(id, breakpoint)| {
-            if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
-                && bp.value.is_some()
-            {
-                pc_breakpoint_found = true;
-
-                ui.horizontal(|ui| {
-                    if breakpoint.triggered() {
-                        ui.colored_label(egui::Color32::RED, "●");
-                    }
-
-                    let mut enabled = breakpoint.enabled();
-                    if ui.checkbox(&mut enabled, breakpoint.to_string()).changed() {
-                        to_toggle = Some((id, enabled));
-                    }
-
-                    if ui.button("Remove").clicked() {
-                        to_remove = Some(id);
-                    }
-                });
+            if breakpoint.one_shot() {
+                return;
             }
+            if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
+                && bp.register != Register16::PC
+            {
+                return;
+            }
+
+            pc_breakpoint_found = true;
+
+            ui.horizontal(|ui| {
+                if breakpoint.triggered() {
+                    ui.colored_label(egui::Color32::RED, "●");
+                }
+
+                let mut enabled = breakpoint.enabled();
+                if ui.checkbox(&mut enabled, breakpoint.to_string()).changed() {
+                    to_toggle = Some((id, enabled));
+                }
+
+                if ui.button("Remove").clicked() {
+                    to_remove = Some(id);
+                }
+            });
         });
 
         if !pc_breakpoint_found {
