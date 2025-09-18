@@ -11,7 +11,7 @@ use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
     debug::{
-        breakpoint::BreakpointManager,
+        breakpoint::{AnyBreakpoint, Breakpoint, BreakpointManager},
         view::{DisassembledInstruction, SystemDebugView},
     },
     system::SystemConfig,
@@ -39,7 +39,8 @@ pub struct Frontend {
     time_available: usize,
     can_interact: bool,
     paused: bool,
-    breakpoint_hit: bool,
+    force_pause: bool,
+    show_debug_overlay: bool,
     picked_file_disk_a: Shared<Option<File>>,
     picked_file_disk_b: Shared<Option<File>>,
     picked_file_tape: Shared<Option<File>>,
@@ -75,7 +76,8 @@ impl Frontend {
             time_available: 0,
             can_interact: true,
             paused: false,
-            breakpoint_hit: false,
+            force_pause: false,
+            show_debug_overlay: false,
             picked_file_disk_a: shared(None),
             picked_file_disk_b: shared(None),
             picked_file_tape: shared(None),
@@ -231,15 +233,11 @@ impl Frontend {
         self.handle_picked_files();
 
         #[cfg(target_arch = "wasm32")]
-        if self.has_window_focus() && self.can_interact && !self.breakpoint_hit {
-            self.resume();
-        } else {
+        if !self.has_window_focus() || !self.can_interact || self.force_pause {
             self.pause();
         }
         #[cfg(not(target_arch = "wasm32"))]
-        if self.can_interact && !self.breakpoint_hit {
-            self.resume();
-        } else {
+        if !self.can_interact || self.force_pause {
             self.pause();
         }
 
@@ -359,16 +357,26 @@ impl Frontend {
         // TODO: Allow running at 60Hz??? Does CPC really support that?
         while self.time_available >= 20_000 {
             log::trace!("Stepping emulator for 20_000 microseconds");
-            self.breakpoint_hit = self.driver.step(20_000, &mut self.video, &mut self.audio);
+            let breakpoint_hit = self.driver.step(20_000, &mut self.video, &mut self.audio);
             self.time_available -= 20_000; // TODO:: take into account actually executed cycles
+
+            if breakpoint_hit {
+                self.force_pause = true;
+                return;
+            }
         }
 
         if self.time_available > 0 {
             log::trace!("Stepping emulator for {} microseconds", self.time_available);
-            self.breakpoint_hit =
+            let breakpoint_hit =
                 self.driver
                     .step(self.time_available, &mut self.video, &mut self.audio);
             self.time_available = 0; // TODO:: take into account actually executed cycles
+
+            if breakpoint_hit {
+                self.force_pause = true;
+                return;
+            }
         }
 
         log::trace!(
@@ -379,12 +387,33 @@ impl Frontend {
 
     fn draw_framebuffer(
         &mut self,
-        _ctx: &egui::Context,
+        ctx: &egui::Context,
         ui: &mut egui::Ui,
         size: egui::Vec2,
     ) -> egui::Response {
         let texture = egui::load::SizedTexture::new(self.video.framebuffer(), size);
-        ui.image(texture)
+        let response = ui.image(texture);
+
+        // Update persistent overlay state
+        if response.hovered() {
+            self.show_debug_overlay = true;
+        } else if !response
+            .rect
+            .contains(ctx.input(|i| i.pointer.hover_pos()).unwrap_or_default())
+        {
+            // Only hide if pointer is completely outside the image area
+            self.show_debug_overlay = false;
+        }
+
+        // Show debug overlay when breakpoint is hit or persistent overlay state is true
+        let show_overlay = self.paused || self.show_debug_overlay;
+
+        // log::debug!("Show overlay: {show_overlay}");
+        if show_overlay {
+            self.draw_debug_overlay(ui, &response, size);
+        }
+
+        response
     }
 
     fn pause(&mut self) {
@@ -401,6 +430,7 @@ impl Frontend {
             self.audio.play_audio();
             self.frame_start = Instant::now(); // Reset timing
             log::debug!("Emulation resumed");
+            dbg!(self.can_interact, self.force_pause);
         }
     }
 
@@ -445,5 +475,99 @@ impl Frontend {
 
     pub fn breakpoint_manager(&mut self) -> &mut BreakpointManager {
         self.driver.breakpoint_manager()
+    }
+
+    fn draw_debug_overlay(
+        &mut self,
+        ui: &mut egui::Ui,
+        screen_response: &egui::Response,
+        screen_size: egui::Vec2,
+    ) {
+        let rect = screen_response.rect;
+        let overlay_height = 40.0;
+        let overlay_rect = egui::Rect::from_min_size(
+            egui::Pos2::new(rect.min.x, rect.min.y),
+            egui::Vec2::new(screen_size.x, overlay_height),
+        );
+
+        // Draw semi-transparent background
+        ui.painter().rect_filled(
+            overlay_rect,
+            egui::CornerRadius::default(),
+            egui::Color32::from_black_alpha(128),
+        );
+
+        // Draw the overlay content in a child UI
+        let mut child_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(overlay_rect)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+
+        child_ui.spacing_mut().item_spacing.x = 8.0;
+        child_ui.add_space(8.0);
+
+        // Status text
+        let status_text = if self.force_pause || self.paused {
+            "Paused"
+        } else {
+            "Running"
+        };
+
+        child_ui.colored_label(egui::Color32::WHITE, status_text);
+        child_ui.add_space(16.0);
+
+        // Control buttons
+        if self.force_pause || self.paused {
+            // Show Run and Step buttons when paused
+            if child_ui.button("Run").clicked() {
+                self.resume_execution();
+            }
+            if child_ui.button("Step").clicked() {
+                log::debug!("Stepping one instruction");
+                self.step_into();
+            }
+        } else {
+            // Show Pause button when running
+            if child_ui.button("Pause").clicked() {
+                self.pause_execution();
+            }
+        }
+    }
+
+    fn resume_execution(&mut self) {
+        self.force_pause = false;
+        self.resume();
+    }
+
+    fn pause_execution(&mut self) {
+        self.force_pause = true;
+        self.pause();
+    }
+
+    fn step_over(&mut self) {
+        //TODO: only step over calls, not jumps
+        let current_pc = self.driver.debug_view().cpu.register_pc;
+
+        let disassembly = self.driver.disassemble(current_pc, 1);
+        if let Some(instruction) = disassembly.first() {
+            let next_pc = current_pc.wrapping_add(instruction.length as u16);
+
+            let mut breakpoint = AnyBreakpoint::pc_breakpoint(next_pc);
+            breakpoint.set_one_shot(true);
+            self.driver.breakpoint_manager().add_breakpoint(breakpoint);
+
+            self.force_pause = false;
+            self.resume();
+        }
+    }
+
+    fn step_into(&mut self) {
+        let mut breakpoint = AnyBreakpoint::pc_step();
+        breakpoint.set_one_shot(true);
+        self.driver.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.force_pause = false;
+        self.resume();
     }
 }
