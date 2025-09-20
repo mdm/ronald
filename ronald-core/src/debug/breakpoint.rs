@@ -416,17 +416,16 @@ impl BreakpointManager {
         self.breakpoints.values().any(|bp| bp.triggered())
     }
 
-    pub fn prepare_breakpoints(&mut self) {
+    pub fn evaluate_breakpoints(&mut self) {
         // Remove triggered one-shot breakpoints
         self.breakpoints
             .retain(|_id, bp| !bp.triggered() || !bp.one_shot());
 
+        // Reset all triggered flags
         for (_id, breakpoint) in self.breakpoints.iter_mut() {
             breakpoint.set_triggered(false);
         }
-    }
 
-    pub fn evaluate_breakpoints(&mut self) {
         self.subscription.with_events(|record| {
             for (_id, breakpoint) in self.breakpoints.iter_mut() {
                 if breakpoint.should_break(record.source, &record.event) {
@@ -445,6 +444,8 @@ impl Default for BreakpointManager {
 
 #[cfg(test)]
 mod tests {
+    use crate::{debug::emit_event, system::clock::MasterClockTick};
+
     use super::*;
 
     #[test]
@@ -647,20 +648,20 @@ mod tests {
     #[test]
     fn test_breakpoint_manager_add_remove() {
         let mut manager = BreakpointManager::new();
-        assert_eq!(manager.breakpoints.borrow().len(), 0);
+        assert_eq!(manager.breakpoints.len(), 0);
 
         let id1 = manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(0x1000));
         let id2 = manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(0x2000));
-        assert_eq!(manager.breakpoints.borrow().len(), 2);
+        assert_eq!(manager.breakpoints.len(), 2);
 
         assert!(manager.remove_breakpoint(id1));
-        assert_eq!(manager.breakpoints.borrow().len(), 1);
+        assert_eq!(manager.breakpoints.len(), 1);
 
         assert!(!manager.remove_breakpoint(id1)); // Already removed
-        assert_eq!(manager.breakpoints.borrow().len(), 1);
+        assert_eq!(manager.breakpoints.len(), 1);
 
         assert!(manager.remove_breakpoint(id2));
-        assert_eq!(manager.breakpoints.borrow().len(), 0);
+        assert_eq!(manager.breakpoints.len(), 0);
     }
 
     #[test]
@@ -668,13 +669,13 @@ mod tests {
         let mut manager = BreakpointManager::new();
         let id = manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(0x1000));
 
-        assert!(manager.get_breakpoint(id).unwrap().enabled());
+        assert!(manager.breakpoint(id).unwrap().enabled());
 
         assert!(manager.enable_breakpoint(id, false));
-        assert!(!manager.get_breakpoint(id).unwrap().enabled());
+        assert!(!manager.breakpoint(id).unwrap().enabled());
 
         assert!(manager.enable_breakpoint(id, true));
-        assert!(manager.get_breakpoint(id).unwrap().enabled());
+        assert!(manager.breakpoint(id).unwrap().enabled());
 
         let invalid_id = BreakpointId(999);
         assert!(!manager.enable_breakpoint(invalid_id, false));
@@ -725,11 +726,10 @@ mod tests {
     #[test]
     fn test_breakpoint_manager_one_shot_removal() {
         let mut manager = BreakpointManager::new();
-        let mut callback_called = false;
 
         let id = manager.add_breakpoint(AnyBreakpoint::pc_step());
-        assert_eq!(manager.breakpoints.borrow().len(), 1);
-        assert!(manager.get_breakpoint(id).unwrap().one_shot());
+        assert_eq!(manager.breakpoints.len(), 1);
+        assert!(manager.breakpoint(id).unwrap().one_shot());
 
         let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
@@ -737,10 +737,13 @@ mod tests {
             was: 0x0000,
         });
 
-        manager.on_event(DebugSource::Cpu, &event);
+        emit_event(DebugSource::Cpu, event.clone(), MasterClockTick::default());
+        manager.evaluate_breakpoints();
+        emit_event(DebugSource::Cpu, event, MasterClockTick::default());
+        manager.evaluate_breakpoints();
 
         // One-shot breakpoint should be removed after triggering
-        assert_eq!(manager.breakpoints.borrow().len(), 0);
-        assert!(manager.get_breakpoint(id).is_none());
+        assert_eq!(manager.breakpoints.len(), 0);
+        assert!(manager.breakpoint(id).is_none());
     }
 }

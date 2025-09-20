@@ -105,7 +105,7 @@ where
         memory: &mut (impl MemRead + MemManage),
         video: &mut impl VideoSink,
         audio: &mut impl AudioSink,
-        master_clock: MasterClockTick,
+        _master_clock: MasterClockTick,
     ) -> bool {
         self.psg.step(audio);
         self.crtc.step();

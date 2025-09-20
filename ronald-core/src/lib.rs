@@ -66,16 +66,13 @@ impl Driver {
         audio: &mut impl AudioSink,
     ) -> bool {
         self.cached_debug_view = None;
-        self.breakpoint_manager.prepare_breakpoints();
 
         let mut elapsed_microseconds = 0;
         while elapsed_microseconds < usecs {
             // TODO: tie this to vsync instead of fixed value
             elapsed_microseconds += self.system.emulate(video, audio) as usize;
 
-            log::debug!("BEFORE BP EVAL");
             self.breakpoint_manager.evaluate_breakpoints();
-            log::debug!("AFTER BP EVAL");
             if self.breakpoint_manager.any_triggered() {
                 return true;
             }
