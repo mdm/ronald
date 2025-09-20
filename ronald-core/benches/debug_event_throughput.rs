@@ -32,6 +32,10 @@ fn debug_event_throughput(total_events: u64, batch_size: u64, multiple_subs: boo
 
         count += batch_size;
     }
+
+    if multiple_subs {
+        subscriptions[1].with_events(|_record| {});
+    }
 }
 
 fn criterion_benchmark(c: &mut criterion::Criterion) {

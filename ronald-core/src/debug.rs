@@ -223,6 +223,7 @@ pub enum DebugSource {
 mod tests {
     use super::*;
 
+    #[test]
     fn test_subscribe_single_subscription() {
         let mut subscription = EventSubscription::new(DebugSource::Cpu);
 
