@@ -431,12 +431,10 @@ impl BreakpointManager {
     }
 
     pub fn evaluate_breakpoints(&mut self) {
-        self.subscription.poll_batch(|iter| {
-            for (source, event) in iter {
-                for (_id, breakpoint) in self.breakpoints.iter_mut() {
-                    if breakpoint.should_break(source, event) {
-                        breakpoint.set_triggered(true);
-                    }
+        self.subscription.with_events(|record| {
+            for (_id, breakpoint) in self.breakpoints.iter_mut() {
+                if breakpoint.should_break(record.source, &record.event) {
+                    breakpoint.set_triggered(true);
                 }
             }
         });

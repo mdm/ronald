@@ -53,9 +53,9 @@ impl EventLog {
 struct SubscriptionId(usize);
 
 pub struct EventSubscription {
+    id: SubscriptionId,
     source: DebugSource,
     first_unconsumed: EventSequence,
-    id: SubscriptionId,
 }
 
 impl EventSubscription {
@@ -65,31 +65,27 @@ impl EventSubscription {
             .with(|registry| registry.borrow_mut().subcribe(first_unconsumed));
 
         Self {
+            id,
             source,
             first_unconsumed,
-            id,
         }
     }
 
-    pub fn poll_batch<F, R>(&mut self, mut callback: F) -> R
+    pub fn with_events<F>(&mut self, mut callback: F)
     where
-        F: FnMut(&mut dyn Iterator<Item = (DebugSource, &DebugEvent)>) -> R,
+        F: FnMut(&EventRecord),
     {
-        let result = DEBUG_EVENT_LOG.with(|log| {
+        DEBUG_EVENT_LOG.with(|log| {
             let log = log.borrow();
-            let mut matching_events = Vec::new();
 
             for record in &log.events {
                 if record.sequence >= self.first_unconsumed
                     && (self.source == DebugSource::Any || self.source == record.source)
                 {
-                    matching_events.push((record.source, &record.event));
                     self.first_unconsumed = record.sequence;
+                    callback(record);
                 }
             }
-
-            let mut iter = matching_events.into_iter();
-            callback(&mut iter)
         });
 
         DEBUG_SUBSCRIPTION_REGISTRY.with(|registry| {
@@ -97,12 +93,6 @@ impl EventSubscription {
                 .borrow_mut()
                 .consume_events(self.id, self.first_unconsumed);
         });
-
-        result
-    }
-
-    pub fn poll(&mut self) -> Vec<DebugEvent> {
-        self.poll_batch(|iter| iter.map(|(_, event)| event.clone()).collect())
     }
 
     pub fn has_pending(&self) -> bool {
