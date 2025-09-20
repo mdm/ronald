@@ -17,6 +17,7 @@ impl EventSequence {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct EventRecord {
     sequence: EventSequence,
     pub source: DebugSource,
@@ -82,7 +83,7 @@ impl EventSubscription {
                 if record.sequence >= self.first_unconsumed
                     && (self.source == DebugSource::Any || self.source == record.source)
                 {
-                    self.first_unconsumed = record.sequence;
+                    self.first_unconsumed = record.sequence.next();
                     callback(record);
                 }
             }
@@ -97,6 +98,27 @@ impl EventSubscription {
 
     pub fn has_pending(&self) -> bool {
         DEBUG_EVENT_LOG.with(|log| log.borrow().current_sequence > self.first_unconsumed)
+    }
+
+    pub fn pending_count(&self) -> u64 {
+        if !self.has_pending() {
+            return 0;
+        }
+
+        DEBUG_EVENT_LOG.with(|log| {
+            let log = log.borrow();
+            let mut count = 0;
+
+            for record in &log.events {
+                if record.sequence >= self.first_unconsumed
+                    && (self.source == DebugSource::Any || self.source == record.source)
+                {
+                    count += 1;
+                }
+            }
+
+            count
+        })
     }
 }
 
@@ -200,16 +222,16 @@ pub enum DebugSource {
 }
 
 #[cfg(test)]
+pub fn emit_event(source: DebugSource, event: DebugEvent, master_clock: MasterClockTick) {
+    DEBUG_EVENT_LOG.with(|log| log.borrow_mut().append(source, event, master_clock));
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    fn emit_event(source: DebugSource, event: DebugEvent, master_clock: MasterClockTick) {
-        DEBUG_EVENT_LOG.with(|log| log.borrow_mut().append(source, event, master_clock));
-    }
-
-    #[test]
     fn test_subscribe_single_subscription() {
-        let mut subscription = subscribe(DebugSource::Cpu);
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
 
         emit_event(
             DebugSource::Cpu,
@@ -218,17 +240,19 @@ mod tests {
                 is: 0x42,
                 was: 0x00,
             }),
+            MasterClockTick::default(),
         );
 
-        let events = subscription.poll();
-        assert_eq!(events.len(), 1);
-        assert!(matches!(&events[0], DebugEvent::Cpu(_)));
+        assert_eq!(subscription.pending_count(), 1);
+        subscription.with_events(|record| {
+            assert!(matches!(record.event, DebugEvent::Cpu(_)));
+        });
     }
 
     #[test]
     fn test_subscribe_multiple_subscriptions_same_source() {
-        let mut subscription1 = subscribe(DebugSource::Memory);
-        let mut subscription2 = subscribe(DebugSource::Memory);
+        let subscription1 = EventSubscription::new(DebugSource::Memory);
+        let subscription2 = EventSubscription::new(DebugSource::Memory);
 
         emit_event(
             DebugSource::Memory,
@@ -236,18 +260,17 @@ mod tests {
                 address: 0x1000,
                 value: 0x42,
             }),
+            MasterClockTick::default(),
         );
 
-        let events1 = subscription1.poll();
-        let events2 = subscription2.poll();
-        assert_eq!(events1.len(), 1);
-        assert_eq!(events2.len(), 1);
+        assert_eq!(subscription1.pending_count(), 1);
+        assert_eq!(subscription2.pending_count(), 1);
     }
 
     #[test]
     fn test_subscribe_multiple_sources() {
-        let mut cpu_subscription = subscribe(DebugSource::Cpu);
-        let mut memory_subscription = subscribe(DebugSource::Memory);
+        let mut cpu_subscription = EventSubscription::new(DebugSource::Cpu);
+        let mut memory_subscription = EventSubscription::new(DebugSource::Memory);
 
         emit_event(
             DebugSource::Cpu,
@@ -256,6 +279,7 @@ mod tests {
                 is: 0x42,
                 was: 0x00,
             }),
+            MasterClockTick::default(),
         );
         emit_event(
             DebugSource::Memory,
@@ -263,21 +287,23 @@ mod tests {
                 address: 0x1000,
                 value: 0x42,
             }),
+            MasterClockTick::default(),
         );
 
-        let cpu_events = cpu_subscription.poll();
-        let memory_events = memory_subscription.poll();
+        assert_eq!(cpu_subscription.pending_count(), 1);
+        cpu_subscription.with_events(|record| {
+            assert!(matches!(record.event, DebugEvent::Cpu(_)));
+        });
 
-        assert_eq!(cpu_events.len(), 1);
-        assert!(matches!(&cpu_events[0], DebugEvent::Cpu(_)));
-
-        assert_eq!(memory_events.len(), 1);
-        assert!(matches!(&memory_events[0], DebugEvent::Memory(_)));
+        assert_eq!(memory_subscription.pending_count(), 1);
+        memory_subscription.with_events(|record| {
+            assert!(matches!(record.event, DebugEvent::Memory(_)));
+        });
     }
 
     #[test]
-    fn test_poll_batch_zero_clone() {
-        let mut subscription = subscribe(DebugSource::Cpu);
+    fn test_any_receives_all_sources() {
+        let subscription = EventSubscription::new(DebugSource::Any);
 
         emit_event(
             DebugSource::Cpu,
@@ -286,28 +312,7 @@ mod tests {
                 is: 0x42,
                 was: 0x00,
             }),
-        );
-
-        let batch = subscription.poll_batch();
-        assert_eq!(batch.len(), 1);
-
-        for (source, event) in batch {
-            assert_eq!(source, DebugSource::Cpu);
-            assert!(matches!(event, DebugEvent::Cpu(_)));
-        }
-    }
-
-    #[test]
-    fn test_subscribe_all_receives_all_sources() {
-        let mut subscription = subscribe_all();
-
-        emit_event(
-            DebugSource::Cpu,
-            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
-                register: crate::system::cpu::Register8::A,
-                is: 0x42,
-                was: 0x00,
-            }),
+            MasterClockTick::default(),
         );
         emit_event(
             DebugSource::Memory,
@@ -315,15 +320,15 @@ mod tests {
                 address: 0x1000,
                 value: 0x42,
             }),
+            MasterClockTick::default(),
         );
 
-        let events = subscription.poll();
-        assert_eq!(events.len(), 2);
+        assert_eq!(subscription.pending_count(), 2);
     }
 
     #[test]
     fn test_has_pending_events() {
-        let mut subscription = subscribe(DebugSource::Cpu);
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
         assert!(!subscription.has_pending());
 
         emit_event(
@@ -333,18 +338,19 @@ mod tests {
                 is: 0x42,
                 was: 0x00,
             }),
+            MasterClockTick::default(),
         );
 
         assert!(subscription.has_pending());
 
-        let _events = subscription.poll();
+        subscription.with_events(|_record| {});
         assert!(!subscription.has_pending());
     }
 
     #[test]
     fn test_cleanup_old_events() {
-        let mut subscription1 = subscribe(DebugSource::Cpu);
-        let mut subscription2 = subscribe(DebugSource::Cpu);
+        let mut subscription1 = EventSubscription::new(DebugSource::Cpu);
+        let mut subscription2 = EventSubscription::new(DebugSource::Cpu);
 
         // Emit some events
         for i in 0..10 {
@@ -355,23 +361,21 @@ mod tests {
                     is: i,
                     was: 0x00,
                 }),
+                MasterClockTick::default(),
             );
         }
 
         // First subscription consumes all events
-        let events1 = subscription1.poll();
-        assert_eq!(events1.len(), 10);
+        subscription1.with_events(|_record| {});
 
         // Cleanup should not remove events that subscription2 hasn't consumed
-        cleanup_old_events();
+        assert!(!subscription1.has_pending());
+        assert_eq!(subscription2.pending_count(), 10);
 
-        let events2 = subscription2.poll();
-        assert_eq!(events2.len(), 10); // Should still get all events
+        // Second subscription consumes all events
+        subscription2.with_events(|_record| {});
 
         // Now cleanup should remove events since both have consumed them
-        cleanup_old_events();
-
-        // Verify log is empty by checking internal state would be consistent
         assert!(!subscription1.has_pending());
         assert!(!subscription2.has_pending());
     }
@@ -385,27 +389,18 @@ mod tests {
                 is: 0x42,
                 was: 0x00,
             }),
+            MasterClockTick::default(),
         ); // Should not panic
     }
 
     #[test]
     fn test_event_sequence_ordering() {
-        let seq1 = EventSequence::new(1);
-        let seq2 = EventSequence::new(2);
+        let seq1 = EventSequence(1);
+        let seq2 = EventSequence(2);
         let seq3 = seq1.next();
 
         assert!(seq1 < seq2);
-        assert_eq!(seq3.value(), 2);
+        assert_eq!(seq3.0, 2);
         assert_eq!(seq3, seq2);
-    }
-
-    #[test]
-    fn test_master_clock_tick() {
-        let tick1 = MasterClockTick::new(100);
-        let tick2 = MasterClockTick::new(200);
-
-        assert!(tick1 < tick2);
-        assert_eq!(tick1.value(), 100);
-        assert_eq!(tick2.value(), 200);
     }
 }

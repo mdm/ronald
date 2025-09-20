@@ -2211,12 +2211,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
     use std::path::PathBuf;
-    use std::rc::Rc;
 
     use crate::{
-        debug::{event::DebugEvent, subscribe, DebugEventSubscriber, DebugSource, TestSubscriber},
+        debug::{event::DebugEvent, DebugSource, EventSubscription},
         system::{
             bus::Bus,
             clock::MasterClock,
@@ -2288,7 +2286,7 @@ mod tests {
                             self.master_clock.current(),
                         );
                         total_cycles += cycles as usize;
-                        self.master_clock.step(cycles);
+                        self.master_clock.step(cycles as u64);
                     }
                     _ => {
                         let (cycles, _) = self.cpu.fetch_and_execute(
@@ -2297,7 +2295,7 @@ mod tests {
                             self.master_clock.current(),
                         );
                         total_cycles += cycles as usize;
-                        self.master_clock.step(cycles);
+                        self.master_clock.step(cycles as u64);
                     }
                 }
             }
@@ -2336,6 +2334,7 @@ mod tests {
             _memory: &mut impl MemManage,
             _video: &mut impl VideoSink,
             _audio: &mut impl AudioSink,
+            _master_clock: MasterClockTick,
         ) -> bool {
             unimplemented!();
         }
@@ -2388,22 +2387,33 @@ mod tests {
         ];
 
         for (register, test_value, expected_16bit_reg, expected_16bit_value) in test_cases {
-            let (subscriber, events) = TestSubscriber::new();
-            let _handle = subscribe(DebugSource::Cpu, Box::new(subscriber));
+            let mut subscription = EventSubscription::new(DebugSource::Cpu);
 
             let mut register_file = RegisterFile::new();
             register_file.write_byte(&register, test_value);
 
-            let events = events.borrow();
-
-            // Check for 8-bit register change event
-            let has_8bit_event = events.iter().any(|(source, event)| {
-                matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register8Written {
+            let event_count = subscription.pending_count();
+            let mut has_8bit_event = false;
+            let mut has_16bit_event = false;
+            subscription.with_events(|record| {
+                if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register8Written {
                     register: r,
                     is: v,
                     was: 0x00,
-                })) if *r == register && *v == test_value)
+                })) if *r == register && *v == test_value) {
+                    has_8bit_event = true;
+                }
+
+                if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: r,
+                    is: v,
+                    was: 0x0000,
+                })) if *r == expected_16bit_reg && *v == expected_16bit_value) {
+                    has_16bit_event = true;
+                }
             });
+
+            // Check for 8-bit register change event
             assert!(
                 has_8bit_event,
                 "Should emit 8-bit register change event for {:?}",
@@ -2413,27 +2423,18 @@ mod tests {
             // For I and R registers, no 16-bit event should be emitted
             if matches!(register, Register8::I | Register8::R) {
                 assert_eq!(
-                    events.len(),
-                    1,
+                    event_count, 1,
                     "I and R registers should only emit 8-bit events"
                 );
             } else {
                 // Should emit both 8-bit and 16-bit events
                 assert_eq!(
-                    events.len(),
-                    2,
+                    event_count, 2,
                     "Should emit both 8-bit and 16-bit events for {:?}",
                     register
                 );
 
                 // Check for 16-bit register change event
-                let has_16bit_event = events.iter().any(|(source, event)| {
-                    matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
-                        register: r,
-                        is: v,
-                        was: 0x0000,
-                    })) if *r == expected_16bit_reg && *v == expected_16bit_value)
-                });
                 assert!(
                     has_16bit_event,
                     "Should emit 16-bit register change event for {:?} -> {:?}",
@@ -2457,27 +2458,31 @@ mod tests {
         ];
 
         for (register, test_value) in test_cases {
-            let (subscriber, events) = TestSubscriber::new();
-            let _handle = subscribe(DebugSource::Cpu, Box::new(subscriber));
+            let mut subscription = EventSubscription::new(DebugSource::Cpu);
 
             let mut register_file = RegisterFile::new();
             register_file.write_word(&register, test_value);
 
-            let events = events.borrow();
             assert_eq!(
-                events.len(),
+                subscription.pending_count(),
                 1,
                 "Should emit only 16-bit register event for {:?}",
                 register
             );
 
             // Check for 16-bit register change event
+            let mut has_16bit_event = false;
+            subscription.with_events(|record| {
+                    if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                        register: r,
+                        is: v,
+                        was: 0x0000,
+                    })) if *r == register && *v == test_value) {
+                        has_16bit_event = true;
+                    }
+                });
             assert!(
-                matches!(&events[0], (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
-                register: r,
-                is: v,
-                was: 0x0000,
-            })) if *r == register && *v == test_value),
+                has_16bit_event,
                 "Should emit correct 16-bit register change event for {:?}",
                 register
             );
@@ -2494,8 +2499,7 @@ mod tests {
         ];
 
         for (register, main_value, shadow_value) in test_cases {
-            let (subscriber, events) = TestSubscriber::new();
-            let _handle = subscribe(DebugSource::Cpu, Box::new(subscriber));
+            let mut subscription = EventSubscription::new(DebugSource::Cpu);
 
             let mut register_file = RegisterFile::new();
 
@@ -2513,41 +2517,45 @@ mod tests {
             register_file.data[shadow_index] = shadow_value;
 
             // Clear events from setup
-            events.borrow_mut().clear();
+            subscription.with_events(|_| {});
+            assert!(!subscription.has_pending());
 
             // Perform the swap
             register_file.swap_word(&register);
 
-            let events = events.borrow();
             assert_eq!(
-                events.len(),
+                subscription.pending_count(),
                 2,
                 "Should emit both Register16Written and ShadowRegister16Written events for {:?}",
                 register
             );
 
             // Check for Register16Written event (main register gets shadow value)
-            let has_main_event = events.iter().any(|(source, event)| {
-                matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            // Check for ShadowRegister16Written event (shadow register gets main value)
+            let mut has_main_event = false;
+            let mut has_shadow_event = false;
+            subscription.with_events(|record| {
+                if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
                     register: r,
                     is: v,
                     was: old_v,
-                })) if r == &register && v == &shadow_value && old_v == &main_value)
+                })) if *r == register && *v == shadow_value && *old_v == main_value) {
+                    has_main_event = true;
+                }
+
+                if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::ShadowRegister16Written {
+                    register: r,
+                    is: v,
+                    was: old_v,
+                })) if *r == register && *v == main_value && *old_v == shadow_value) {
+                    has_shadow_event = true;
+                }
             });
             assert!(
                 has_main_event,
                 "Should emit Register16Written event for {:?}",
                 register
             );
-
-            // Check for ShadowRegister16Written event (shadow register gets main value)
-            let has_shadow_event = events.iter().any(|(source, event)| {
-                matches!((source, event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::ShadowRegister16Written {
-                    register: r,
-                    is: v,
-                    was: old_v,
-                })) if r == &register && v == &main_value && old_v == &shadow_value)
-            });
             assert!(
                 has_shadow_event,
                 "Should emit ShadowRegister16Written event for {:?}",
