@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::system::clock::MasterClockTick;
 use crate::system::memory::{AnyMemory, MemManage, MemRead};
 use crate::{AudioSink, VideoSink};
 
@@ -32,6 +33,7 @@ pub trait Bus: Default {
         memory: &mut (impl MemRead + MemManage),
         video: &mut impl VideoSink,
         audio: &mut impl AudioSink,
+        master_clock: MasterClockTick,
     ) -> bool;
     fn acknowledge_interrupt(&mut self);
     fn set_key(&mut self, line: usize, bit: u8);
@@ -103,6 +105,7 @@ where
         memory: &mut (impl MemRead + MemManage),
         video: &mut impl VideoSink,
         audio: &mut impl AudioSink,
+        master_clock: MasterClockTick,
     ) -> bool {
         self.psg.step(audio);
         self.crtc.step();

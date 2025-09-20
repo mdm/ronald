@@ -1,4 +1,5 @@
 pub mod bus;
+pub mod clock;
 pub mod cpu;
 pub mod instruction;
 pub mod memory;
@@ -9,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::debug::view::{CpuDebugView, DisassembledInstruction, MemoryDebugView, SystemDebugView};
 use crate::debug::Snapshotable;
+use crate::system::clock::{MasterClock, MasterClockTick};
 use crate::{AudioSink, VideoSink};
 
 use bus::crtc::AnyCrtController;
@@ -34,7 +36,7 @@ where
     memory: M,
     #[serde(flatten)]
     bus: B,
-    master_clock: u64,
+    master_clock: MasterClock,
     disk_drives: DiskDrives,
 }
 
@@ -45,15 +47,20 @@ where
     B: Bus,
 {
     pub fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
-        let (cycles, interrupt_acknowledged) =
-            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+        let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute(
+            &mut self.memory,
+            &mut self.bus,
+            self.master_clock.current(),
+        );
 
         // Master clock runs at 16MHz
         // CPU runs at 4MHz (master clock / 4)
         // cycles represents NOP time units, where 1 NOP = 4 CPU cycles = 16 master clock ticks
         for _ in 0..cycles {
-            self.master_clock += 16;
-            let interrupt = self.bus.step(&mut self.memory, video, audio);
+            self.master_clock.step(16);
+            let interrupt =
+                self.bus
+                    .step(&mut self.memory, video, audio, self.master_clock.current());
             if interrupt {
                 self.cpu.request_interrupt();
             }
@@ -117,7 +124,7 @@ where
 
     fn debug_view(&self) -> Self::View {
         Self::View {
-            master_clock: self.master_clock,
+            master_clock: self.master_clock.current(),
             cpu: self.cpu.debug_view(),
             memory: self.memory.debug_view(),
         }
@@ -219,7 +226,7 @@ where
             cpu,
             memory,
             bus,
-            master_clock: 0,
+            master_clock: MasterClock::default(),
             disk_drives: config.disk_drives,
         }
     }

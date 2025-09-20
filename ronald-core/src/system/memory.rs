@@ -1,15 +1,13 @@
 use std::collections::HashMap;
-use std::fs::*;
-use std::io;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::event::DebugEvent;
 use crate::debug::event::MemoryDebugEvent;
 use crate::debug::view::MemoryDebugView;
 use crate::debug::DebugSource;
 use crate::debug::Debuggable;
 use crate::debug::Snapshotable;
+use crate::system::clock::MasterClockTick;
 
 pub trait MemRead {
     fn read_byte(&self, address: usize) -> u8;
@@ -46,17 +44,27 @@ pub struct Rom {
     #[serde(rename = "rom")]
     data: Vec<u8>,
     address_mask: usize,
+    master_clock: MasterClockTick,
 }
 
 impl Rom {
+    pub fn step(&mut self, master_clock: MasterClockTick) {
+        self.master_clock = master_clock;
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Rom {
         // TODO: better error handling
         // TODO: check ROM size (should be 16k)
         let data = bytes.to_vec();
         debug_assert!(data.len().is_power_of_two());
         let address_mask = data.len() - 1;
+        let master_clock = MasterClockTick::default();
 
-        Rom { data, address_mask }
+        Rom {
+            data,
+            address_mask,
+            master_clock,
+        }
     }
 }
 
@@ -64,7 +72,10 @@ impl MemRead for Rom {
     fn read_byte(&self, address: usize) -> u8 {
         let address = address & self.address_mask;
         let value = self.data[address];
-        self.emit_debug_event(MemoryDebugEvent::MemoryRead { address, value });
+        self.emit_debug_event(
+            MemoryDebugEvent::MemoryRead { address, value },
+            self.master_clock,
+        );
 
         value
     }
@@ -94,6 +105,7 @@ pub struct Ram {
     #[serde(rename = "ram")]
     data: Vec<u8>,
     address_mask: usize,
+    master_clock: MasterClockTick,
 }
 
 impl Ram {
@@ -101,8 +113,13 @@ impl Ram {
         let data = vec![0; size];
         debug_assert!(data.len().is_power_of_two());
         let address_mask = data.len() - 1;
+        let master_clock = MasterClockTick::default();
 
-        Ram { data, address_mask }
+        Ram {
+            data,
+            address_mask,
+            master_clock,
+        }
     }
 
     pub fn from_bytes(size: usize, bytes: &[u8], offset: usize) -> Ram {
@@ -116,13 +133,20 @@ impl Ram {
 
         ram
     }
+
+    pub fn step(&mut self, master_clock: MasterClockTick) {
+        self.master_clock = master_clock;
+    }
 }
 
 impl MemRead for Ram {
     fn read_byte(&self, address: usize) -> u8 {
         let address = address & self.address_mask;
         let value = self.data[address];
-        self.emit_debug_event(MemoryDebugEvent::MemoryRead { address, value });
+        self.emit_debug_event(
+            MemoryDebugEvent::MemoryRead { address, value },
+            self.master_clock,
+        );
 
         value
     }
@@ -133,11 +157,14 @@ impl MemWrite for Ram {
         let address = address & self.address_mask;
         let was = self.data[address];
         self.data[address] = value;
-        self.emit_debug_event(MemoryDebugEvent::MemoryWritten {
-            address,
-            is: value,
-            was,
-        });
+        self.emit_debug_event(
+            MemoryDebugEvent::MemoryWritten {
+                address,
+                is: value,
+                was,
+            },
+            self.master_clock,
+        );
     }
 }
 

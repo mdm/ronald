@@ -1,10 +1,8 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::rc::Rc;
 
 use crate::debug::event::{CpuDebugEvent, MemoryDebugEvent};
-use crate::debug::{subscribe, DebugEvent, DebugEventSubscriber, DebugSource, SubscriptionHandle};
+use crate::debug::{DebugEvent, DebugSource, EventSubscription};
 use crate::system::cpu::{Register16, Register8};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -357,42 +355,34 @@ impl fmt::Display for AnyBreakpoint {
     }
 }
 
-type SharedBreakpoints = Rc<RefCell<HashMap<BreakpointId, AnyBreakpoint>>>;
-
 pub struct BreakpointManager {
-    breakpoints: SharedBreakpoints,
+    breakpoints: HashMap<BreakpointId, AnyBreakpoint>,
     next_id: usize,
-    subscription: SubscriptionHandle,
+    subscription: EventSubscription,
 }
 
 impl BreakpointManager {
     pub fn new() -> Self {
-        let breakpoints = Rc::new(RefCell::new(HashMap::new()));
-        let subscriber = BreakpointSubscriber {
-            breakpoints: breakpoints.clone(),
-        };
-        let subscription = subscribe(DebugSource::Any, Box::new(subscriber));
-
         Self {
-            breakpoints,
+            breakpoints: HashMap::new(),
             next_id: 0,
-            subscription,
+            subscription: EventSubscription::new(DebugSource::Any),
         }
     }
 
     pub fn add_breakpoint(&mut self, breakpoint: AnyBreakpoint) -> BreakpointId {
         let id = BreakpointId(self.next_id);
         self.next_id += 1;
-        self.breakpoints.borrow_mut().insert(id, breakpoint);
+        self.breakpoints.insert(id, breakpoint);
         id
     }
 
     pub fn remove_breakpoint(&mut self, id: BreakpointId) -> bool {
-        self.breakpoints.borrow_mut().remove(&id).is_some()
+        self.breakpoints.remove(&id).is_some()
     }
 
     pub fn enable_breakpoint(&mut self, id: BreakpointId, enabled: bool) -> bool {
-        if let Some(breakpoint) = self.breakpoints.borrow_mut().get_mut(&id) {
+        if let Some(breakpoint) = self.breakpoints.get_mut(&id) {
             breakpoint.set_enabled(enabled);
             true
         } else {
@@ -400,57 +390,62 @@ impl BreakpointManager {
         }
     }
 
+    pub fn get_breakpoint(&self, id: BreakpointId) -> Option<&AnyBreakpoint> {
+        self.breakpoints.get(&id)
+    }
+
+    pub fn get_breakpoint_mut(&mut self, id: BreakpointId) -> Option<&mut AnyBreakpoint> {
+        self.breakpoints.get_mut(&id)
+    }
+
     pub fn with_breakpoint(
         &self,
         id: BreakpointId,
         mut callback: impl FnMut((BreakpointId, Option<&AnyBreakpoint>)),
     ) {
-        callback((id, self.breakpoints.borrow().get(&id)));
+        callback((id, self.breakpoints.get(&id)));
     }
 
     pub fn with_breakpoints(&self, mut callback: impl FnMut((BreakpointId, &AnyBreakpoint))) {
-        for (id, bp) in self.breakpoints.borrow().iter() {
+        for (id, bp) in &self.breakpoints {
             callback((*id, bp));
         }
     }
 
     pub fn clear_all(&mut self) {
-        self.breakpoints.borrow_mut().clear();
+        self.breakpoints.clear();
     }
 
     pub fn any_triggered(&self) -> bool {
-        self.breakpoints.borrow().values().any(|bp| bp.triggered())
+        self.breakpoints.values().any(|bp| bp.triggered())
     }
 
     pub fn prepare_breakpoints(&mut self) {
         // Remove triggered one-shot breakpoints
         self.breakpoints
-            .borrow_mut()
             .retain(|_id, bp| !bp.triggered() || !bp.one_shot());
 
-        for (_id, breakpoint) in self.breakpoints.borrow_mut().iter_mut() {
+        for (_id, breakpoint) in self.breakpoints.iter_mut() {
             breakpoint.set_triggered(false);
         }
+    }
+
+    pub fn evaluate_breakpoints(&mut self) {
+        self.subscription.poll_batch(|iter| {
+            for (source, event) in iter {
+                for (_id, breakpoint) in self.breakpoints.iter_mut() {
+                    if breakpoint.should_break(source, event) {
+                        breakpoint.set_triggered(true);
+                    }
+                }
+            }
+        });
     }
 }
 
 impl Default for BreakpointManager {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-struct BreakpointSubscriber {
-    breakpoints: SharedBreakpoints,
-}
-
-impl DebugEventSubscriber for BreakpointSubscriber {
-    fn on_event(&mut self, source: DebugSource, event: &DebugEvent) {
-        for (_id, breakpoint) in self.breakpoints.borrow_mut().iter_mut() {
-            if breakpoint.should_break(source, event) {
-                breakpoint.set_triggered(true);
-            }
-        }
     }
 }
 

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use crate::system::instruction::InterruptMode;
+use crate::system::{clock::MasterClockTick, instruction::InterruptMode};
 
 pub struct SystemDebugView {
-    pub master_clock: u64,
+    pub master_clock: MasterClockTick,
     pub cpu: CpuDebugView,
     pub memory: MemoryDebugView,
 }
