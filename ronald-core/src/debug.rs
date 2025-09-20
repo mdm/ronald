@@ -403,4 +403,247 @@ mod tests {
         assert_eq!(seq3.0, 2);
         assert_eq!(seq3, seq2);
     }
+
+    #[test]
+    fn test_sequence_boundary_subscription_created_before_events() {
+        let subscription = EventSubscription::new(DebugSource::Cpu);
+
+        emit_event(
+            DebugSource::Cpu,
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                register: crate::system::cpu::Register8::A,
+                is: 0x42,
+                was: 0x00,
+            }),
+            MasterClockTick::default(),
+        );
+
+        assert_eq!(subscription.pending_count(), 1);
+        assert!(subscription.has_pending());
+    }
+
+    #[test]
+    fn test_sequence_boundary_subscription_created_after_events() {
+        emit_event(
+            DebugSource::Cpu,
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                register: crate::system::cpu::Register8::A,
+                is: 0x42,
+                was: 0x00,
+            }),
+            MasterClockTick::default(),
+        );
+
+        let subscription = EventSubscription::new(DebugSource::Cpu);
+
+        assert_eq!(subscription.pending_count(), 0);
+        assert!(!subscription.has_pending());
+    }
+
+    #[test]
+    fn test_sequence_boundary_exact_consumption() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        emit_event(
+            DebugSource::Cpu,
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                register: crate::system::cpu::Register8::A,
+                is: 0x01,
+                was: 0x00,
+            }),
+            MasterClockTick::default(),
+        );
+        emit_event(
+            DebugSource::Cpu,
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                register: crate::system::cpu::Register8::A,
+                is: 0x02,
+                was: 0x01,
+            }),
+            MasterClockTick::default(),
+        );
+
+        assert_eq!(subscription.pending_count(), 2);
+
+        let mut consumed_count = 0;
+        subscription.with_events(|_record| {
+            consumed_count += 1;
+        });
+
+        assert_eq!(consumed_count, 2);
+        assert_eq!(subscription.pending_count(), 0);
+        assert!(!subscription.has_pending());
+    }
+
+    #[test]
+    fn test_sequence_boundary_multiple_consumption_calls() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        for i in 0..5 {
+            emit_event(
+                DebugSource::Cpu,
+                DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                    register: crate::system::cpu::Register8::A,
+                    is: i,
+                    was: 0x00,
+                }),
+                MasterClockTick::default(),
+            );
+        }
+
+        assert_eq!(subscription.pending_count(), 5);
+
+        let mut first_batch_count = 0;
+        subscription.with_events(|_record| {
+            first_batch_count += 1;
+        });
+
+        assert_eq!(first_batch_count, 5);
+        assert_eq!(subscription.pending_count(), 0);
+        assert!(!subscription.has_pending());
+
+        for i in 5..8 {
+            emit_event(
+                DebugSource::Cpu,
+                DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                    register: crate::system::cpu::Register8::A,
+                    is: i,
+                    was: 0x00,
+                }),
+                MasterClockTick::default(),
+            );
+        }
+
+        assert_eq!(subscription.pending_count(), 3);
+
+        let mut second_batch_count = 0;
+        subscription.with_events(|_record| {
+            second_batch_count += 1;
+        });
+
+        assert_eq!(second_batch_count, 3);
+        assert_eq!(subscription.pending_count(), 0);
+    }
+
+    #[test]
+    fn test_sequence_boundary_interleaved_subscriptions() {
+        let mut subscription1 = EventSubscription::new(DebugSource::Cpu);
+
+        emit_event(
+            DebugSource::Cpu,
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                register: crate::system::cpu::Register8::A,
+                is: 0x01,
+                was: 0x00,
+            }),
+            MasterClockTick::default(),
+        );
+
+        let mut subscription2 = EventSubscription::new(DebugSource::Cpu);
+
+        emit_event(
+            DebugSource::Cpu,
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                register: crate::system::cpu::Register8::A,
+                is: 0x02,
+                was: 0x01,
+            }),
+            MasterClockTick::default(),
+        );
+
+        assert_eq!(subscription1.pending_count(), 2);
+        assert_eq!(subscription2.pending_count(), 1);
+
+        subscription1.with_events(|_record| {});
+
+        assert_eq!(subscription1.pending_count(), 0);
+        assert_eq!(subscription2.pending_count(), 1);
+
+        subscription2.with_events(|_record| {});
+
+        assert_eq!(subscription1.pending_count(), 0);
+        assert_eq!(subscription2.pending_count(), 0);
+    }
+
+    #[test]
+    fn test_sequence_boundary_event_cleanup_precision() {
+        let mut subscription1 = EventSubscription::new(DebugSource::Cpu);
+        let mut subscription2 = EventSubscription::new(DebugSource::Cpu);
+
+        for i in 0..10 {
+            emit_event(
+                DebugSource::Cpu,
+                DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                    register: crate::system::cpu::Register8::A,
+                    is: i,
+                    was: 0x00,
+                }),
+                MasterClockTick::default(),
+            );
+        }
+
+        let mut subscription1_events = Vec::new();
+        subscription1.with_events(|record| {
+            subscription1_events.push(record.sequence);
+        });
+
+        assert_eq!(subscription1_events.len(), 10);
+        assert_eq!(subscription2.pending_count(), 10);
+
+        let mut subscription2_events = Vec::new();
+        subscription2.with_events(|record| {
+            subscription2_events.push(record.sequence);
+        });
+
+        assert_eq!(subscription2_events.len(), 10);
+        assert_eq!(subscription1_events, subscription2_events);
+    }
+
+    #[test]
+    fn test_sequence_boundary_first_event_zero() {
+        DEBUG_EVENT_LOG.with(|log| {
+            let initial_sequence = log.borrow().current_sequence;
+            assert_eq!(initial_sequence.0, 0);
+        });
+
+        emit_event(
+            DebugSource::Cpu,
+            DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                register: crate::system::cpu::Register8::A,
+                is: 0x42,
+                was: 0x00,
+            }),
+            MasterClockTick::default(),
+        );
+
+        DEBUG_EVENT_LOG.with(|log| {
+            let log = log.borrow();
+            assert_eq!(log.current_sequence.0, 1);
+            assert_eq!(log.events[0].sequence.0, 0);
+        });
+    }
+
+    #[test]
+    fn test_sequence_boundary_consecutive_events() {
+        for i in 0..5 {
+            emit_event(
+                DebugSource::Cpu,
+                DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
+                    register: crate::system::cpu::Register8::A,
+                    is: i,
+                    was: 0x00,
+                }),
+                MasterClockTick::default(),
+            );
+        }
+
+        DEBUG_EVENT_LOG.with(|log| {
+            let log = log.borrow();
+            assert_eq!(log.current_sequence.0, 5);
+
+            for (idx, event) in log.events.iter().enumerate() {
+                assert_eq!(event.sequence.0, idx as u64);
+            }
+        });
+    }
 }
