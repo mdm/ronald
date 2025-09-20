@@ -3,11 +3,12 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::debug::event::CpuDebugEvent;
-use crate::debug::view::{CpuDebugView, DisassembledInstruction};
+use crate::debug::view::CpuDebugView;
 use crate::debug::{DebugSource, Debuggable, Snapshotable};
 use crate::system::bus::Bus;
 use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
 use crate::system::memory::{MemManage, MemRead, MemWrite};
+use crate::system::MasterClockTick;
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
 #[derive(Debug, Clone, PartialEq)]
@@ -44,14 +45,22 @@ pub enum Register16 {
 struct RegisterFile {
     #[serde(rename = "registers")]
     data: Vec<u16>,
+    master_clock: MasterClockTick,
 }
 
 impl RegisterFile {
     fn new() -> RegisterFile {
-        RegisterFile { data: vec![0; 14] }
+        RegisterFile {
+            data: vec![0; 14],
+            master_clock: MasterClockTick::default(),
+        }
     }
 
-    pub fn read_byte(&self, register: &Register8) -> u8 {
+    fn step(&mut self, master_clock: MasterClockTick) {
+        self.master_clock = master_clock;
+    }
+
+    fn read_byte(&self, register: &Register8) -> u8 {
         let value = match register {
             Register8::A => self.data[0] >> 8,
             Register8::F => self.data[0] & 0xff,
@@ -80,193 +89,271 @@ impl RegisterFile {
             Register8::A => {
                 let was = self.data[0];
                 self.data[0] = (value << 8) + (self.data[0] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::A,
-                    is: value as u8,
-                    was: (was >> 8) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::AF,
-                    is: self.data[0],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::A,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::AF,
+                        is: self.data[0],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::F => {
                 let was = self.data[0];
                 self.data[0] = (self.data[0] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::F,
-                    is: value as u8,
-                    was: (was & 0xff) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::AF,
-                    is: self.data[0],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::F,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::AF,
+                        is: self.data[0],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::B => {
                 let was = self.data[1];
                 self.data[1] = (value << 8) + (self.data[1] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::B,
-                    is: value as u8,
-                    was: (was >> 8) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::BC,
-                    is: self.data[1],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::B,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::BC,
+                        is: self.data[1],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::C => {
                 let was = self.data[1];
                 self.data[1] = (self.data[1] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::C,
-                    is: value as u8,
-                    was: (was & 0xff) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::BC,
-                    is: self.data[1],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::C,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::BC,
+                        is: self.data[1],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::D => {
                 let was = self.data[2];
                 self.data[2] = (value << 8) + (self.data[2] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::D,
-                    is: value as u8,
-                    was: (was >> 8) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::DE,
-                    is: self.data[2],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::D,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::DE,
+                        is: self.data[2],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::E => {
                 let was = self.data[2];
                 self.data[2] = (self.data[2] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::E,
-                    is: value as u8,
-                    was: (was & 0xff) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::DE,
-                    is: self.data[2],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::E,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::DE,
+                        is: self.data[2],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::H => {
                 let was = self.data[3];
                 self.data[3] = (value << 8) + (self.data[3] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::H,
-                    is: value as u8,
-                    was: (was >> 8) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::HL,
-                    is: self.data[3],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::H,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::HL,
+                        is: self.data[3],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::L => {
                 let was = self.data[3];
                 self.data[3] = (self.data[3] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::L,
-                    is: value as u8,
-                    was: (was & 0xff) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::HL,
-                    is: self.data[3],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::L,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::HL,
+                        is: self.data[3],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::I => {
                 let was = self.data[8];
                 self.data[8] = (self.data[8] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::I,
-                    is: value as u8,
-                    was: (was & 0xff) as u8,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::I,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::R => {
                 let was = self.data[9];
                 self.data[9] = (self.data[9] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::R,
-                    is: value as u8,
-                    was: (was & 0xff) as u8,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::R,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::IXH => {
                 let was = self.data[10];
                 self.data[10] = (value << 8) + (self.data[10] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::IXH,
-                    is: value as u8,
-                    was: (was >> 8) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::IX,
-                    is: self.data[10],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::IXH,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IX,
+                        is: self.data[10],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::IXL => {
                 let was = self.data[10];
                 self.data[10] = (self.data[10] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::IXL,
-                    is: value as u8,
-                    was: (was & 0xff) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::IX,
-                    is: self.data[10],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::IXL,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IX,
+                        is: self.data[10],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::IYH => {
                 let was = self.data[11];
                 self.data[11] = (value << 8) + (self.data[11] & 0xff);
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::IYH,
-                    is: value as u8,
-                    was: (was >> 8) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::IY,
-                    is: self.data[11],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::IYH,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IY,
+                        is: self.data[11],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::IYL => {
                 let was = self.data[11];
                 self.data[11] = (self.data[11] & 0xff00) + value;
-                self.emit_debug_event(CpuDebugEvent::Register8Written {
-                    register: Register8::IYL,
-                    is: value as u8,
-                    was: (was & 0xff) as u8,
-                });
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::IY,
-                    is: self.data[11],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::IYL,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IY,
+                        is: self.data[11],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
         }
     }
 
-    pub fn read_word(&self, register: &Register16) -> u16 {
+    fn read_word(&self, register: &Register16) -> u16 {
         match register {
             Register16::AF => self.data[0],
             Register16::BC => self.data[1],
@@ -284,74 +371,98 @@ impl RegisterFile {
             Register16::AF => {
                 let was = self.data[0];
                 self.data[0] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::AF,
-                    is: self.data[0],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::AF,
+                        is: self.data[0],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::BC => {
                 let was = self.data[1];
                 self.data[1] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::BC,
-                    is: self.data[1],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::BC,
+                        is: self.data[1],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::DE => {
                 let was = self.data[2];
                 self.data[2] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::DE,
-                    is: self.data[2],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::DE,
+                        is: self.data[2],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::HL => {
                 let was = self.data[3];
                 self.data[3] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::HL,
-                    is: self.data[3],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::HL,
+                        is: self.data[3],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::IX => {
                 let was = self.data[10];
                 self.data[10] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::IX,
-                    is: self.data[10],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IX,
+                        is: self.data[10],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::IY => {
                 let was = self.data[11];
                 self.data[11] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::IY,
-                    is: self.data[11],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IY,
+                        is: self.data[11],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::SP => {
                 let was = self.data[12];
                 self.data[12] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::SP,
-                    is: self.data[12],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::SP,
+                        is: self.data[12],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::PC => {
                 let was = self.data[13];
                 self.data[13] = value;
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::PC,
-                    is: self.data[13],
-                    was,
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::PC,
+                        is: self.data[13],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
         }
     }
@@ -360,55 +471,79 @@ impl RegisterFile {
         match register {
             Register16::AF => {
                 self.data.swap(0, 4);
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::AF,
-                    is: self.data[0],
-                    was: self.data[4],
-                });
-                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Written {
-                    register: Register16::AF,
-                    is: self.data[4],
-                    was: self.data[0],
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::AF,
+                        is: self.data[0],
+                        was: self.data[4],
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::ShadowRegister16Written {
+                        register: Register16::AF,
+                        is: self.data[4],
+                        was: self.data[0],
+                    },
+                    self.master_clock,
+                );
             }
             Register16::BC => {
                 self.data.swap(1, 5);
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::BC,
-                    is: self.data[1],
-                    was: self.data[5],
-                });
-                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Written {
-                    register: Register16::BC,
-                    is: self.data[5],
-                    was: self.data[1],
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::BC,
+                        is: self.data[1],
+                        was: self.data[5],
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::ShadowRegister16Written {
+                        register: Register16::BC,
+                        is: self.data[5],
+                        was: self.data[1],
+                    },
+                    self.master_clock,
+                );
             }
             Register16::DE => {
                 self.data.swap(2, 6);
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::DE,
-                    is: self.data[2],
-                    was: self.data[6],
-                });
-                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Written {
-                    register: Register16::DE,
-                    is: self.data[6],
-                    was: self.data[2],
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::DE,
+                        is: self.data[2],
+                        was: self.data[6],
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::ShadowRegister16Written {
+                        register: Register16::DE,
+                        is: self.data[6],
+                        was: self.data[2],
+                    },
+                    self.master_clock,
+                );
             }
             Register16::HL => {
                 self.data.swap(3, 7);
-                self.emit_debug_event(CpuDebugEvent::Register16Written {
-                    register: Register16::HL,
-                    is: self.data[3],
-                    was: self.data[7],
-                });
-                self.emit_debug_event(CpuDebugEvent::ShadowRegister16Written {
-                    register: Register16::HL,
-                    is: self.data[7],
-                    was: self.data[3],
-                });
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::HL,
+                        is: self.data[3],
+                        was: self.data[7],
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::ShadowRegister16Written {
+                        register: Register16::HL,
+                        is: self.data[7],
+                        was: self.data[3],
+                    },
+                    self.master_clock,
+                );
             }
             _ => unreachable!(),
         }
@@ -556,6 +691,7 @@ pub trait Cpu: Default {
         &mut self,
         memory: &mut (impl MemRead + MemWrite + MemManage),
         bus: &mut impl Bus,
+        master_clock: MasterClockTick,
     ) -> (u8, bool);
     fn request_interrupt(&mut self);
 }
@@ -567,7 +703,7 @@ where
     D: Decoder,
 {
     #[serde(flatten)]
-    registers: RegisterFile, // TODO: make this private, public because of ZexHarness reads it, use debug view instead?
+    registers: RegisterFile,
     decoder: D, // TODO: make this private
     iff1: bool,
     iff2: bool,
@@ -575,6 +711,7 @@ where
     interrupt_mode: InterruptMode,
     enable_interrupt: bool,
     irq_received: bool,
+    master_clock: MasterClockTick,
 }
 
 impl<D> Default for ZilogZ80<D>
@@ -603,6 +740,7 @@ where
             interrupt_mode: InterruptMode::default(),
             enable_interrupt: false,
             irq_received: false,
+            master_clock: MasterClockTick::default(),
         };
 
         cpu.reset();
@@ -752,7 +890,11 @@ where
         &mut self,
         memory: &mut (impl MemRead + MemWrite + MemManage),
         bus: &mut impl Bus,
+        master_clock: MasterClockTick,
     ) -> (u8, bool) {
+        self.master_clock = master_clock;
+        self.registers.step(self.master_clock);
+
         if self.halted {
             if self.handle_interrupt(memory) {
                 return (4, true);
@@ -2077,6 +2219,7 @@ mod tests {
         debug::{event::DebugEvent, subscribe, DebugEventSubscriber, DebugSource, TestSubscriber},
         system::{
             bus::Bus,
+            clock::MasterClock,
             instruction::AlgorithmicDecoder,
             memory::{MemManage, Ram},
         },
@@ -2091,6 +2234,7 @@ mod tests {
         cpu: ZilogZ80<AlgorithmicDecoder>,
         memory: Ram,
         bus: BlackHole,
+        master_clock: MasterClock,
     }
 
     impl ZexHarness {
@@ -2103,6 +2247,7 @@ mod tests {
                 cpu: ZilogZ80::new(0x100),
                 memory,
                 bus: BlackHole::new(),
+                master_clock: MasterClock::default(),
             }
         }
 
@@ -2137,14 +2282,22 @@ mod tests {
                             }
                             _ => unreachable!(),
                         }
-                        let (cycles, _) =
-                            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                        let (cycles, _) = self.cpu.fetch_and_execute(
+                            &mut self.memory,
+                            &mut self.bus,
+                            self.master_clock.current(),
+                        );
                         total_cycles += cycles as usize;
+                        self.master_clock.step(cycles);
                     }
                     _ => {
-                        let (cycles, _) =
-                            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                        let (cycles, _) = self.cpu.fetch_and_execute(
+                            &mut self.memory,
+                            &mut self.bus,
+                            self.master_clock.current(),
+                        );
                         total_cycles += cycles as usize;
+                        self.master_clock.step(cycles);
                     }
                 }
             }

@@ -73,6 +73,9 @@ impl Driver {
             // TODO: tie this to vsync instead of fixed value
             elapsed_microseconds += self.system.emulate(video, audio) as usize;
 
+            log::debug!("BEFORE BP EVAL");
+            self.breakpoint_manager.evaluate_breakpoints();
+            log::debug!("AFTER BP EVAL");
             if self.breakpoint_manager.any_triggered() {
                 return true;
             }

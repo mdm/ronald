@@ -76,7 +76,7 @@ where
     S: KeyMapStore,
 {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        // let start = Instant::now();
+        let start = Instant::now();
         egui_extras::install_image_loaders(ctx);
 
         self.render_menu_bar(ctx);
@@ -102,8 +102,8 @@ where
         }
 
         ctx.request_repaint();
-        // let elapsed = Instant::now() - start;
-        // log::debug!("Frame time: {} ms", elapsed.as_micros());
+        let elapsed = Instant::now() - start;
+        log::debug!("Frame time: {} ms", elapsed.as_micros());
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
