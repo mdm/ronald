@@ -334,7 +334,7 @@ impl CpuDebugWindow {
         let mut to_remove = None;
         let mut to_toggle = None;
 
-        breakpoint_manager.with_breakpoints(|(id, breakpoint)| {
+        for (id, breakpoint) in breakpoint_manager.breakpoints_iter() {
             if breakpoint.one_shot()
                 || !matches!(
                     breakpoint,
@@ -354,14 +354,14 @@ impl CpuDebugWindow {
 
                 let mut enabled = breakpoint.enabled();
                 if ui.checkbox(&mut enabled, breakpoint.to_string()).changed() {
-                    to_toggle = Some((id, enabled));
+                    to_toggle = Some((*id, enabled));
                 }
 
                 if ui.button("Remove").clicked() {
-                    to_remove = Some(id);
+                    to_remove = Some(*id);
                 }
             });
-        });
+        }
 
         if !cpu_breakpoint_found {
             ui.label("No CPU breakpoints set");

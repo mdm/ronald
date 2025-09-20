@@ -390,26 +390,22 @@ impl BreakpointManager {
         }
     }
 
-    pub fn get_breakpoint(&self, id: BreakpointId) -> Option<&AnyBreakpoint> {
+    pub fn breakpoint(&self, id: BreakpointId) -> Option<&AnyBreakpoint> {
         self.breakpoints.get(&id)
     }
 
-    pub fn get_breakpoint_mut(&mut self, id: BreakpointId) -> Option<&mut AnyBreakpoint> {
+    pub fn breakpoint_mut(&mut self, id: BreakpointId) -> Option<&mut AnyBreakpoint> {
         self.breakpoints.get_mut(&id)
     }
 
-    pub fn with_breakpoint(
-        &self,
-        id: BreakpointId,
-        mut callback: impl FnMut((BreakpointId, Option<&AnyBreakpoint>)),
-    ) {
-        callback((id, self.breakpoints.get(&id)));
+    pub fn breakpoints_iter(&self) -> impl Iterator<Item = (&BreakpointId, &AnyBreakpoint)> {
+        self.breakpoints.iter()
     }
 
-    pub fn with_breakpoints(&self, mut callback: impl FnMut((BreakpointId, &AnyBreakpoint))) {
-        for (id, bp) in &self.breakpoints {
-            callback((*id, bp));
-        }
+    pub fn breakpoints_iter_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (&BreakpointId, &mut AnyBreakpoint)> {
+        self.breakpoints.iter_mut()
     }
 
     pub fn clear_all(&mut self) {

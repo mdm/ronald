@@ -460,22 +460,23 @@ impl MemoryDebugWindow {
         }
 
         // Add PC breakpoint controls
-        // let breakpoint_manager = frontend.breakpoint_manager();
         self.render_pc_breakpoint_controls(ui, frontend.breakpoint_manager());
         ui.separator();
 
         // Build a HashMap from PC addresses to BreakpointIds for efficient lookup
-        let mut pc_breakpoints: std::collections::HashMap<u16, BreakpointId> =
-            std::collections::HashMap::new();
-        frontend
+        let pc_breakpoints: std::collections::HashMap<u16, BreakpointId> = frontend
             .breakpoint_manager()
-            .with_breakpoints(|(id, breakpoint)| {
+            .breakpoints_iter()
+            .filter_map(|(id, breakpoint)| {
                 if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
                     && let Some(addr) = bp.value
                 {
-                    pc_breakpoints.insert(addr, id);
+                    Some((addr, *id))
+                } else {
+                    None
                 }
-            });
+            })
+            .collect();
 
         ui.label("💡 Click on addresses to toggle PC breakpoints");
         ui.separator();
@@ -624,7 +625,7 @@ impl MemoryDebugWindow {
         let mut to_remove = None;
         let mut to_toggle = None;
 
-        breakpoint_manager.with_breakpoints(|(id, breakpoint)| {
+        for (id, breakpoint) in breakpoint_manager.breakpoints_iter() {
             if breakpoint.one_shot() {
                 return;
             }
@@ -643,14 +644,14 @@ impl MemoryDebugWindow {
 
                 let mut enabled = breakpoint.enabled();
                 if ui.checkbox(&mut enabled, breakpoint.to_string()).changed() {
-                    to_toggle = Some((id, enabled));
+                    to_toggle = Some((*id, enabled));
                 }
 
                 if ui.button("Remove").clicked() {
-                    to_remove = Some(id);
+                    to_remove = Some(*id);
                 }
             });
-        });
+        }
 
         if !pc_breakpoint_found {
             ui.label("No PC breakpoints set");
