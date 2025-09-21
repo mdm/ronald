@@ -83,8 +83,8 @@ impl EventSubscription {
             let first_unconsumed = self.first_unconsumed.0 - log.first_sequence.0;
 
             for record in &log.events[first_unconsumed as usize..] {
+                self.first_unconsumed = record.sequence.next();
                 if self.source == DebugSource::Any || self.source == record.source {
-                    self.first_unconsumed = record.sequence.next();
                     callback(record);
                 }
             }
