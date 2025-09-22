@@ -470,6 +470,7 @@ impl MemoryDebugWindow {
             .filter_map(|(id, breakpoint)| {
                 if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
                     && let Some(addr) = bp.value
+                    && !bp.one_shot()
                 {
                     Some((addr, *id))
                 } else {
@@ -648,7 +649,6 @@ impl MemoryDebugWindow {
                 }
 
                 if let Some(master_clock) = breakpoint.triggered() {
-                    // TODO: use an indicator that renders properly
                     ui.colored_label(
                         egui::Color32::from_rgb(200, 50, 50), // Dark red - better contrast
                         format!("(triggered at {})", master_clock.value()),

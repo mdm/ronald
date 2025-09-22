@@ -10,7 +10,7 @@ use crate::system::cpu::{Register16, Register8};
 pub struct BreakpointId(usize);
 
 pub trait Breakpoint {
-    fn should_break(&self, source: DebugSource, event: &DebugEvent) -> bool;
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool;
     fn enabled(&self) -> bool;
     fn set_enabled(&mut self, enabled: bool);
     fn one_shot(&self) -> bool;
@@ -41,7 +41,7 @@ impl CpuRegister8Breakpoint {
 }
 
 impl Breakpoint for CpuRegister8Breakpoint {
-    fn should_break(&self, source: DebugSource, event: &DebugEvent) -> bool {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Cpu {
             return false;
         }
@@ -112,7 +112,7 @@ impl CpuRegister16Breakpoint {
         Self::new(Register16::PC, Some(address))
     }
 
-    pub fn pc_step() -> Self {
+    pub fn step_into() -> Self {
         let mut bp = Self::new(Register16::PC, None);
         bp.one_shot = true;
         bp
@@ -120,7 +120,7 @@ impl CpuRegister16Breakpoint {
 }
 
 impl Breakpoint for CpuRegister16Breakpoint {
-    fn should_break(&self, source: DebugSource, event: &DebugEvent) -> bool {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Cpu {
             return false;
         }
@@ -193,7 +193,7 @@ impl MemoryBreakpoint {
 }
 
 impl Breakpoint for MemoryBreakpoint {
-    fn should_break(&self, source: DebugSource, event: &DebugEvent) -> bool {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Memory {
             return false;
         }
@@ -255,10 +255,80 @@ impl fmt::Display for MemoryBreakpoint {
 }
 
 #[derive(Debug, Clone)]
+pub struct StepOutBreakpoint {
+    depth: usize,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl StepOutBreakpoint {
+    pub fn new() -> Self {
+        Self {
+            depth: 1,
+            enabled: true,
+            one_shot: true,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for StepOutBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Cpu {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Cpu(CpuDebugEvent::CallExecuted) => self.depth += 1,
+            DebugEvent::Cpu(CpuDebugEvent::ReturnExecuted) => self.depth -= 1,
+            _ => {}
+        }
+
+        if self.depth == 0 {
+            return true;
+        }
+
+        false
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for StepOutBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Step out")
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum AnyBreakpoint {
     CpuRegister8(CpuRegister8Breakpoint),
     CpuRegister16(CpuRegister16Breakpoint),
     Memory(MemoryBreakpoint),
+    StepOut(StepOutBreakpoint),
 }
 
 impl AnyBreakpoint {
@@ -266,8 +336,12 @@ impl AnyBreakpoint {
         Self::CpuRegister16(CpuRegister16Breakpoint::pc_breakpoint(address))
     }
 
-    pub fn pc_step() -> Self {
-        Self::CpuRegister16(CpuRegister16Breakpoint::pc_step())
+    pub fn step_into() -> Self {
+        Self::CpuRegister16(CpuRegister16Breakpoint::step_into())
+    }
+
+    pub fn step_out() -> Self {
+        Self::StepOut(StepOutBreakpoint::new())
     }
 
     pub fn register8_breakpoint(register: Register8, value: Option<u8>) -> Self {
@@ -289,11 +363,12 @@ impl AnyBreakpoint {
 }
 
 impl Breakpoint for AnyBreakpoint {
-    fn should_break(&self, source: DebugSource, event: &DebugEvent) -> bool {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.should_break(source, event),
             AnyBreakpoint::CpuRegister16(bp) => bp.should_break(source, event),
             AnyBreakpoint::Memory(bp) => bp.should_break(source, event),
+            AnyBreakpoint::StepOut(bp) => bp.should_break(source, event),
         }
     }
 
@@ -302,6 +377,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.enabled(),
             AnyBreakpoint::CpuRegister16(bp) => bp.enabled(),
             AnyBreakpoint::Memory(bp) => bp.enabled(),
+            AnyBreakpoint::StepOut(bp) => bp.enabled(),
         }
     }
 
@@ -310,6 +386,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::Memory(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::StepOut(bp) => bp.set_enabled(enabled),
         }
     }
 
@@ -318,6 +395,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.one_shot(),
             AnyBreakpoint::CpuRegister16(bp) => bp.one_shot(),
             AnyBreakpoint::Memory(bp) => bp.one_shot(),
+            AnyBreakpoint::StepOut(bp) => bp.one_shot(),
         }
     }
 
@@ -326,6 +404,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::Memory(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::StepOut(bp) => bp.set_one_shot(one_shot),
         }
     }
 
@@ -334,6 +413,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.triggered(),
             AnyBreakpoint::CpuRegister16(bp) => bp.triggered(),
             AnyBreakpoint::Memory(bp) => bp.triggered(),
+            AnyBreakpoint::StepOut(bp) => bp.triggered(),
         }
     }
 
@@ -342,6 +422,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::Memory(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::StepOut(bp) => bp.set_triggered(triggered),
         }
     }
 }
@@ -352,6 +433,7 @@ impl fmt::Display for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.fmt(f),
             AnyBreakpoint::CpuRegister16(bp) => bp.fmt(f),
             AnyBreakpoint::Memory(bp) => bp.fmt(f),
+            AnyBreakpoint::StepOut(bp) => bp.fmt(f),
         }
     }
 }
@@ -451,7 +533,7 @@ mod tests {
 
     #[test]
     fn test_pc_breakpoint_triggers_on_correct_address() {
-        let bp = AnyBreakpoint::pc_breakpoint(0x1000);
+        let mut bp = AnyBreakpoint::pc_breakpoint(0x1000);
 
         let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
@@ -464,7 +546,7 @@ mod tests {
 
     #[test]
     fn test_pc_breakpoint_ignores_wrong_address() {
-        let bp = AnyBreakpoint::pc_breakpoint(0x1000);
+        let mut bp = AnyBreakpoint::pc_breakpoint(0x1000);
 
         let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
@@ -477,7 +559,7 @@ mod tests {
 
     #[test]
     fn test_pc_breakpoint_ignores_wrong_register() {
-        let bp = AnyBreakpoint::pc_breakpoint(0x1000);
+        let mut bp = AnyBreakpoint::pc_breakpoint(0x1000);
 
         let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::SP,
@@ -489,8 +571,8 @@ mod tests {
     }
 
     #[test]
-    fn test_pc_step_triggers_on_any_pc_change() {
-        let bp = AnyBreakpoint::pc_step();
+    fn test_step_into_triggers_on_any_pc_change() {
+        let mut bp = AnyBreakpoint::step_into();
 
         let event1 = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
@@ -511,7 +593,7 @@ mod tests {
 
     #[test]
     fn test_register8_breakpoint_with_specific_value() {
-        let bp = AnyBreakpoint::register8_breakpoint(Register8::A, Some(0x42));
+        let mut bp = AnyBreakpoint::register8_breakpoint(Register8::A, Some(0x42));
 
         let correct_event = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
             register: Register8::A,
@@ -538,7 +620,7 @@ mod tests {
 
     #[test]
     fn test_register8_breakpoint_any_value() {
-        let bp = AnyBreakpoint::register8_breakpoint(Register8::A, None);
+        let mut bp = AnyBreakpoint::register8_breakpoint(Register8::A, None);
 
         let event1 = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
             register: Register8::A,
@@ -558,7 +640,7 @@ mod tests {
 
     #[test]
     fn test_memory_breakpoint_write_only() {
-        let bp = AnyBreakpoint::memory_breakpoint(0x4000, false, true, None);
+        let mut bp = AnyBreakpoint::memory_breakpoint(0x4000, false, true, None);
 
         let write_event = DebugEvent::Memory(MemoryDebugEvent::MemoryWritten {
             address: 0x4000,
@@ -577,7 +659,7 @@ mod tests {
 
     #[test]
     fn test_memory_breakpoint_read_only() {
-        let bp = AnyBreakpoint::memory_breakpoint(0x4000, true, false, None);
+        let mut bp = AnyBreakpoint::memory_breakpoint(0x4000, true, false, None);
 
         let write_event = DebugEvent::Memory(MemoryDebugEvent::MemoryWritten {
             address: 0x4000,
@@ -596,7 +678,7 @@ mod tests {
 
     #[test]
     fn test_memory_breakpoint_with_value_filter() {
-        let bp = AnyBreakpoint::memory_breakpoint(0x4000, false, true, Some(0x42));
+        let mut bp = AnyBreakpoint::memory_breakpoint(0x4000, false, true, Some(0x42));
 
         let correct_write = DebugEvent::Memory(MemoryDebugEvent::MemoryWritten {
             address: 0x4000,
@@ -708,14 +790,14 @@ mod tests {
 
     #[test]
     fn test_breakpoint_ignores_wrong_debug_source() {
-        let cpu_bp = AnyBreakpoint::pc_breakpoint(0x1000);
+        let mut cpu_bp = AnyBreakpoint::pc_breakpoint(0x1000);
         let mem_event = DebugEvent::Memory(MemoryDebugEvent::MemoryRead {
             address: 0x1000,
             value: 0x42,
         });
         assert!(!cpu_bp.should_break(DebugSource::Memory, &mem_event));
 
-        let mem_bp = AnyBreakpoint::memory_breakpoint(0x1000, true, false, None);
+        let mut mem_bp = AnyBreakpoint::memory_breakpoint(0x1000, true, false, None);
         let cpu_event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
             is: 0x1000,
@@ -728,7 +810,7 @@ mod tests {
     fn test_breakpoint_manager_one_shot_removal() {
         let mut manager = BreakpointManager::new();
 
-        let id = manager.add_breakpoint(AnyBreakpoint::pc_step());
+        let id = manager.add_breakpoint(AnyBreakpoint::step_into());
         assert_eq!(manager.breakpoints.len(), 1);
         assert!(manager.breakpoint(id).unwrap().one_shot());
 

@@ -481,35 +481,50 @@ impl Frontend {
         child_ui.spacing_mut().item_spacing.x = 8.0;
         child_ui.add_space(8.0);
 
-        // Status text
         let status_text = if self.paused { "Paused" } else { "Running" };
 
         child_ui.colored_label(egui::Color32::WHITE, status_text);
         child_ui.add_space(16.0);
 
-        // Control buttons
         if self.paused {
-            // Show Run and Step buttons when paused
             if child_ui.button("Run").clicked() {
                 self.resume();
             }
-            if child_ui.button("Step").clicked() {
+
+            child_ui.add_space(24.0);
+
+            if child_ui.button("Step Into").clicked() {
                 self.step_into();
             }
-        } else {
-            // Show Pause button when running
-            if child_ui.button("Pause").clicked() {
-                self.pause();
+
+            if child_ui.button("Step Over").clicked() {
+                self.step_over();
             }
+
+            if child_ui.button("Step Out").clicked() {
+                self.step_out();
+            }
+        } else if child_ui.button("Pause").clicked() {
+            self.pause();
         }
     }
 
+    fn step_into(&mut self) {
+        let mut breakpoint = AnyBreakpoint::step_into();
+        breakpoint.set_one_shot(true);
+        self.driver.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.resume();
+    }
+
     fn step_over(&mut self) {
-        //TODO: only step over calls, not jumps
         let current_pc = self.driver.debug_view().cpu.register_pc;
 
         let disassembly = self.driver.disassemble(current_pc, 1);
-        if let Some(instruction) = disassembly.first() {
+        log::debug!("Disassembly at {:#04X}: {:#?}", current_pc, disassembly);
+        if let Some(instruction) = disassembly.first()
+            && instruction.instruction.contains("call")
+        {
             let next_pc = current_pc.wrapping_add(instruction.length as u16);
 
             let mut breakpoint = AnyBreakpoint::pc_breakpoint(next_pc);
@@ -517,11 +532,13 @@ impl Frontend {
             self.driver.breakpoint_manager().add_breakpoint(breakpoint);
 
             self.resume();
+        } else {
+            self.step_into();
         }
     }
 
-    fn step_into(&mut self) {
-        let mut breakpoint = AnyBreakpoint::pc_step();
+    fn step_out(&mut self) {
+        let mut breakpoint = AnyBreakpoint::step_out();
         breakpoint.set_one_shot(true);
         self.driver.breakpoint_manager().add_breakpoint(breakpoint);
 

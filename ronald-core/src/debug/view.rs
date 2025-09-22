@@ -8,6 +8,7 @@ pub struct SystemDebugView {
     pub memory: MemoryDebugView,
 }
 
+#[derive(Debug)]
 pub struct DisassembledInstruction {
     pub address: u16,
     pub instruction: String,

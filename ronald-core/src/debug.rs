@@ -55,6 +55,7 @@ impl EventLog {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct SubscriptionId(usize);
 
+#[derive(Debug, Clone)]
 pub struct EventSubscription {
     id: SubscriptionId,
     source: DebugSource,
