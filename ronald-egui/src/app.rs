@@ -103,7 +103,7 @@ where
 
         ctx.request_repaint();
         let elapsed = Instant::now() - start;
-        log::debug!("Frame time: {} ms", elapsed.as_micros());
+        log::debug!("Frame time: {} us", elapsed.as_micros());
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

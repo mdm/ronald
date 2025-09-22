@@ -638,10 +638,6 @@ impl MemoryDebugWindow {
             pc_breakpoint_found = true;
 
             ui.horizontal(|ui| {
-                if breakpoint.triggered() {
-                    ui.colored_label(egui::Color32::RED, "●");
-                }
-
                 let mut enabled = breakpoint.enabled();
                 if ui.checkbox(&mut enabled, breakpoint.to_string()).changed() {
                     to_toggle = Some((*id, enabled));
@@ -649,6 +645,14 @@ impl MemoryDebugWindow {
 
                 if ui.button("Remove").clicked() {
                     to_remove = Some(*id);
+                }
+
+                if let Some(master_clock) = breakpoint.triggered() {
+                    // TODO: use an indicator that renders properly
+                    ui.colored_label(
+                        egui::Color32::from_rgb(200, 50, 50), // Dark red - better contrast
+                        format!("(triggered at {})", master_clock.value()),
+                    );
                 }
             });
         }
