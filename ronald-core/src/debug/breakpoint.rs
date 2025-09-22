@@ -3,6 +3,7 @@ use std::fmt;
 
 use crate::debug::event::{CpuDebugEvent, MemoryDebugEvent};
 use crate::debug::{DebugEvent, DebugSource, EventSubscription};
+use crate::system::clock::MasterClockTick;
 use crate::system::cpu::{Register16, Register8};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,8 +15,8 @@ pub trait Breakpoint {
     fn set_enabled(&mut self, enabled: bool);
     fn one_shot(&self) -> bool;
     fn set_one_shot(&mut self, one_shot: bool);
-    fn triggered(&self) -> bool;
-    fn set_triggered(&mut self, triggered: bool);
+    fn triggered(&self) -> Option<MasterClockTick>;
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>);
 }
 
 #[derive(Debug, Clone)]
@@ -24,7 +25,7 @@ pub struct CpuRegister8Breakpoint {
     pub value: Option<u8>,
     enabled: bool,
     one_shot: bool,
-    triggered: bool,
+    triggered: Option<MasterClockTick>,
 }
 
 impl CpuRegister8Breakpoint {
@@ -34,7 +35,7 @@ impl CpuRegister8Breakpoint {
             value,
             enabled: true,
             one_shot: false,
-            triggered: false,
+            triggered: None,
         }
     }
 }
@@ -69,11 +70,11 @@ impl Breakpoint for CpuRegister8Breakpoint {
         self.one_shot = one_shot;
     }
 
-    fn triggered(&self) -> bool {
+    fn triggered(&self) -> Option<MasterClockTick> {
         self.triggered
     }
 
-    fn set_triggered(&mut self, triggered: bool) {
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
         self.triggered = triggered;
     }
 }
@@ -93,7 +94,7 @@ pub struct CpuRegister16Breakpoint {
     pub value: Option<u16>,
     enabled: bool,
     one_shot: bool,
-    triggered: bool,
+    triggered: Option<MasterClockTick>,
 }
 
 impl CpuRegister16Breakpoint {
@@ -103,7 +104,7 @@ impl CpuRegister16Breakpoint {
             value,
             enabled: true,
             one_shot: false,
-            triggered: false,
+            triggered: None,
         }
     }
 
@@ -148,11 +149,11 @@ impl Breakpoint for CpuRegister16Breakpoint {
         self.one_shot = one_shot;
     }
 
-    fn triggered(&self) -> bool {
+    fn triggered(&self) -> Option<MasterClockTick> {
         self.triggered
     }
 
-    fn set_triggered(&mut self, triggered: bool) {
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
         self.triggered = triggered;
     }
 }
@@ -174,7 +175,7 @@ pub struct MemoryBreakpoint {
     pub value: Option<u8>,
     enabled: bool,
     one_shot: bool,
-    triggered: bool,
+    triggered: Option<MasterClockTick>,
 }
 
 impl MemoryBreakpoint {
@@ -186,7 +187,7 @@ impl MemoryBreakpoint {
             value,
             enabled: true,
             one_shot: false,
-            triggered: false,
+            triggered: None,
         }
     }
 }
@@ -228,11 +229,11 @@ impl Breakpoint for MemoryBreakpoint {
         self.one_shot = one_shot;
     }
 
-    fn triggered(&self) -> bool {
+    fn triggered(&self) -> Option<MasterClockTick> {
         self.triggered
     }
 
-    fn set_triggered(&mut self, triggered: bool) {
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
         self.triggered = triggered;
     }
 }
@@ -328,7 +329,7 @@ impl Breakpoint for AnyBreakpoint {
         }
     }
 
-    fn triggered(&self) -> bool {
+    fn triggered(&self) -> Option<MasterClockTick> {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.triggered(),
             AnyBreakpoint::CpuRegister16(bp) => bp.triggered(),
@@ -336,7 +337,7 @@ impl Breakpoint for AnyBreakpoint {
         }
     }
 
-    fn set_triggered(&mut self, triggered: bool) {
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_triggered(triggered),
@@ -413,23 +414,23 @@ impl BreakpointManager {
     }
 
     pub fn any_triggered(&self) -> bool {
-        self.breakpoints.values().any(|bp| bp.triggered())
+        self.breakpoints.values().any(|bp| bp.triggered().is_some())
     }
 
     pub fn evaluate_breakpoints(&mut self) {
         // Remove triggered one-shot breakpoints
         self.breakpoints
-            .retain(|_id, bp| !bp.triggered() || !bp.one_shot());
+            .retain(|_id, bp| bp.triggered().is_none() || !bp.one_shot());
 
         // Reset all triggered flags
         for (_id, breakpoint) in self.breakpoints.iter_mut() {
-            breakpoint.set_triggered(false);
+            breakpoint.set_triggered(None);
         }
 
         self.subscription.with_events(|record| {
             for (_id, breakpoint) in self.breakpoints.iter_mut() {
                 if breakpoint.should_break(record.source, &record.event) {
-                    breakpoint.set_triggered(true);
+                    breakpoint.set_triggered(Some(record.master_clock));
                 }
             }
         });
