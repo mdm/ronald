@@ -357,7 +357,6 @@ impl CpuDebugWindow {
                 }
 
                 if let Some(master_clock) = breakpoint.triggered() {
-                    // TODO: use an indicator that renders properly
                     ui.colored_label(
                         egui::Color32::from_rgb(200, 50, 50), // Dark red - better contrast
                         format!("(triggered at {})", master_clock.value()),

@@ -1045,6 +1045,7 @@ where
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
                 }
+                self.emit_debug_event(CpuDebugEvent::CallExecuted, self.master_clock);
             }
             Instruction::Call(_, _) => {
                 unreachable!();
@@ -1781,6 +1782,7 @@ where
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
                 }
+                self.emit_debug_event(CpuDebugEvent::ReturnExecuted, self.master_clock);
             }
             Instruction::Reti => {
                 let old_sp = self.registers.read_word(&Register16::SP);

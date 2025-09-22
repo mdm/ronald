@@ -1,16 +1,14 @@
-use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
-use debug::{
-    breakpoint::{Breakpoint, BreakpointManager},
-    view::SystemDebugView,
-    Snapshotable,
-};
+use debug::{breakpoint::BreakpointManager, view::SystemDebugView, Snapshotable};
 use system::bus::{crtc::AnyCrtController, gate_array::AnyGateArray, StandardBus};
 use system::cpu::ZilogZ80;
 use system::instruction::AlgorithmicDecoder;
 use system::memory::AnyMemory;
 use system::{AmstradCpc, SystemConfig};
+
+use crate::debug::view::DisassembledInstruction;
 
 pub mod constants;
 pub mod debug;
@@ -122,11 +120,7 @@ impl Driver {
         self.cached_debug_view.as_ref().unwrap()
     }
 
-    pub fn disassemble(
-        &self,
-        start_address: u16,
-        count: usize,
-    ) -> Vec<debug::view::DisassembledInstruction> {
+    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DisassembledInstruction> {
         self.system.disassemble(start_address, count)
     }
 
