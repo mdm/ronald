@@ -30,8 +30,12 @@ pub enum CpuDebugEvent {
         is: u16,
         was: u16,
     },
-    CallExecuted,
-    ReturnExecuted,
+    CallExecuted {
+        interrupt: bool,
+    },
+    ReturnExecuted {
+        interrupt: bool,
+    },
 }
 
 impl From<CpuDebugEvent> for DebugEvent {

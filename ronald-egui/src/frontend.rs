@@ -519,9 +519,8 @@ impl Frontend {
 
     fn step_over(&mut self) {
         let current_pc = self.driver.debug_view().cpu.register_pc;
-
         let disassembly = self.driver.disassemble(current_pc, 1);
-        log::debug!("Disassembly at {:#04X}: {:#?}", current_pc, disassembly);
+
         if let Some(instruction) = disassembly.first()
             && instruction.instruction.contains("call")
         {
