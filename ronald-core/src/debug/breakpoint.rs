@@ -273,6 +273,12 @@ impl StepOutBreakpoint {
     }
 }
 
+impl Default for StepOutBreakpoint {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Breakpoint for StepOutBreakpoint {
     fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Cpu {
@@ -280,16 +286,12 @@ impl Breakpoint for StepOutBreakpoint {
         }
 
         match event {
-            DebugEvent::Cpu(CpuDebugEvent::CallExecuted) => self.depth += 1,
-            DebugEvent::Cpu(CpuDebugEvent::ReturnExecuted) => self.depth -= 1,
+            DebugEvent::Cpu(CpuDebugEvent::CallExecuted { interrupt: _ }) => self.depth += 1,
+            DebugEvent::Cpu(CpuDebugEvent::ReturnExecuted { interrupt: _ }) => self.depth -= 1,
             _ => {}
         }
 
-        if self.depth == 0 {
-            return true;
-        }
-
-        false
+        self.depth == 0
     }
 
     fn enabled(&self) -> bool {
