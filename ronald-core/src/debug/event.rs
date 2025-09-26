@@ -30,10 +30,10 @@ pub enum CpuDebugEvent {
         is: u16,
         was: u16,
     },
-    CallExecuted {
+    CallFetched {
         interrupt: bool,
     },
-    ReturnExecuted {
+    ReturnFetched {
         interrupt: bool,
     },
 }

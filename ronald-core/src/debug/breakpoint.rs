@@ -255,17 +255,17 @@ impl fmt::Display for MemoryBreakpoint {
 }
 
 #[derive(Debug, Clone)]
-pub struct StepOutBreakpoint {
+pub struct CallStackBreakpoint {
     depth: usize,
     enabled: bool,
     one_shot: bool,
     triggered: Option<MasterClockTick>,
 }
 
-impl StepOutBreakpoint {
-    pub fn new() -> Self {
+impl CallStackBreakpoint {
+    pub fn new(depth: usize) -> Self {
         Self {
-            depth: 1,
+            depth,
             enabled: true,
             one_shot: true,
             triggered: None,
@@ -273,25 +273,24 @@ impl StepOutBreakpoint {
     }
 }
 
-impl Default for StepOutBreakpoint {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Breakpoint for StepOutBreakpoint {
+impl Breakpoint for CallStackBreakpoint {
     fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Cpu {
             return false;
         }
 
         match event {
-            DebugEvent::Cpu(CpuDebugEvent::CallExecuted { interrupt: _ }) => self.depth += 1,
-            DebugEvent::Cpu(CpuDebugEvent::ReturnExecuted { interrupt: _ }) => self.depth -= 1,
+            DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: _ }) => self.depth += 1,
+            DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: _ }) => self.depth -= 1,
+            DebugEvent::Cpu(CpuDebugEvent::Register16Written { register, .. })
+                if *register == Register16::PC =>
+            {
+                return self.depth == 0;
+            }
             _ => {}
         }
 
-        self.depth == 0
+        false
     }
 
     fn enabled(&self) -> bool {
@@ -319,7 +318,7 @@ impl Breakpoint for StepOutBreakpoint {
     }
 }
 
-impl fmt::Display for StepOutBreakpoint {
+impl fmt::Display for CallStackBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Step out")
     }
@@ -330,7 +329,7 @@ pub enum AnyBreakpoint {
     CpuRegister8(CpuRegister8Breakpoint),
     CpuRegister16(CpuRegister16Breakpoint),
     Memory(MemoryBreakpoint),
-    StepOut(StepOutBreakpoint),
+    CallStack(CallStackBreakpoint),
 }
 
 impl AnyBreakpoint {
@@ -343,7 +342,11 @@ impl AnyBreakpoint {
     }
 
     pub fn step_out() -> Self {
-        Self::StepOut(StepOutBreakpoint::new())
+        Self::CallStack(CallStackBreakpoint::new(1))
+    }
+
+    pub fn step_over() -> Self {
+        Self::CallStack(CallStackBreakpoint::new(0))
     }
 
     pub fn register8_breakpoint(register: Register8, value: Option<u8>) -> Self {
@@ -370,7 +373,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.should_break(source, event),
             AnyBreakpoint::CpuRegister16(bp) => bp.should_break(source, event),
             AnyBreakpoint::Memory(bp) => bp.should_break(source, event),
-            AnyBreakpoint::StepOut(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CallStack(bp) => bp.should_break(source, event),
         }
     }
 
@@ -379,7 +382,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.enabled(),
             AnyBreakpoint::CpuRegister16(bp) => bp.enabled(),
             AnyBreakpoint::Memory(bp) => bp.enabled(),
-            AnyBreakpoint::StepOut(bp) => bp.enabled(),
+            AnyBreakpoint::CallStack(bp) => bp.enabled(),
         }
     }
 
@@ -388,7 +391,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::Memory(bp) => bp.set_enabled(enabled),
-            AnyBreakpoint::StepOut(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CallStack(bp) => bp.set_enabled(enabled),
         }
     }
 
@@ -397,7 +400,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.one_shot(),
             AnyBreakpoint::CpuRegister16(bp) => bp.one_shot(),
             AnyBreakpoint::Memory(bp) => bp.one_shot(),
-            AnyBreakpoint::StepOut(bp) => bp.one_shot(),
+            AnyBreakpoint::CallStack(bp) => bp.one_shot(),
         }
     }
 
@@ -406,7 +409,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::Memory(bp) => bp.set_one_shot(one_shot),
-            AnyBreakpoint::StepOut(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CallStack(bp) => bp.set_one_shot(one_shot),
         }
     }
 
@@ -415,7 +418,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.triggered(),
             AnyBreakpoint::CpuRegister16(bp) => bp.triggered(),
             AnyBreakpoint::Memory(bp) => bp.triggered(),
-            AnyBreakpoint::StepOut(bp) => bp.triggered(),
+            AnyBreakpoint::CallStack(bp) => bp.triggered(),
         }
     }
 
@@ -424,7 +427,7 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::Memory(bp) => bp.set_triggered(triggered),
-            AnyBreakpoint::StepOut(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CallStack(bp) => bp.set_triggered(triggered),
         }
     }
 }
@@ -435,7 +438,7 @@ impl fmt::Display for AnyBreakpoint {
             AnyBreakpoint::CpuRegister8(bp) => bp.fmt(f),
             AnyBreakpoint::CpuRegister16(bp) => bp.fmt(f),
             AnyBreakpoint::Memory(bp) => bp.fmt(f),
-            AnyBreakpoint::StepOut(bp) => bp.fmt(f),
+            AnyBreakpoint::CallStack(bp) => bp.fmt(f),
         }
     }
 }
