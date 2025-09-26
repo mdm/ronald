@@ -863,6 +863,10 @@ where
             match self.interrupt_mode {
                 InterruptMode::Mode1 => {
                     log::trace!("Handling interrupt");
+                    self.emit_debug_event(
+                        CpuDebugEvent::CallFetched { interrupt: true },
+                        self.master_clock,
+                    );
                     let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
@@ -871,11 +875,6 @@ where
                     self.registers.write_word(&Register16::PC, 0x0038);
 
                     // timing_in_nops += 4; // + Instruction::Rst(_).timing()
-
-                    self.emit_debug_event(
-                        CpuDebugEvent::CallExecuted { interrupt: true },
-                        self.master_clock,
-                    );
                 }
                 _ => unimplemented!(),
             }
@@ -1041,6 +1040,10 @@ where
                 unreachable!();
             }
             Instruction::Call(jump_test, Operand::Immediate16(address)) => {
+                self.emit_debug_event(
+                    CpuDebugEvent::CallFetched { interrupt: false },
+                    self.master_clock,
+                );
                 if self.check_jump(jump_test) {
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
@@ -1050,10 +1053,6 @@ where
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
                 }
-                self.emit_debug_event(
-                    CpuDebugEvent::CallExecuted { interrupt: false },
-                    self.master_clock,
-                );
             }
             Instruction::Call(_, _) => {
                 unreachable!();
@@ -1781,6 +1780,10 @@ where
                 unreachable!();
             }
             Instruction::Ret(jump_test) => {
+                self.emit_debug_event(
+                    CpuDebugEvent::ReturnFetched { interrupt: false },
+                    self.master_clock,
+                );
                 if self.check_jump(jump_test) {
                     let old_sp = self.registers.read_word(&Register16::SP);
                     self.registers.write_word(&Register16::SP, old_sp + 2);
@@ -1790,31 +1793,27 @@ where
                     self.registers
                         .write_word(&Register16::PC, next_address as u16);
                 }
-                self.emit_debug_event(
-                    CpuDebugEvent::ReturnExecuted { interrupt: false },
-                    self.master_clock,
-                );
             }
             Instruction::Reti => {
+                self.emit_debug_event(
+                    CpuDebugEvent::ReturnFetched { interrupt: true },
+                    self.master_clock,
+                );
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
                 self.registers
                     .write_word(&Register16::PC, memory.read_word(old_sp as usize));
-                self.emit_debug_event(
-                    CpuDebugEvent::ReturnExecuted { interrupt: true },
-                    self.master_clock,
-                );
             }
             Instruction::Retn => {
+                self.emit_debug_event(
+                    CpuDebugEvent::ReturnFetched { interrupt: true },
+                    self.master_clock,
+                );
                 self.iff1 = self.iff2;
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
                 self.registers
                     .write_word(&Register16::PC, memory.read_word(old_sp as usize));
-                self.emit_debug_event(
-                    CpuDebugEvent::ReturnExecuted { interrupt: true },
-                    self.master_clock,
-                );
             }
             Instruction::Rl(destination, operand) => {
                 let value = self.load_byte(memory, operand);
