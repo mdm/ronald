@@ -113,9 +113,7 @@ impl CpuRegister16Breakpoint {
     }
 
     pub fn step_into() -> Self {
-        let mut bp = Self::new(Register16::PC, None);
-        bp.one_shot = true;
-        bp
+        Self::new(Register16::PC, None)
     }
 }
 
@@ -267,7 +265,7 @@ impl CallStackBreakpoint {
         Self {
             depth,
             enabled: true,
-            one_shot: true,
+            one_shot: false,
             triggered: None,
         }
     }
@@ -839,26 +837,30 @@ mod tests {
     fn test_step_into_breakpoint_behavior() {
         let mut manager = BreakpointManager::new();
         let step_into_id = manager.add_breakpoint(AnyBreakpoint::step_into());
-        
+
         // Verify step_into is a one-shot breakpoint
         assert!(manager.breakpoint(step_into_id).unwrap().one_shot());
         assert!(manager.breakpoint(step_into_id).unwrap().enabled());
-        
+
         // Simulate PC change (any instruction execution)
         let pc_event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
             is: 0x1001,
             was: 0x1000,
         });
-        
+
         // Emit the event and evaluate breakpoints
         emit_event(DebugSource::Cpu, pc_event, MasterClockTick::default());
         manager.evaluate_breakpoints();
-        
+
         // The breakpoint should have triggered
         assert!(manager.any_triggered());
-        assert!(manager.breakpoint(step_into_id).unwrap().triggered().is_some());
-        
+        assert!(manager
+            .breakpoint(step_into_id)
+            .unwrap()
+            .triggered()
+            .is_some());
+
         // After evaluation, the one-shot breakpoint should be removed
         manager.evaluate_breakpoints();
         assert_eq!(manager.breakpoints.len(), 0);
@@ -869,21 +871,19 @@ mod tests {
     fn test_step_over_breakpoint_behavior() {
         let mut manager = BreakpointManager::new();
         let step_over_id = manager.add_breakpoint(AnyBreakpoint::step_over());
-        
+
         // Verify step_over is a one-shot CallStackBreakpoint with depth 0
         assert!(manager.breakpoint(step_over_id).unwrap().one_shot());
         assert!(manager.breakpoint(step_over_id).unwrap().enabled());
-        
+
         // Simulate a call instruction (increases call stack depth)
-        let call_event = DebugEvent::Cpu(CpuDebugEvent::CallFetched {
-            interrupt: false,
-        });
+        let call_event = DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false });
         emit_event(DebugSource::Cpu, call_event, MasterClockTick::default());
         manager.evaluate_breakpoints();
-        
+
         // Should not trigger while in call
         assert!(!manager.any_triggered());
-        
+
         // Simulate PC change while inside call
         let pc_in_call = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
@@ -892,33 +892,39 @@ mod tests {
         });
         emit_event(DebugSource::Cpu, pc_in_call, MasterClockTick::default());
         manager.evaluate_breakpoints();
-        
+
         // Should still not trigger (we're in a deeper call level)
         assert!(!manager.any_triggered());
-        
+
         // Simulate return instruction (decreases call stack depth back to 0)
-        let return_event = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched {
-            interrupt: false,
-        });
+        let return_event = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false });
         emit_event(DebugSource::Cpu, return_event, MasterClockTick::default());
         manager.evaluate_breakpoints();
-        
+
         // Should still not trigger yet (return just adjusts depth)
         assert!(!manager.any_triggered());
-        
+
         // Simulate PC change after return (back at original call level)
         let pc_after_return = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
             is: 0x1001,
             was: 0x1000,
         });
-        emit_event(DebugSource::Cpu, pc_after_return, MasterClockTick::default());
+        emit_event(
+            DebugSource::Cpu,
+            pc_after_return,
+            MasterClockTick::default(),
+        );
         manager.evaluate_breakpoints();
-        
+
         // Now it should trigger (we're back at depth 0)
         assert!(manager.any_triggered());
-        assert!(manager.breakpoint(step_over_id).unwrap().triggered().is_some());
-        
+        assert!(manager
+            .breakpoint(step_over_id)
+            .unwrap()
+            .triggered()
+            .is_some());
+
         // After evaluation, the one-shot breakpoint should be removed
         manager.evaluate_breakpoints();
         assert_eq!(manager.breakpoints.len(), 0);
@@ -928,11 +934,11 @@ mod tests {
     fn test_step_over_breakpoint_no_calls() {
         let mut manager = BreakpointManager::new();
         let step_over_id = manager.add_breakpoint(AnyBreakpoint::step_over());
-        
+
         // Verify step_over is a one-shot CallStackBreakpoint with depth 0
         assert!(manager.breakpoint(step_over_id).unwrap().one_shot());
         assert!(manager.breakpoint(step_over_id).unwrap().enabled());
-        
+
         // Simulate simple PC change without any calls (normal instruction execution)
         let pc_event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
@@ -941,11 +947,15 @@ mod tests {
         });
         emit_event(DebugSource::Cpu, pc_event, MasterClockTick::default());
         manager.evaluate_breakpoints();
-        
+
         // Should trigger immediately since we're already at depth 0
         assert!(manager.any_triggered());
-        assert!(manager.breakpoint(step_over_id).unwrap().triggered().is_some());
-        
+        assert!(manager
+            .breakpoint(step_over_id)
+            .unwrap()
+            .triggered()
+            .is_some());
+
         // After evaluation, the one-shot breakpoint should be removed
         manager.evaluate_breakpoints();
         assert_eq!(manager.breakpoints.len(), 0);
@@ -954,26 +964,24 @@ mod tests {
     #[test]
     fn test_step_out_from_inside_function() {
         let mut manager = BreakpointManager::new();
-        
+
         // Simulate that we're already inside a function by creating the breakpoint
         // after a call has been made (this is the typical debugging scenario)
-        let call_event = DebugEvent::Cpu(CpuDebugEvent::CallFetched {
-            interrupt: false,
-        });
+        let call_event = DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false });
         emit_event(DebugSource::Cpu, call_event, MasterClockTick::default());
-        
+
         // Now create step_out breakpoint (starts with depth 1)
         let step_out_id = manager.add_breakpoint(AnyBreakpoint::step_out());
-        
+
         // Evaluate breakpoints so the CallStackBreakpoint can process the call event
         // This will increment its internal depth from 1 to 2
         manager.evaluate_breakpoints();
-        
+
         assert!(manager.breakpoint(step_out_id).unwrap().one_shot());
         assert!(manager.breakpoint(step_out_id).unwrap().enabled());
         assert!(!manager.any_triggered()); // Should not trigger yet
-        
-        // Simulate PC changes while inside function 
+
+        // Simulate PC changes while inside function
         let pc_in_function = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
             is: 0x2000,
@@ -981,38 +989,38 @@ mod tests {
         });
         emit_event(DebugSource::Cpu, pc_in_function, MasterClockTick::default());
         manager.evaluate_breakpoints();
-        
+
         // Should not trigger (we're at depth 2, not 0)
         assert!(!manager.any_triggered());
-        
+
         // Simulate return from function
-        let return_event = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched {
-            interrupt: false,
-        });
+        let return_event = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false });
         emit_event(DebugSource::Cpu, return_event, MasterClockTick::default());
         manager.evaluate_breakpoints();
-        
+
         // Should still not trigger yet (return just decrements depth to 1)
         assert!(!manager.any_triggered());
-        
+
         // Simulate PC change after return (now at depth 1, but we need depth 0)
         let pc_after_return = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
             is: 0x1001,
             was: 0x1000,
         });
-        emit_event(DebugSource::Cpu, pc_after_return, MasterClockTick::default());
+        emit_event(
+            DebugSource::Cpu,
+            pc_after_return,
+            MasterClockTick::default(),
+        );
         manager.evaluate_breakpoints();
-        
+
         // Still should not trigger (depth is 1, not 0)
         assert!(!manager.any_triggered());
-        
+
         // Need another return to get to depth 0
-        let final_return = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched {
-            interrupt: false,
-        });
+        let final_return = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false });
         emit_event(DebugSource::Cpu, final_return, MasterClockTick::default());
-        
+
         // Now PC change should trigger step_out
         let final_pc = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
             register: Register16::PC,
@@ -1021,11 +1029,15 @@ mod tests {
         });
         emit_event(DebugSource::Cpu, final_pc, MasterClockTick::default());
         manager.evaluate_breakpoints();
-        
+
         // Now it should trigger (we've stepped out to depth 0)
         assert!(manager.any_triggered());
-        assert!(manager.breakpoint(step_out_id).unwrap().triggered().is_some());
-        
+        assert!(manager
+            .breakpoint(step_out_id)
+            .unwrap()
+            .triggered()
+            .is_some());
+
         // After evaluation, the one-shot breakpoint should be removed
         manager.evaluate_breakpoints();
         assert_eq!(manager.breakpoints.len(), 0);
