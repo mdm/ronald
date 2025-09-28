@@ -2238,8 +2238,8 @@ mod tests {
         system::{
             bus::Bus,
             clock::MasterClock,
-            instruction::AlgorithmicDecoder,
-            memory::{MemManage, Ram},
+            instruction::{AlgorithmicDecoder, Instruction, JumpTest, Operand, TestDecoder},
+            memory::{MemManage, Ram, TestMemory},
         },
         AudioSink, VideoSink,
     };
@@ -2582,5 +2582,517 @@ mod tests {
                 register
             );
         }
+    }
+
+    #[test]
+    fn test_call_instruction_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        // Create CPU with TestDecoder that returns CALL instruction
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x1000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Call(
+            JumpTest::Unconditional,
+            Operand::Immediate16(0x2000),
+        )]);
+
+        // Set up stack pointer to avoid underflow
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Execute the CALL instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that CallFetched event comes before PC change event
+        let call_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x2000,
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            call_event_pos.is_some(),
+            "CallFetched event should be emitted"
+        );
+        assert!(pc_change_pos.is_some(), "PC change event should be emitted");
+        assert!(
+            call_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "CallFetched event should come before PC change event"
+        );
+    }
+
+    #[test]
+    fn test_conditional_call_instruction_debug_event_ordering_taken() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x1000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Call(
+            JumpTest::Zero,
+            Operand::Immediate16(0x2000),
+        )]);
+
+        // Set up stack pointer to avoid underflow
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Set zero flag to make conditional call taken
+        cpu.set_flag(Flag::Zero, true);
+
+        // Execute the CALL instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that CallFetched event comes before PC change event
+        let call_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x2000,
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            call_event_pos.is_some(),
+            "CallFetched event should be emitted for taken conditional call"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for taken conditional call"
+        );
+        assert!(
+            call_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "CallFetched event should come before PC change event for taken conditional call"
+        );
+    }
+
+    #[test]
+    fn test_conditional_call_instruction_debug_event_ordering_not_taken() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x1000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Call(
+            JumpTest::Zero,
+            Operand::Immediate16(0x2000),
+        )]);
+
+        // Set up stack pointer to avoid underflow
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Clear zero flag to make conditional call not taken
+        cpu.set_flag(Flag::Zero, false);
+
+        // Execute the CALL instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that CallFetched event comes before PC change event
+        let call_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1001, // Should advance to next instruction
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            call_event_pos.is_some(),
+            "CallFetched event should be emitted even for not taken conditional call"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for not taken conditional call"
+        );
+        assert!(
+            call_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "CallFetched event should come before PC change event for not taken conditional call"
+        );
+    }
+
+    #[test]
+    fn test_return_instruction_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Ret(JumpTest::Unconditional)]);
+
+        // Set up memory to return 0x1500 when stack is read
+        let mut memory = TestMemory::new(vec![0x00, 0x15]); // Little endian 0x1500
+        let mut bus = BlackHole::new();
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RET instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1500, // Return address from stack
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted"
+        );
+        assert!(pc_change_pos.is_some(), "PC change event should be emitted");
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event"
+        );
+    }
+
+    #[test]
+    fn test_conditional_return_instruction_debug_event_ordering_taken() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Ret(JumpTest::Zero)]);
+
+        let mut memory = TestMemory::new(vec![0x00, 0x15]); // Little endian 0x1500
+        let mut bus = BlackHole::new();
+
+        // Set zero flag to make conditional return taken
+        cpu.set_flag(Flag::Zero, true);
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RET instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1500, // Return address from stack
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted for taken conditional return"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for taken conditional return"
+        );
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event for taken conditional return"
+        );
+    }
+
+    #[test]
+    fn test_conditional_return_instruction_debug_event_ordering_not_taken() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Ret(JumpTest::Zero)]);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Clear zero flag to make conditional return not taken
+        cpu.set_flag(Flag::Zero, false);
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RET instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x2001, // Should advance to next instruction
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted even for not taken conditional return"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for not taken conditional return"
+        );
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event for not taken conditional return"
+        );
+    }
+
+    #[test]
+    fn test_reti_instruction_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Reti]);
+
+        let mut memory = TestMemory::new(vec![0x00, 0x15]); // Little endian 0x1500
+        let mut bus = BlackHole::new();
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RETI instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: true })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1500, // Return address from stack
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted for RETI"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for RETI"
+        );
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event for RETI"
+        );
+    }
+
+    #[test]
+    fn test_retn_instruction_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Retn]);
+
+        let mut memory = TestMemory::new(vec![0x00, 0x15]); // Little endian 0x1500
+        let mut bus = BlackHole::new();
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RETN instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: true })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1500, // Return address from stack
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted for RETN"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for RETN"
+        );
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event for RETN"
+        );
+    }
+
+    #[test]
+    fn test_interrupt_handling_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x1000);
+        cpu.decoder = TestDecoder::new(vec![
+            Instruction::Nop, // Simple instruction at current PC
+        ]);
+
+        // Set up stack pointer to avoid underflow
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Enable interrupts and set interrupt mode 1
+        cpu.iff1 = true;
+        cpu.interrupt_mode = InterruptMode::Mode1;
+
+        // Request an interrupt
+        cpu.request_interrupt();
+
+        // Execute instruction - this should handle the interrupt
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that CallFetched interrupt event comes before PC change event
+        let call_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: true })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x0038, // Interrupt vector for mode 1
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            call_event_pos.is_some(),
+            "CallFetched interrupt event should be emitted"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for interrupt"
+        );
+        assert!(
+            call_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "CallFetched interrupt event should come before PC change event"
+        );
     }
 }

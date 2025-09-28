@@ -493,3 +493,63 @@ impl Snapshotable for AnyMemory {
         }
     }
 }
+
+#[cfg(test)]
+/// A test memory implementation that returns predefined values and ignores writes
+#[derive(Default)]
+pub struct TestMemory {
+    read_values: Vec<u8>,
+    current_index: std::cell::Cell<usize>,
+}
+
+#[cfg(test)]
+impl TestMemory {
+    pub fn new(read_values: Vec<u8>) -> Self {
+        use std::cell::Cell;
+
+        Self {
+            read_values,
+            current_index: Cell::new(0),
+        }
+    }
+}
+
+#[cfg(test)]
+impl MemRead for TestMemory {
+    fn read_byte(&self, _address: usize) -> u8 {
+        let current_index = self.current_index.get();
+        if current_index < self.read_values.len() {
+            let value = self.read_values[current_index];
+            self.current_index.set(current_index + 1);
+            value
+        } else {
+            0x00 // Default value when no more data
+        }
+    }
+}
+
+#[cfg(test)]
+impl MemWrite for TestMemory {
+    fn write_byte(&mut self, _address: usize, _value: u8) {
+        // Noop - writes are ignored in test memory
+    }
+}
+
+#[cfg(test)]
+impl MemManage for TestMemory {
+    fn enable_lower_rom(&mut self, _enable: bool) {
+        // Noop
+    }
+
+    fn enable_upper_rom(&mut self, _enable: bool) {
+        // Noop
+    }
+
+    fn select_upper_rom(&mut self, _upper_rom_nr: u8) {
+        // Noop
+    }
+
+    fn force_ram_read(&mut self, _force: bool) {
+        // Noop
+    }
+}
