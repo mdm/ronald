@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::system::cpu;
 use crate::system::memory::MemRead;
 
+#[derive(Clone)]
 pub enum Operand {
     Immediate8(u8),
     Immediate16(u16),
@@ -92,6 +93,7 @@ impl fmt::Display for InterruptMode {
     }
 }
 
+#[derive(Clone)]
 pub enum JumpTest {
     Unconditional,
     NonZero,
@@ -137,6 +139,7 @@ impl fmt::Display for JumpTest {
     }
 }
 
+#[derive(Clone)]
 pub enum Instruction {
     Adc(Operand, Operand),
     Add(Operand, Operand),
@@ -1620,6 +1623,38 @@ impl AlgorithmicDecoder {
                 }
             }
             _ => unreachable!(),
+        }
+    }
+}
+
+#[cfg(test)]
+/// A test decoder that can return specific instructions without decoding
+#[derive(Default)]
+pub struct TestDecoder {
+    instructions: Vec<Instruction>,
+    current_index: usize,
+}
+
+#[cfg(test)]
+impl TestDecoder {
+    pub fn new(instructions: Vec<Instruction>) -> Self {
+        Self {
+            instructions,
+            current_index: 0,
+        }
+    }
+}
+
+#[cfg(test)]
+impl Decoder for TestDecoder {
+    fn decode(&mut self, _memory: &impl MemRead, address: usize) -> (Instruction, usize) {
+        if self.current_index < self.instructions.len() {
+            let instruction = self.instructions[self.current_index].clone();
+            self.current_index += 1;
+            (instruction, address + 1) // Simple increment for next address
+        } else {
+            // Return NOP if we run out of instructions
+            (Instruction::Nop, address + 1)
         }
     }
 }
