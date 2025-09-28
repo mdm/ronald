@@ -518,22 +518,11 @@ impl Frontend {
     }
 
     fn step_over(&mut self) {
-        let current_pc = self.driver.debug_view().cpu.register_pc;
-        let disassembly = self.driver.disassemble(current_pc, 1);
+        let mut breakpoint = AnyBreakpoint::step_over();
+        breakpoint.set_one_shot(true);
+        self.driver.breakpoint_manager().add_breakpoint(breakpoint);
 
-        if let Some(instruction) = disassembly.first()
-            && instruction.instruction.contains("call")
-        {
-            let next_pc = current_pc.wrapping_add(instruction.length as u16);
-
-            let mut breakpoint = AnyBreakpoint::pc_breakpoint(next_pc);
-            breakpoint.set_one_shot(true);
-            self.driver.breakpoint_manager().add_breakpoint(breakpoint);
-
-            self.resume();
-        } else {
-            self.step_into();
-        }
+        self.resume();
     }
 
     fn step_out(&mut self) {
