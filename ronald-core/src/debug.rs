@@ -25,8 +25,6 @@ pub struct EventRecord {
     pub master_clock: MasterClockTick,
 }
 
-const MAX_EVENTS: usize = 100;
-
 struct EventLog {
     events: Vec<EventRecord>,
     first_sequence: EventSequence,
@@ -43,9 +41,12 @@ impl EventLog {
     }
 
     fn append(&mut self, source: DebugSource, event: DebugEvent, master_clock: MasterClockTick) {
-        if self.events.len() >= MAX_EVENTS {
-            log::warn!("Debug event log is full. Are all subscriptions consuming events?");
-        }
+        debug_assert!(
+            self.events.len() < 100_000,
+            "Debug event log is full ({} events, last={:?}). Are all subscriptions consuming events?",
+            self.events.len(),
+            self.events.last()
+        );
 
         let sequence = self.next_sequence;
         self.next_sequence = self.next_sequence.next();

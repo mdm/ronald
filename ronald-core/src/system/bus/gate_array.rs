@@ -25,7 +25,7 @@ pub struct Amstrad40007 {
     requested_screen_mode: u8,
     hsync_active: bool,
     vsync_active: bool,
-    hsyncs_since_last_vsync: u8,
+    hsyncs_since_last_vsync: u16,
     interrupt_counter: u8,
     hold_interrupt: bool,
     selected_pen: usize,
