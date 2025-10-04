@@ -26,6 +26,7 @@ pub struct EventRecord {
 }
 
 struct EventLog {
+    enabled: bool,
     events: Vec<EventRecord>,
     first_sequence: EventSequence,
     next_sequence: EventSequence,
@@ -34,6 +35,7 @@ struct EventLog {
 impl EventLog {
     fn new() -> Self {
         Self {
+            enabled: true,
             events: Vec::new(),
             first_sequence: EventSequence(0),
             next_sequence: EventSequence(0),
@@ -41,6 +43,10 @@ impl EventLog {
     }
 
     fn append(&mut self, source: DebugSource, event: DebugEvent, master_clock: MasterClockTick) {
+        if !self.enabled {
+            return;
+        }
+
         debug_assert!(
             self.events.len() < 100_000,
             "Debug event log is full ({} events, last={:?}). Are all subscriptions consuming events?",
@@ -197,6 +203,10 @@ thread_local! {
 
 pub fn emit_event(source: DebugSource, event: DebugEvent, master_clock: MasterClockTick) {
     DEBUG_EVENT_LOG.with(|log| log.borrow_mut().append(source, event, master_clock));
+}
+
+pub fn record_debug_events(enabled: bool) {
+    DEBUG_EVENT_LOG.with(|log| log.borrow_mut().enabled = enabled);
 }
 
 pub trait Snapshotable {

@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::debug::view::{CpuDebugView, DisassembledInstruction, MemoryDebugView, SystemDebugView};
-use crate::debug::Snapshotable;
+use crate::debug::{record_debug_events, Snapshotable};
 use crate::system::clock::{MasterClock, MasterClockTick};
 use crate::{AudioSink, VideoSink};
 
@@ -96,6 +96,7 @@ where
     B: Bus,
 {
     pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DisassembledInstruction> {
+        record_debug_events(false);
         let mut decoder = AlgorithmicDecoder::default();
         let mut disassembly = Vec::with_capacity(count);
         let mut address = start_address;
@@ -110,6 +111,7 @@ where
             });
             address = next_address as u16;
         }
+        record_debug_events(true);
         disassembly
     }
 }
