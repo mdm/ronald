@@ -64,7 +64,6 @@ where
             Default::default()
         };
 
-        // Apply the saved theme preference
         cc.egui_ctx
             .set_theme(egui::Theme::from_dark_mode(app.dark_mode));
 
@@ -85,20 +84,16 @@ where
         self.render_workbench_mode(ctx);
         self.key_map_editor.ui(ctx, &mut self.key_mapper);
         let config_changed = self.system_config_modal.ui(ctx, &mut self.system_config);
-        if config_changed {
-            // Recreate frontend with new config
-            if let Some(render_state) = frame.wgpu_render_state() {
-                let new_frontend = Frontend::with_config(render_state, &self.system_config);
-                self.frontend = Some(new_frontend);
-            }
+        if config_changed && let Some(render_state) = frame.wgpu_render_state() {
+            let new_frontend = Frontend::with_config(render_state, &self.system_config);
+            self.frontend = Some(new_frontend);
         }
 
-        // Render debug windows with current debug data when emulator is paused
-        if let Some(frontend) = &mut self.frontend {
-            // if frontend.is_paused() {
+        if self.workbench
+            && let Some(frontend) = &mut self.frontend
+        {
             self.cpu_debug_window.ui(ctx, frontend);
             self.memory_debug_window.ui(ctx, frontend);
-            // }
         }
 
         ctx.request_repaint();
@@ -251,7 +246,7 @@ where
                             ctx,
                             Some(ui),
                             &mut self.key_mapper,
-                            !self.key_map_editor.show,
+                            !self.key_map_editor.show && !self.system_config_modal.show,
                         );
                     },
                 );
@@ -263,7 +258,12 @@ where
         if let Some(frontend) = &mut self.frontend
             && self.workbench
         {
-            frontend.ui(ctx, None, &mut self.key_mapper, !self.key_map_editor.show);
+            frontend.ui(
+                ctx,
+                None,
+                &mut self.key_mapper,
+                !self.key_map_editor.show && !self.system_config_modal.show,
+            );
         }
     }
 }

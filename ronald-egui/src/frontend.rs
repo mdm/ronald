@@ -1,6 +1,7 @@
 use std::{path::PathBuf, thread::spawn};
 
 use eframe::{egui, egui_wgpu};
+use egui::Vec2;
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
@@ -39,6 +40,7 @@ pub struct Frontend {
     time_available: usize,
     can_interact: bool,
     paused: bool,
+    hovered: Option<Instant>,
     picked_file_disk_a: Shared<Option<File>>,
     picked_file_disk_b: Shared<Option<File>>,
     picked_file_tape: Shared<Option<File>>,
@@ -69,6 +71,7 @@ impl Frontend {
             time_available: 0,
             can_interact: true,
             paused: false,
+            hovered: None,
             picked_file_disk_a: shared(None),
             picked_file_disk_b: shared(None),
             picked_file_tape: shared(None),
@@ -233,7 +236,7 @@ impl Frontend {
         }
 
         self.step_emulation();
-        self.draw_framebuffer(ctx, ui, size)
+        self.draw_framebuffer(ctx, ui, size, workbench)
     }
     fn handle_input<K>(&mut self, input: &egui::InputState, key_mapper: &mut KeyMapper<K>)
     where
@@ -381,16 +384,29 @@ impl Frontend {
         ctx: &egui::Context,
         ui: &mut egui::Ui,
         size: egui::Vec2,
+        workbench: bool,
     ) -> egui::Response {
         let texture = egui::load::SizedTexture::new(self.video.framebuffer(), size);
-        let response = ui.image(texture);
+        let response = ui.image(texture).interact(egui::Sense::click());
 
         let hovered = response
             .rect
             .contains(ctx.input(|i| i.pointer.hover_pos()).unwrap_or_default());
 
-        if self.paused || hovered {
-            self.draw_debug_overlay(ui, &response);
+        let moved = ctx.input(|i| i.pointer.delta() != Vec2::new(0.0, 0.0)) || response.clicked();
+
+        if hovered && moved {
+            self.hovered = Some(Instant::now());
+        } else if let Some(hovered) = self.hovered
+            && Instant::now().duration_since(hovered).as_secs_f32() > 2.0
+        {
+            self.hovered = None;
+        } else if !hovered {
+            self.hovered = None;
+        }
+
+        if self.paused || self.hovered.is_some() {
+            self.draw_pause_overlay(ui, &response, workbench);
         }
 
         response
@@ -456,7 +472,12 @@ impl Frontend {
         self.driver.breakpoint_manager()
     }
 
-    fn draw_debug_overlay(&mut self, ui: &mut egui::Ui, screen_response: &egui::Response) {
+    fn draw_pause_overlay(
+        &mut self,
+        ui: &mut egui::Ui,
+        screen_response: &egui::Response,
+        workbench: bool,
+    ) {
         let rect = screen_response.rect;
         let overlay_height = 40.0;
         let overlay_rect = egui::Rect::from_min_size(
@@ -489,6 +510,10 @@ impl Frontend {
         if self.paused {
             if child_ui.button("Run").clicked() {
                 self.resume();
+            }
+
+            if !workbench {
+                return;
             }
 
             child_ui.add_space(24.0);
