@@ -232,6 +232,16 @@ impl MemoryDebugWindow {
     }
 
     fn render_memory_controls(&mut self, ui: &mut egui::Ui) {
+        let size = match &self.view_mode {
+            MemoryViewMode::Disassembly => 0x10000,
+            MemoryViewMode::CompositeRomRam => 0x10000,
+            MemoryViewMode::CompositeRam => 0x10000,
+            MemoryViewMode::LowerRomOnly => 0x4000,
+            MemoryViewMode::UpperRomOnly(_) => 0x4000,
+            MemoryViewMode::RamOnly => 0x10000,
+            MemoryViewMode::ExtensionRamOnly => 0x10000,
+        };
+
         ui.horizontal(|ui| {
             ui.label("Jump to address:");
             let text_edit = ui.text_edit_singleline(&mut self.address_input);
@@ -242,10 +252,11 @@ impl MemoryDebugWindow {
             if enter_pressed || go_clicked {
                 if self.view_mode == MemoryViewMode::Disassembly {
                     if let Ok(addr) =
-                        u16::from_str_radix(self.address_input.trim_start_matches("0x"), 16)
+                        usize::from_str_radix(self.address_input.trim_start_matches("0x"), 16)
                     {
                         log::debug!("Setting disassembly start address: {:04X}", addr);
-                        self.disassembly_start = Some(addr);
+                        // TODO: show toast when wrapping
+                        self.disassembly_start = Some((addr % size) as u16);
                         self.cached_disassembly = None; // Invalidate cache
                     } else {
                         log::warn!("Failed to parse address: '{}'", self.address_input);
@@ -254,7 +265,8 @@ impl MemoryDebugWindow {
                     usize::from_str_radix(self.address_input.trim_start_matches("0x"), 16)
                 {
                     log::debug!("Setting scroll target to address: {:04X}", addr);
-                    self.jump_to_address = Some(addr);
+                    // TODO: show toast when wrapping
+                    self.jump_to_address = Some(addr % size);
                 } else {
                     log::warn!("Failed to parse address: '{}'", self.address_input);
                 }
