@@ -125,11 +125,15 @@ where
     type View = SystemDebugView;
 
     fn debug_view(&self) -> Self::View {
-        Self::View {
+        record_debug_events(false);
+        let debug_view = Self::View {
             master_clock: self.master_clock.current(),
             cpu: self.cpu.debug_view(),
             memory: self.memory.debug_view(),
-        }
+        };
+        record_debug_events(true);
+
+        debug_view
     }
 }
 

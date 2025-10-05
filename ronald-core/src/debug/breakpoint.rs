@@ -323,9 +323,79 @@ impl fmt::Display for CallStackBreakpoint {
 }
 
 #[derive(Debug, Clone)]
+pub struct CpuShadowRegister16Breakpoint {
+    pub register: Register16,
+    pub value: Option<u16>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CpuShadowRegister16Breakpoint {
+    pub fn new(register: Register16, value: Option<u16>) -> Self {
+        Self {
+            register,
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CpuShadowRegister16Breakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Cpu {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Cpu(CpuDebugEvent::ShadowRegister16Written { register, is, .. }) => {
+                *register == self.register && self.value.is_none_or(|v| v == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CpuShadowRegister16Breakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.value {
+            Some(val) => write!(f, "{:?}' = 0x{:04X}", self.register, val),
+            None => write!(f, "{:?}' written", self.register),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum AnyBreakpoint {
     CpuRegister8(CpuRegister8Breakpoint),
     CpuRegister16(CpuRegister16Breakpoint),
+    CpuShadowRegister16(CpuShadowRegister16Breakpoint),
     Memory(MemoryBreakpoint),
     CallStack(CallStackBreakpoint),
 }
@@ -347,12 +417,16 @@ impl AnyBreakpoint {
         Self::CallStack(CallStackBreakpoint::new(0))
     }
 
-    pub fn register8_breakpoint(register: Register8, value: Option<u8>) -> Self {
+    pub fn cpu_register8_breakpoint(register: Register8, value: Option<u8>) -> Self {
         Self::CpuRegister8(CpuRegister8Breakpoint::new(register, value))
     }
 
-    pub fn register16_breakpoint(register: Register16, value: Option<u16>) -> Self {
+    pub fn cpu_register16_breakpoint(register: Register16, value: Option<u16>) -> Self {
         Self::CpuRegister16(CpuRegister16Breakpoint::new(register, value))
+    }
+
+    pub fn cpu_shadow_register16_breakpoint(register: Register16, value: Option<u16>) -> Self {
+        Self::CpuShadowRegister16(CpuShadowRegister16Breakpoint::new(register, value))
     }
 
     pub fn memory_breakpoint(
@@ -370,6 +444,7 @@ impl Breakpoint for AnyBreakpoint {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.should_break(source, event),
             AnyBreakpoint::CpuRegister16(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.should_break(source, event),
             AnyBreakpoint::Memory(bp) => bp.should_break(source, event),
             AnyBreakpoint::CallStack(bp) => bp.should_break(source, event),
         }
@@ -379,6 +454,7 @@ impl Breakpoint for AnyBreakpoint {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.enabled(),
             AnyBreakpoint::CpuRegister16(bp) => bp.enabled(),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.enabled(),
             AnyBreakpoint::Memory(bp) => bp.enabled(),
             AnyBreakpoint::CallStack(bp) => bp.enabled(),
         }
@@ -388,6 +464,7 @@ impl Breakpoint for AnyBreakpoint {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::Memory(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CallStack(bp) => bp.set_enabled(enabled),
         }
@@ -397,6 +474,7 @@ impl Breakpoint for AnyBreakpoint {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.one_shot(),
             AnyBreakpoint::CpuRegister16(bp) => bp.one_shot(),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.one_shot(),
             AnyBreakpoint::Memory(bp) => bp.one_shot(),
             AnyBreakpoint::CallStack(bp) => bp.one_shot(),
         }
@@ -406,6 +484,7 @@ impl Breakpoint for AnyBreakpoint {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::Memory(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CallStack(bp) => bp.set_one_shot(one_shot),
         }
@@ -415,6 +494,7 @@ impl Breakpoint for AnyBreakpoint {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.triggered(),
             AnyBreakpoint::CpuRegister16(bp) => bp.triggered(),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.triggered(),
             AnyBreakpoint::Memory(bp) => bp.triggered(),
             AnyBreakpoint::CallStack(bp) => bp.triggered(),
         }
@@ -424,6 +504,7 @@ impl Breakpoint for AnyBreakpoint {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CpuRegister16(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::Memory(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CallStack(bp) => bp.set_triggered(triggered),
         }
@@ -435,6 +516,7 @@ impl fmt::Display for AnyBreakpoint {
         match self {
             AnyBreakpoint::CpuRegister8(bp) => bp.fmt(f),
             AnyBreakpoint::CpuRegister16(bp) => bp.fmt(f),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.fmt(f),
             AnyBreakpoint::Memory(bp) => bp.fmt(f),
             AnyBreakpoint::CallStack(bp) => bp.fmt(f),
         }
@@ -596,7 +678,7 @@ mod tests {
 
     #[test]
     fn test_register8_breakpoint_with_specific_value() {
-        let mut bp = AnyBreakpoint::register8_breakpoint(Register8::A, Some(0x42));
+        let mut bp = AnyBreakpoint::cpu_register8_breakpoint(Register8::A, Some(0x42));
 
         let correct_event = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
             register: Register8::A,
@@ -623,7 +705,7 @@ mod tests {
 
     #[test]
     fn test_register8_breakpoint_any_value() {
-        let mut bp = AnyBreakpoint::register8_breakpoint(Register8::A, None);
+        let mut bp = AnyBreakpoint::cpu_register8_breakpoint(Register8::A, None);
 
         let event1 = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
             register: Register8::A,
@@ -772,10 +854,10 @@ mod tests {
         let pc_bp = AnyBreakpoint::pc_breakpoint(0x1000);
         assert_eq!(pc_bp.to_string(), "PC = 0x1000");
 
-        let reg8_specific = AnyBreakpoint::register8_breakpoint(Register8::A, Some(0x42));
+        let reg8_specific = AnyBreakpoint::cpu_register8_breakpoint(Register8::A, Some(0x42));
         assert_eq!(reg8_specific.to_string(), "A = 0x42");
 
-        let reg8_any = AnyBreakpoint::register8_breakpoint(Register8::B, None);
+        let reg8_any = AnyBreakpoint::cpu_register8_breakpoint(Register8::B, None);
         assert_eq!(reg8_any.to_string(), "B written");
 
         let mem_read = AnyBreakpoint::memory_breakpoint(0x4000, true, false, None);

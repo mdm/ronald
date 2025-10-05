@@ -1,24 +1,129 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use ronald_core::debug::{
-    breakpoint::{AnyBreakpoint, Breakpoint, BreakpointManager},
-    view::CpuDebugView,
-};
+use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
+use ronald_core::system::cpu::{Register8, Register16 as PrimaryRegister16};
 
 use crate::frontend::Frontend;
+
+fn default_register8() -> Register8 {
+    Register8::A
+}
+
+fn default_ui_register16() -> Register16 {
+    Register16::PC
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+enum Register16 {
+    PC,
+    SP,
+    AF,
+    BC,
+    DE,
+    HL,
+    IX,
+    IY,
+    ShadowAF,
+    ShadowBC,
+    ShadowDE,
+    ShadowHL,
+}
+
+impl Register16 {
+    fn is_shadow(&self) -> bool {
+        matches!(
+            self,
+            Register16::ShadowAF
+                | Register16::ShadowBC
+                | Register16::ShadowDE
+                | Register16::ShadowHL
+        )
+    }
+
+    fn all_options() -> &'static [Register16] {
+        &[
+            Register16::PC,
+            Register16::SP,
+            Register16::AF,
+            Register16::BC,
+            Register16::DE,
+            Register16::HL,
+            Register16::IX,
+            Register16::IY,
+            Register16::ShadowAF,
+            Register16::ShadowBC,
+            Register16::ShadowDE,
+            Register16::ShadowHL,
+        ]
+    }
+}
+
+impl std::fmt::Display for Register16 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Register16::PC => write!(f, "PC"),
+            Register16::SP => write!(f, "SP"),
+            Register16::AF => write!(f, "AF"),
+            Register16::BC => write!(f, "BC"),
+            Register16::DE => write!(f, "DE"),
+            Register16::HL => write!(f, "HL"),
+            Register16::IX => write!(f, "IX"),
+            Register16::IY => write!(f, "IY"),
+            Register16::ShadowAF => write!(f, "AF'"),
+            Register16::ShadowBC => write!(f, "BC'"),
+            Register16::ShadowDE => write!(f, "DE'"),
+            Register16::ShadowHL => write!(f, "HL'"),
+        }
+    }
+}
+
+impl From<Register16> for PrimaryRegister16 {
+    fn from(reg: Register16) -> Self {
+        match reg {
+            Register16::PC => PrimaryRegister16::PC,
+            Register16::SP => PrimaryRegister16::SP,
+            Register16::AF | Register16::ShadowAF => PrimaryRegister16::AF,
+            Register16::BC | Register16::ShadowBC => PrimaryRegister16::BC,
+            Register16::DE | Register16::ShadowDE => PrimaryRegister16::DE,
+            Register16::HL | Register16::ShadowHL => PrimaryRegister16::HL,
+            Register16::IX => PrimaryRegister16::IX,
+            Register16::IY => PrimaryRegister16::IY,
+        }
+    }
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct CpuDebugWindow {
     pub show: bool,
-    pc_breakpoint_input: String,
+
+    // 8-bit register breakpoints
+    #[serde(skip, default = "default_register8")]
+    selected_register8: Register8,
+    #[serde(skip, default)]
+    register8_value_input: String,
+    #[serde(skip, default)]
+    register8_any_change: bool,
+
+    // 16-bit register breakpoints (main + shadow)
+    #[serde(skip, default = "default_ui_register16")]
+    selected_register16: Register16,
+    #[serde(skip, default)]
+    register16_value_input: String,
+    #[serde(skip, default)]
+    register16_any_change: bool,
 }
 
 impl Default for CpuDebugWindow {
     fn default() -> Self {
         Self {
             show: false,
-            pc_breakpoint_input: String::new(),
+            selected_register8: Register8::A,
+            register8_value_input: String::new(),
+            register8_any_change: false,
+            selected_register16: Register16::PC,
+            register16_value_input: String::new(),
+            register16_any_change: false,
         }
     }
 }
@@ -306,25 +411,88 @@ impl CpuDebugWindow {
     }
 
     fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
-        let breakpoint_manager = frontend.breakpoint_manager();
-        ui.heading("Breakpoints");
+        ui.heading("CPU Breakpoints");
 
-        // PC breakpoint input
+        // 8-bit register breakpoints
+        let mut add_register8 = false;
         ui.horizontal(|ui| {
-            ui.label("PC:");
-            let text_edit = ui.text_edit_singleline(&mut self.pc_breakpoint_input);
+            ui.label("8-bit:");
+            egui::ComboBox::from_id_salt("reg8")
+                .selected_text(format!("{:?}", self.selected_register8))
+                .show_ui(ui, |ui| {
+                    for reg in [
+                        Register8::A,
+                        Register8::F,
+                        Register8::B,
+                        Register8::C,
+                        Register8::D,
+                        Register8::E,
+                        Register8::H,
+                        Register8::L,
+                        Register8::I,
+                        Register8::R,
+                        Register8::IXH,
+                        Register8::IXL,
+                        Register8::IYH,
+                        Register8::IYL,
+                    ] {
+                        ui.selectable_value(
+                            &mut self.selected_register8,
+                            reg,
+                            format!("{:?}", reg),
+                        );
+                    }
+                });
+
+            ui.label("Value:");
+            let text_edit = ui.text_edit_singleline(&mut self.register8_value_input);
+            let text_edit = text_edit.on_hover_text("Hex value (e.g., 42 or 0x42)");
+
+            ui.checkbox(&mut self.register8_any_change, "Any Change");
+
             let enter_pressed =
                 text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let add_clicked = ui.button("Add").clicked();
 
-            if (enter_pressed || add_clicked)
-                && let Ok(addr) =
-                    u16::from_str_radix(self.pc_breakpoint_input.trim_start_matches("0x"), 16)
-            {
-                breakpoint_manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(addr));
-                self.pc_breakpoint_input.clear();
+            if enter_pressed || add_clicked {
+                add_register8 = true;
             }
         });
+
+        if add_register8 {
+            self.add_register8_breakpoint(frontend);
+        }
+
+        // 16-bit register breakpoints (main + shadow)
+        let mut add_register16 = false;
+        ui.horizontal(|ui| {
+            ui.label("16-bit:");
+            egui::ComboBox::from_id_salt("reg16")
+                .selected_text(self.selected_register16.to_string())
+                .show_ui(ui, |ui| {
+                    for reg in Register16::all_options() {
+                        ui.selectable_value(&mut self.selected_register16, *reg, reg.to_string());
+                    }
+                });
+
+            ui.label("Value:");
+            let text_edit = ui.text_edit_singleline(&mut self.register16_value_input);
+            let text_edit = text_edit.on_hover_text("Hex value (e.g., 1000 or 0x1000)");
+
+            ui.checkbox(&mut self.register16_any_change, "Any Change");
+
+            let enter_pressed =
+                text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let add_clicked = ui.button("Add").clicked();
+
+            if enter_pressed || add_clicked {
+                add_register16 = true;
+            }
+        });
+
+        if add_register16 {
+            self.add_register16_breakpoint(frontend);
+        }
 
         // List active CPU breakpoints only
         ui.separator();
@@ -334,14 +502,17 @@ impl CpuDebugWindow {
         let mut to_remove = None;
         let mut to_toggle = None;
 
+        let breakpoint_manager = frontend.breakpoint_manager();
         for (id, breakpoint) in breakpoint_manager.breakpoints_iter() {
             if breakpoint.one_shot()
                 || !matches!(
                     breakpoint,
-                    AnyBreakpoint::CpuRegister8(_) | AnyBreakpoint::CpuRegister16(_)
+                    AnyBreakpoint::CpuRegister8(_)
+                        | AnyBreakpoint::CpuRegister16(_)
+                        | AnyBreakpoint::CpuShadowRegister16(_)
                 )
             {
-                return;
+                continue;
             }
 
             cpu_breakpoint_found = true;
@@ -376,5 +547,51 @@ impl CpuDebugWindow {
         if let Some(id) = to_remove {
             breakpoint_manager.remove_breakpoint(id);
         }
+    }
+
+    fn add_register8_breakpoint(&mut self, frontend: &mut Frontend) {
+        let value = if self.register8_any_change {
+            None
+        } else {
+            match u8::from_str_radix(self.register8_value_input.trim_start_matches("0x"), 16) {
+                Ok(val) => Some(val),
+                Err(_) => return, // Invalid input, don't add breakpoint
+            }
+        };
+
+        let breakpoint = AnyBreakpoint::cpu_register8_breakpoint(self.selected_register8, value);
+        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        self.clear_register8_inputs();
+    }
+
+    fn add_register16_breakpoint(&mut self, frontend: &mut Frontend) {
+        let value = if self.register16_any_change {
+            None
+        } else {
+            match u16::from_str_radix(self.register16_value_input.trim_start_matches("0x"), 16) {
+                Ok(val) => Some(val),
+                Err(_) => return, // Invalid input, don't add breakpoint
+            }
+        };
+
+        let primary_register = self.selected_register16.into();
+        let breakpoint = if self.selected_register16.is_shadow() {
+            AnyBreakpoint::cpu_shadow_register16_breakpoint(primary_register, value)
+        } else {
+            AnyBreakpoint::cpu_register16_breakpoint(primary_register, value)
+        };
+
+        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        self.clear_register16_inputs();
+    }
+
+    fn clear_register8_inputs(&mut self) {
+        self.register8_value_input.clear();
+        self.register8_any_change = false;
+    }
+
+    fn clear_register16_inputs(&mut self) {
+        self.register16_value_input.clear();
+        self.register16_any_change = false;
     }
 }
