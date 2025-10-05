@@ -640,12 +640,14 @@ impl MemoryDebugWindow {
 
         for (id, breakpoint) in breakpoint_manager.breakpoints_iter() {
             if breakpoint.one_shot() {
-                return;
+                continue;
             }
-            if let AnyBreakpoint::CpuRegister16(bp) = breakpoint
-                && bp.register != Register16::PC
-            {
-                return;
+            if let AnyBreakpoint::CpuRegister16(bp) = breakpoint {
+                if bp.register != Register16::PC {
+                    continue;
+                }
+            } else {
+                continue;
             }
 
             pc_breakpoint_found = true;

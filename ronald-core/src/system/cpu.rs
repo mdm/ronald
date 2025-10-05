@@ -11,7 +11,7 @@ use crate::system::memory::{MemManage, MemRead, MemWrite};
 use crate::system::MasterClockTick;
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Register8 {
     A,
     F,
@@ -29,7 +29,7 @@ pub enum Register8 {
     IYL,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Register16 {
     AF,
     BC,
