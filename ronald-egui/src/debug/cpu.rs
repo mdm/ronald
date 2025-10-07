@@ -445,10 +445,19 @@ impl CpuDebugWindow {
                 });
 
             ui.label("Value:");
-            let text_edit = ui.text_edit_singleline(&mut self.register8_value_input);
+            let text_edit = ui.add_enabled(
+                !self.register8_any_change,
+                egui::TextEdit::singleline(&mut self.register8_value_input),
+            );
             let text_edit = text_edit.on_hover_text("Hex value (e.g., 42 or 0x42)");
 
-            ui.checkbox(&mut self.register8_any_change, "Any Change");
+            if ui
+                .checkbox(&mut self.register8_any_change, "Any Change")
+                .changed()
+                && self.register8_any_change
+            {
+                self.register8_value_input.clear();
+            }
 
             let enter_pressed =
                 text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -476,10 +485,19 @@ impl CpuDebugWindow {
                 });
 
             ui.label("Value:");
-            let text_edit = ui.text_edit_singleline(&mut self.register16_value_input);
+            let text_edit = ui.add_enabled(
+                !self.register16_any_change,
+                egui::TextEdit::singleline(&mut self.register16_value_input),
+            );
             let text_edit = text_edit.on_hover_text("Hex value (e.g., 1000 or 0x1000)");
 
-            ui.checkbox(&mut self.register16_any_change, "Any Change");
+            if ui
+                .checkbox(&mut self.register16_any_change, "Any Change")
+                .changed()
+                && self.register16_any_change
+            {
+                self.register16_value_input.clear();
+            }
 
             let enter_pressed =
                 text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
