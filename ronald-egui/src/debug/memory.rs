@@ -1,12 +1,12 @@
-use eframe::{WebGlContextOption, egui};
+use eframe::egui;
 use serde::{Deserialize, Serialize};
 
 use ronald_core::{
     debug::{
         breakpoint::{AnyBreakpoint, Breakpoint, BreakpointId, BreakpointManager},
-        view::{DisassembledInstruction, MemoryDebugView, SystemDebugView},
+        view::MemoryDebugView,
     },
-    system::cpu::Register16,
+    system::{cpu::Register16, instruction::DecodedInstruction},
 };
 
 use crate::frontend::Frontend;
@@ -21,7 +21,7 @@ pub struct MemoryDebugWindow {
     pc_breakpoint_input: String,
     disassembly_start: Option<u16>,
     #[serde(skip)]
-    cached_disassembly: Option<Vec<DisassembledInstruction>>,
+    cached_disassembly: Option<Vec<DecodedInstruction>>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -559,7 +559,7 @@ impl MemoryDebugWindow {
                                     } else {
                                         egui::Color32::from_rgb(70, 130, 180) // Steel blue - better contrast
                                     };
-                                    ui.colored_label(color, &instruction.instruction);
+                                    ui.colored_label(color, instruction.instruction.to_string());
                                 });
 
                                 row.col(|ui| {

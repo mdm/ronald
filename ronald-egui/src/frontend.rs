@@ -13,9 +13,9 @@ use ronald_core::{
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
     debug::{
         breakpoint::{AnyBreakpoint, Breakpoint, BreakpointManager},
-        view::{DisassembledInstruction, SystemDebugView},
+        view::SystemDebugView,
     },
-    system::SystemConfig,
+    system::{SystemConfig, instruction::DecodedInstruction},
 };
 
 use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
@@ -464,7 +464,7 @@ impl Frontend {
         self.driver.debug_view()
     }
 
-    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DisassembledInstruction> {
+    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
         self.driver.disassemble(start_address, count)
     }
 

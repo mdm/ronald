@@ -8,9 +8,10 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::view::{CpuDebugView, DisassembledInstruction, MemoryDebugView, SystemDebugView};
+use crate::debug::view::{CpuDebugView, MemoryDebugView, SystemDebugView};
 use crate::debug::{record_debug_events, Snapshotable};
 use crate::system::clock::{MasterClock, MasterClockTick};
+use crate::system::instruction::{DecodedInstruction, Instruction};
 use crate::{AudioSink, VideoSink};
 
 use bus::crtc::AnyCrtController;
@@ -38,6 +39,8 @@ where
     bus: B,
     master_clock: MasterClock,
     disk_drives: DiskDrives,
+    #[serde(skip)]
+    last_instruction: Option<DecodedInstruction>,
 }
 
 impl<C, M, B> AmstradCpc<C, M, B>
@@ -47,11 +50,12 @@ where
     B: Bus,
 {
     pub fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
-        let (cycles, interrupt_acknowledged) = self.cpu.fetch_and_execute(
+        let (cycles, interrupt_acknowledged, executed_instruction) = self.cpu.fetch_and_execute(
             &mut self.memory,
             &mut self.bus,
             self.master_clock.current(),
         );
+        self.last_instruction = executed_instruction;
 
         // Master clock runs at 16MHz
         // CPU runs at 4MHz (master clock / 4)
@@ -95,16 +99,18 @@ where
     M: MemRead + MemWrite + MemManage,
     B: Bus,
 {
-    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DisassembledInstruction> {
+    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
         record_debug_events(false);
         let mut decoder = AlgorithmicDecoder::default();
-        let mut disassembly = Vec::with_capacity(count);
+        let mut disassembly = Vec::with_capacity(count + 1);
         let mut address = start_address;
+        if let Some(last_instruction) = &self.last_instruction {
+            disassembly.push(last_instruction.clone());
+        }
         for _ in 0..count {
             let (instruction, next_address) = decoder.decode(&self.memory, address as usize);
-            let instruction = instruction.to_string();
             let length = next_address - address as usize;
-            disassembly.push(DisassembledInstruction {
+            disassembly.push(DecodedInstruction {
                 address,
                 instruction,
                 length,
@@ -234,6 +240,7 @@ where
             bus,
             master_clock: MasterClock::default(),
             disk_drives: config.disk_drives,
+            last_instruction: None,
         }
     }
 }
