@@ -8,7 +8,7 @@ use system::instruction::AlgorithmicDecoder;
 use system::memory::AnyMemory;
 use system::{AmstradCpc, SystemConfig};
 
-use crate::debug::view::DisassembledInstruction;
+use crate::system::instruction::DecodedInstruction;
 
 pub mod constants;
 pub mod debug;
@@ -120,7 +120,7 @@ impl Driver {
         self.cached_debug_view.as_ref().unwrap()
     }
 
-    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DisassembledInstruction> {
+    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
         self.system.disassemble(start_address, count)
     }
 

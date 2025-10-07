@@ -6,7 +6,9 @@ use crate::debug::event::CpuDebugEvent;
 use crate::debug::view::CpuDebugView;
 use crate::debug::{DebugSource, Debuggable, Snapshotable};
 use crate::system::bus::Bus;
-use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
+use crate::system::instruction::{
+    DecodedInstruction, Decoder, Instruction, InterruptMode, JumpTest, Operand,
+};
 use crate::system::memory::{MemManage, MemRead, MemWrite};
 use crate::system::MasterClockTick;
 
@@ -692,7 +694,7 @@ pub trait Cpu: Default {
         memory: &mut (impl MemRead + MemWrite + MemManage),
         bus: &mut impl Bus,
         master_clock: MasterClockTick,
-    ) -> (u8, bool);
+    ) -> (u8, bool, Option<DecodedInstruction>);
     fn request_interrupt(&mut self);
 }
 
@@ -895,16 +897,16 @@ where
         memory: &mut (impl MemRead + MemWrite + MemManage),
         bus: &mut impl Bus,
         master_clock: MasterClockTick,
-    ) -> (u8, bool) {
+    ) -> (u8, bool, Option<DecodedInstruction>) {
         self.master_clock = master_clock;
         self.registers.step(self.master_clock);
 
         if self.halted {
             if self.handle_interrupt(memory) {
-                return (4, true);
+                return (4, true, None);
             }
 
-            return (1, false);
+            return (1, false, None);
         }
 
         if self.enable_interrupt {
@@ -2159,11 +2161,17 @@ where
             }
         }
 
+        let decoded_instruction = DecodedInstruction {
+            address: pc,
+            instruction,
+            length: next_address - pc as usize,
+        };
+
         if !prevent_interrupt && self.handle_interrupt(memory) {
-            return (timing_in_nops + 4, true);
+            return (timing_in_nops + 4, true, Some(decoded_instruction));
         }
 
-        (timing_in_nops, false)
+        (timing_in_nops, false, Some(decoded_instruction))
     }
 
     fn request_interrupt(&mut self) {
@@ -2300,7 +2308,7 @@ mod tests {
                             }
                             _ => unreachable!(),
                         }
-                        let (cycles, _) = self.cpu.fetch_and_execute(
+                        let (cycles, _, _) = self.cpu.fetch_and_execute(
                             &mut self.memory,
                             &mut self.bus,
                             self.master_clock.current(),
@@ -2309,7 +2317,7 @@ mod tests {
                         self.master_clock.step(cycles as u64);
                     }
                     _ => {
-                        let (cycles, _) = self.cpu.fetch_and_execute(
+                        let (cycles, _, _) = self.cpu.fetch_and_execute(
                             &mut self.memory,
                             &mut self.bus,
                             self.master_clock.current(),

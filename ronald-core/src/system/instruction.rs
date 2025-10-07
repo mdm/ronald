@@ -1627,6 +1627,13 @@ impl AlgorithmicDecoder {
     }
 }
 
+#[derive(Clone)]
+pub struct DecodedInstruction {
+    pub address: u16,
+    pub instruction: Instruction,
+    pub length: usize,
+}
+
 #[cfg(test)]
 /// A test decoder that can return specific instructions without decoding
 #[derive(Default)]
