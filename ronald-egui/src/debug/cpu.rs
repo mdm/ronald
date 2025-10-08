@@ -413,104 +413,113 @@ impl CpuDebugWindow {
     fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
         ui.heading("CPU Breakpoints");
 
-        // 8-bit register breakpoints
-        let mut add_register8 = false;
-        ui.horizontal(|ui| {
-            ui.label("8-bit:");
-            egui::ComboBox::from_id_salt("reg8")
-                .selected_text(format!("{:?}", self.selected_register8))
-                .show_ui(ui, |ui| {
-                    for reg in [
-                        Register8::A,
-                        Register8::F,
-                        Register8::B,
-                        Register8::C,
-                        Register8::D,
-                        Register8::E,
-                        Register8::H,
-                        Register8::L,
-                        Register8::I,
-                        Register8::R,
-                        Register8::IXH,
-                        Register8::IXL,
-                        Register8::IYH,
-                        Register8::IYL,
-                    ] {
-                        ui.selectable_value(
-                            &mut self.selected_register8,
-                            reg,
-                            format!("{:?}", reg),
-                        );
+        egui::Grid::new("breakpoint_grid")
+            .num_columns(2)
+            .spacing([10.0, 4.0])
+            .show(ui, |ui| {
+                // 8-bit register breakpoints
+                ui.label("8-bit register:");
+
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt("reg8")
+                        .selected_text(format!("{:?}", self.selected_register8))
+                        .width(50.0)
+                        .show_ui(ui, |ui| {
+                            for reg in [
+                                Register8::A,
+                                Register8::F,
+                                Register8::B,
+                                Register8::C,
+                                Register8::D,
+                                Register8::E,
+                                Register8::H,
+                                Register8::L,
+                                Register8::I,
+                                Register8::R,
+                                Register8::IXH,
+                                Register8::IXL,
+                                Register8::IYH,
+                                Register8::IYL,
+                            ] {
+                                ui.selectable_value(
+                                    &mut self.selected_register8,
+                                    reg,
+                                    format!("{:?}", reg),
+                                );
+                            }
+                        });
+
+                    ui.label("Value:");
+                    let text_edit = ui
+                        .add_enabled(
+                            !self.register8_any_change,
+                            egui::TextEdit::singleline(&mut self.register8_value_input)
+                                .desired_width(60.0),
+                        )
+                        .on_hover_text("Hex value (e.g., 42 or 0x42)");
+
+                    if ui
+                        .checkbox(&mut self.register8_any_change, "Any Change")
+                        .changed()
+                        && self.register8_any_change
+                    {
+                        self.register8_value_input.clear();
+                    }
+
+                    let enter_pressed =
+                        text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    let add_clicked = ui.button("Add").clicked();
+
+                    if enter_pressed || add_clicked {
+                        self.add_register8_breakpoint(frontend);
                     }
                 });
+                ui.end_row();
 
-            ui.label("Value:");
-            let text_edit = ui.add_enabled(
-                !self.register8_any_change,
-                egui::TextEdit::singleline(&mut self.register8_value_input),
-            );
-            let text_edit = text_edit.on_hover_text("Hex value (e.g., 42 or 0x42)");
+                // 16-bit register breakpoints
+                ui.label("16-bit register:");
 
-            if ui
-                .checkbox(&mut self.register8_any_change, "Any Change")
-                .changed()
-                && self.register8_any_change
-            {
-                self.register8_value_input.clear();
-            }
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt("reg16")
+                        .selected_text(self.selected_register16.to_string())
+                        .width(50.0)
+                        .show_ui(ui, |ui| {
+                            for reg in Register16::all_options() {
+                                ui.selectable_value(
+                                    &mut self.selected_register16,
+                                    *reg,
+                                    reg.to_string(),
+                                );
+                            }
+                        });
 
-            let enter_pressed =
-                text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let add_clicked = ui.button("Add").clicked();
+                    ui.label("Value:");
+                    let text_edit = ui
+                        .add_enabled(
+                            !self.register16_any_change,
+                            egui::TextEdit::singleline(&mut self.register16_value_input)
+                                .desired_width(60.0),
+                        )
+                        .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
 
-            if enter_pressed || add_clicked {
-                add_register8 = true;
-            }
-        });
+                    if ui
+                        .checkbox(&mut self.register16_any_change, "Any Change")
+                        .changed()
+                        && self.register16_any_change
+                    {
+                        self.register16_value_input.clear();
+                    }
 
-        if add_register8 {
-            self.add_register8_breakpoint(frontend);
-        }
+                    let enter_pressed =
+                        text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    let add_clicked = ui.button("Add").clicked();
 
-        // 16-bit register breakpoints (main + shadow)
-        let mut add_register16 = false;
-        ui.horizontal(|ui| {
-            ui.label("16-bit:");
-            egui::ComboBox::from_id_salt("reg16")
-                .selected_text(self.selected_register16.to_string())
-                .show_ui(ui, |ui| {
-                    for reg in Register16::all_options() {
-                        ui.selectable_value(&mut self.selected_register16, *reg, reg.to_string());
+                    if enter_pressed || add_clicked {
+                        self.add_register16_breakpoint(frontend);
                     }
                 });
-
-            ui.label("Value:");
-            let text_edit = ui.add_enabled(
-                !self.register16_any_change,
-                egui::TextEdit::singleline(&mut self.register16_value_input),
-            );
-            let text_edit = text_edit.on_hover_text("Hex value (e.g., 1000 or 0x1000)");
-
-            if ui
-                .checkbox(&mut self.register16_any_change, "Any Change")
-                .changed()
-                && self.register16_any_change
-            {
-                self.register16_value_input.clear();
-            }
-
-            let enter_pressed =
-                text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let add_clicked = ui.button("Add").clicked();
-
-            if enter_pressed || add_clicked {
-                add_register16 = true;
-            }
-        });
-
-        if add_register16 {
-            self.add_register16_breakpoint(frontend);
-        }
+                ui.end_row();
+            });
 
         // List active CPU breakpoints only
         ui.separator();
@@ -571,8 +580,8 @@ impl CpuDebugWindow {
         let value = if self.register8_any_change {
             None
         } else {
-            match u8::from_str_radix(self.register8_value_input.trim_start_matches("0x"), 16) {
-                Ok(val) => Some(val),
+            match usize::from_str_radix(self.register8_value_input.trim_start_matches("0x"), 16) {
+                Ok(val) => Some((val & 0xFF) as u8),
                 Err(_) => return, // Invalid input, don't add breakpoint
             }
         };
@@ -586,8 +595,8 @@ impl CpuDebugWindow {
         let value = if self.register16_any_change {
             None
         } else {
-            match u16::from_str_radix(self.register16_value_input.trim_start_matches("0x"), 16) {
-                Ok(val) => Some(val),
+            match usize::from_str_radix(self.register16_value_input.trim_start_matches("0x"), 16) {
+                Ok(val) => Some((val & 0xFFFF) as u16),
                 Err(_) => return, // Invalid input, don't add breakpoint
             }
         };
