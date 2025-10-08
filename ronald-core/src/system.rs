@@ -55,7 +55,9 @@ where
             &mut self.bus,
             self.master_clock.current(),
         );
-        self.last_instruction = executed_instruction;
+        if executed_instruction.is_some() {
+            self.last_instruction = executed_instruction;
+        }
 
         // Master clock runs at 16MHz
         // CPU runs at 4MHz (master clock / 4)
