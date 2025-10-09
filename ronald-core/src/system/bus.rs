@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::view::GateArrayDebugView;
+use crate::debug::Snapshotable;
 use crate::system::clock::MasterClockTick;
 use crate::system::memory::{AnyMemory, MemManage, MemRead};
 use crate::{AudioSink, VideoSink};
@@ -23,6 +25,10 @@ use ppi::PeripheralInterface;
 use psg::SoundGenerator;
 use screen::Screen;
 use tape::TapeController;
+
+pub struct BusDebugView {
+    pub gate_array: GateArrayDebugView,
+}
 
 pub trait Bus: Default {
     // TODO: replace by BusDevice
@@ -127,5 +133,19 @@ where
 
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         self.fdc.load_disk(drive, rom, path);
+    }
+}
+
+impl<C, G> Snapshotable for StandardBus<C, G>
+where
+    C: CrtController,
+    G: GateArray + Snapshotable<View = GateArrayDebugView>,
+{
+    type View = BusDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        BusDebugView {
+            gate_array: self.gate_array.debug_view(),
+        }
     }
 }
