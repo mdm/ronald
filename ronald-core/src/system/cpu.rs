@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::debug::event::CpuDebugEvent;
 use crate::debug::view::CpuDebugView;
-use crate::debug::{DebugSource, Debuggable, Snapshotable};
+use crate::debug::{DebugSource, Debuggable, Snapshottable};
 use crate::system::bus::Bus;
 use crate::system::instruction::{
     DecodedInstruction, Decoder, Instruction, InterruptMode, JumpTest, Operand,
@@ -598,7 +598,7 @@ struct RegisterFileDebugView {
     pub register_pc: u16,
 }
 
-impl Snapshotable for RegisterFile {
+impl Snapshottable for RegisterFile {
     type View = RegisterFileDebugView;
 
     fn debug_view(&self) -> Self::View {
@@ -2179,7 +2179,7 @@ where
     }
 }
 
-impl<D> Snapshotable for ZilogZ80<D>
+impl<D> Snapshottable for ZilogZ80<D>
 where
     D: Decoder,
 {

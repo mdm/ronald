@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::debug::view::{CpuDebugView, GateArrayDebugView, MemoryDebugView, SystemDebugView};
-use crate::debug::{record_debug_events, Snapshotable};
+use crate::debug::{record_debug_events, Snapshottable};
 use crate::system::bus::BusDebugView;
 use crate::system::clock::{MasterClock, MasterClockTick};
 use crate::system::instruction::{DecodedInstruction, Instruction};
@@ -125,11 +125,11 @@ where
     }
 }
 
-impl<C, M, B> Snapshotable for AmstradCpc<C, M, B>
+impl<C, M, B> Snapshottable for AmstradCpc<C, M, B>
 where
-    C: Cpu + Snapshotable<View = CpuDebugView>,
-    M: MemRead + MemWrite + MemManage + Snapshotable<View = MemoryDebugView> + Default,
-    B: Bus + Snapshotable<View = BusDebugView>,
+    C: Cpu + Snapshottable<View = CpuDebugView>,
+    M: MemRead + MemWrite + MemManage + Snapshottable<View = MemoryDebugView> + Default,
+    B: Bus + Snapshottable<View = BusDebugView>,
 {
     type View = SystemDebugView;
 

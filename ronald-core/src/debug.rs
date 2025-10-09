@@ -209,13 +209,13 @@ pub fn record_debug_events(enabled: bool) {
     DEBUG_EVENT_LOG.with(|log| log.borrow_mut().enabled = enabled);
 }
 
-pub trait Snapshotable {
+pub trait Snapshottable {
     type View;
 
     fn debug_view(&self) -> Self::View;
 }
 
-pub trait Debuggable: Snapshotable {
+pub trait Debuggable: Snapshottable {
     const SOURCE: DebugSource;
     type Event: Into<DebugEvent>;
 

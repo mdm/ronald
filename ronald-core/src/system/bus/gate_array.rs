@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::debug::view::GateArrayDebugView;
-use crate::debug::Snapshotable;
+use crate::debug::Snapshottable;
 use crate::system::bus::crtc;
 use crate::system::bus::screen;
 use crate::system::memory::MemManage;
@@ -227,7 +227,7 @@ impl GateArray for Amstrad40007 {
     }
 }
 
-impl Snapshotable for Amstrad40007 {
+impl Snapshottable for Amstrad40007 {
     type View = GateArrayDebugView;
 
     fn debug_view(&self) -> Self::View {
@@ -282,7 +282,7 @@ impl GateArray for AnyGateArray {
     }
 }
 
-impl Snapshotable for AnyGateArray {
+impl Snapshottable for AnyGateArray {
     type View = GateArrayDebugView;
 
     fn debug_view(&self) -> Self::View {

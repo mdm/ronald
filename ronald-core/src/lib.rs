@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
-use debug::{breakpoint::BreakpointManager, view::SystemDebugView, Snapshotable};
+use debug::{breakpoint::BreakpointManager, view::SystemDebugView, Snapshottable};
 use system::bus::{crtc::AnyCrtController, gate_array::AnyGateArray, StandardBus};
 use system::cpu::ZilogZ80;
 use system::instruction::AlgorithmicDecoder;

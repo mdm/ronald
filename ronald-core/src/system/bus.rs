@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::debug::view::GateArrayDebugView;
-use crate::debug::Snapshotable;
+use crate::debug::Snapshottable;
 use crate::system::clock::MasterClockTick;
 use crate::system::memory::{AnyMemory, MemManage, MemRead};
 use crate::{AudioSink, VideoSink};
@@ -136,10 +136,10 @@ where
     }
 }
 
-impl<C, G> Snapshotable for StandardBus<C, G>
+impl<C, G> Snapshottable for StandardBus<C, G>
 where
     C: CrtController,
-    G: GateArray + Snapshotable<View = GateArrayDebugView>,
+    G: GateArray + Snapshottable<View = GateArrayDebugView>,
 {
     type View = BusDebugView;
 
