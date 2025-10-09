@@ -2,7 +2,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
-use crate::debug::{CpuDebugWindow, MemoryDebugWindow};
+use crate::debug::{CpuDebugWindow, GateArrayDebugWindow, MemoryDebugWindow};
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
@@ -31,6 +31,7 @@ where
     #[serde(skip)]
     system_config_modal: SystemConfigModal,
     cpu_debug_window: CpuDebugWindow,
+    gate_array_debug_window: GateArrayDebugWindow,
     memory_debug_window: MemoryDebugWindow,
 }
 
@@ -48,6 +49,7 @@ where
             key_mapper: KeyMapper::default(),
             system_config_modal: SystemConfigModal::default(),
             cpu_debug_window: CpuDebugWindow::default(),
+            gate_array_debug_window: GateArrayDebugWindow::default(),
             memory_debug_window: MemoryDebugWindow::default(),
         }
     }
@@ -93,6 +95,7 @@ where
             && let Some(frontend) = &mut self.frontend
         {
             self.cpu_debug_window.ui(ctx, frontend);
+            self.gate_array_debug_window.ui(ctx, frontend);
             self.memory_debug_window.ui(ctx, frontend);
         }
 
@@ -144,6 +147,16 @@ where
                             .clicked()
                         {
                             self.memory_debug_window.show = !self.memory_debug_window.show;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new("Gate Array")
+                                    .selected(self.gate_array_debug_window.open),
+                            )
+                            .clicked()
+                        {
+                            self.gate_array_debug_window.open = !self.gate_array_debug_window.open;
                             ui.close_menu();
                         }
                         ui.separator();
