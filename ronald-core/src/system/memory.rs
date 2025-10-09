@@ -6,7 +6,7 @@ use crate::debug::event::MemoryDebugEvent;
 use crate::debug::view::MemoryDebugView;
 use crate::debug::DebugSource;
 use crate::debug::Debuggable;
-use crate::debug::Snapshotable;
+use crate::debug::Snapshottable;
 use crate::system::clock::MasterClockTick;
 
 pub trait MemRead {
@@ -85,7 +85,7 @@ pub struct RomDebugView {
     data: Vec<u8>,
 }
 
-impl Snapshotable for Rom {
+impl Snapshottable for Rom {
     type View = RomDebugView;
 
     fn debug_view(&self) -> Self::View {
@@ -183,7 +183,7 @@ pub struct RamDebugView {
     data: Vec<u8>,
 }
 
-impl Snapshotable for Ram {
+impl Snapshottable for Ram {
     type View = RamDebugView;
 
     fn debug_view(&self) -> Self::View {
@@ -293,7 +293,7 @@ impl MemManage for MemoryCpcX64 {
     }
 }
 
-impl Snapshotable for MemoryCpcX64 {
+impl Snapshottable for MemoryCpcX64 {
     type View = MemoryDebugView;
 
     fn debug_view(&self) -> Self::View {
@@ -401,7 +401,7 @@ impl MemManage for MemoryCpc6128 {
     }
 }
 
-impl Snapshotable for MemoryCpc6128 {
+impl Snapshottable for MemoryCpc6128 {
     type View = MemoryDebugView;
 
     fn debug_view(&self) -> Self::View {
@@ -483,7 +483,7 @@ impl MemManage for AnyMemory {
     }
 }
 
-impl Snapshotable for AnyMemory {
+impl Snapshottable for AnyMemory {
     type View = MemoryDebugView;
 
     fn debug_view(&self) -> Self::View {
