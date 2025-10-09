@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::debug::event::{CpuDebugEvent, MemoryDebugEvent};
+use crate::debug::event::{CpuDebugEvent, GateArrayDebugEvent, MemoryDebugEvent};
 use crate::debug::{DebugEvent, DebugSource, EventSubscription};
 use crate::system::clock::MasterClockTick;
 use crate::system::cpu::{Register16, Register8};
@@ -392,12 +392,210 @@ impl fmt::Display for CpuShadowRegister16Breakpoint {
 }
 
 #[derive(Debug, Clone)]
+pub struct GateArrayScreenModeBreakpoint {
+    pub mode: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl GateArrayScreenModeBreakpoint {
+    pub fn new(mode: Option<u8>) -> Self {
+        Self {
+            mode,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for GateArrayScreenModeBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::GateArray {
+            return false;
+        }
+
+        match event {
+            DebugEvent::GateArray(GateArrayDebugEvent::ScreenModeChanged { is, .. }) => {
+                self.mode.is_none_or(|m| m == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for GateArrayScreenModeBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.mode {
+            Some(mode) => write!(f, "Screen mode = {}", mode),
+            None => write!(f, "Screen mode changed"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GateArrayPenColorBreakpoint {
+    pub pen: Option<usize>,
+    pub color: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl GateArrayPenColorBreakpoint {
+    pub fn new(pen: Option<usize>, color: Option<u8>) -> Self {
+        Self {
+            pen,
+            color,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for GateArrayPenColorBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::GateArray {
+            return false;
+        }
+
+        match event {
+            DebugEvent::GateArray(GateArrayDebugEvent::PenColorChanged { pen, is, .. }) => {
+                self.pen.is_none_or(|p| p == *pen) && self.color.is_none_or(|c| c == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for GateArrayPenColorBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.pen, self.color) {
+            (Some(pen), Some(color)) => write!(f, "Pen {} = 0x{:02X}", pen, color),
+            (Some(pen), None) => write!(f, "Pen {} changed", pen),
+            (None, Some(color)) => write!(f, "Any pen = 0x{:02X}", color),
+            (None, None) => write!(f, "Any pen changed"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GateArrayInterruptBreakpoint {
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl GateArrayInterruptBreakpoint {
+    pub fn new() -> Self {
+        Self {
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for GateArrayInterruptBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::GateArray {
+            return false;
+        }
+
+        matches!(event, DebugEvent::GateArray(GateArrayDebugEvent::InterruptGenerated))
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for GateArrayInterruptBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Interrupt generated")
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum AnyBreakpoint {
     CpuRegister8(CpuRegister8Breakpoint),
     CpuRegister16(CpuRegister16Breakpoint),
     CpuShadowRegister16(CpuShadowRegister16Breakpoint),
     Memory(MemoryBreakpoint),
     CallStack(CallStackBreakpoint),
+    GateArrayScreenMode(GateArrayScreenModeBreakpoint),
+    GateArrayPenColor(GateArrayPenColorBreakpoint),
+    GateArrayInterrupt(GateArrayInterruptBreakpoint),
 }
 
 impl AnyBreakpoint {
@@ -437,6 +635,18 @@ impl AnyBreakpoint {
     ) -> Self {
         Self::Memory(MemoryBreakpoint::new(address, on_read, on_write, value))
     }
+
+    pub fn gate_array_screen_mode_breakpoint(mode: Option<u8>) -> Self {
+        Self::GateArrayScreenMode(GateArrayScreenModeBreakpoint::new(mode))
+    }
+
+    pub fn gate_array_pen_color_breakpoint(pen: Option<usize>, color: Option<u8>) -> Self {
+        Self::GateArrayPenColor(GateArrayPenColorBreakpoint::new(pen, color))
+    }
+
+    pub fn gate_array_interrupt_breakpoint() -> Self {
+        Self::GateArrayInterrupt(GateArrayInterruptBreakpoint::new())
+    }
 }
 
 impl Breakpoint for AnyBreakpoint {
@@ -447,6 +657,9 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuShadowRegister16(bp) => bp.should_break(source, event),
             AnyBreakpoint::Memory(bp) => bp.should_break(source, event),
             AnyBreakpoint::CallStack(bp) => bp.should_break(source, event),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.should_break(source, event),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.should_break(source, event),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.should_break(source, event),
         }
     }
 
@@ -457,6 +670,9 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuShadowRegister16(bp) => bp.enabled(),
             AnyBreakpoint::Memory(bp) => bp.enabled(),
             AnyBreakpoint::CallStack(bp) => bp.enabled(),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.enabled(),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.enabled(),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.enabled(),
         }
     }
 
@@ -467,6 +683,9 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::Memory(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CallStack(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_enabled(enabled),
         }
     }
 
@@ -477,6 +696,9 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuShadowRegister16(bp) => bp.one_shot(),
             AnyBreakpoint::Memory(bp) => bp.one_shot(),
             AnyBreakpoint::CallStack(bp) => bp.one_shot(),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.one_shot(),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.one_shot(),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.one_shot(),
         }
     }
 
@@ -487,6 +709,9 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::Memory(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CallStack(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_one_shot(one_shot),
         }
     }
 
@@ -497,6 +722,9 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuShadowRegister16(bp) => bp.triggered(),
             AnyBreakpoint::Memory(bp) => bp.triggered(),
             AnyBreakpoint::CallStack(bp) => bp.triggered(),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.triggered(),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.triggered(),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.triggered(),
         }
     }
 
@@ -507,6 +735,9 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::Memory(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CallStack(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_triggered(triggered),
         }
     }
 }
@@ -519,6 +750,9 @@ impl fmt::Display for AnyBreakpoint {
             AnyBreakpoint::CpuShadowRegister16(bp) => bp.fmt(f),
             AnyBreakpoint::Memory(bp) => bp.fmt(f),
             AnyBreakpoint::CallStack(bp) => bp.fmt(f),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.fmt(f),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.fmt(f),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.fmt(f),
         }
     }
 }
