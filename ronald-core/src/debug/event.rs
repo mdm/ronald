@@ -60,7 +60,31 @@ impl From<MemoryDebugEvent> for DebugEvent {
 pub enum CrtcDebugEvent {}
 
 #[derive(Debug, Clone)]
-pub enum GateArrayDebugEvent {}
+pub enum GateArrayDebugEvent {
+    ScreenModeChanged {
+        is: u8,
+        was: u8,
+    },
+    PenSelected {
+        pen: usize,
+    },
+    PenColorChanged {
+        pen: usize,
+        is: u8,
+        was: u8,
+    },
+    InterruptGenerated,
+    RomConfigChanged {
+        lower_rom_enabled: bool,
+        upper_rom_enabled: bool,
+    },
+}
+
+impl From<GateArrayDebugEvent> for DebugEvent {
+    fn from(event: GateArrayDebugEvent) -> Self {
+        DebugEvent::GateArray(event)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum FdcDebugEvent {}

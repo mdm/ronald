@@ -6,6 +6,7 @@ pub struct SystemDebugView {
     pub master_clock: MasterClockTick,
     pub cpu: CpuDebugView,
     pub memory: MemoryDebugView,
+    pub gate_array: GateArrayDebugView,
 }
 
 pub struct CpuDebugView {
@@ -51,4 +52,18 @@ pub struct MemoryDebugView {
     pub upper_rom_enabled: bool,
     pub composite_rom_ram: Vec<u8>,
     pub composite_ram: Vec<u8>,
+}
+
+pub struct GateArrayDebugView {
+    pub current_screen_mode: u8,
+    pub requested_screen_mode: u8,
+    pub hsync_active: bool,
+    pub vsync_active: bool,
+    pub hsyncs_since_last_vsync: u16,
+    pub interrupt_counter: u8,
+    pub hold_interrupt: bool,
+    pub selected_pen: usize,
+    pub pen_colors: Vec<u8>, // Hardware color values (0-31)
+    pub lower_rom_enabled: bool,
+    pub upper_rom_enabled: bool,
 }
