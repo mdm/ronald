@@ -64,6 +64,4 @@ pub struct GateArrayDebugView {
     pub hold_interrupt: bool,
     pub selected_pen: usize,
     pub pen_colors: Vec<u8>, // Hardware color values (0-31)
-    pub lower_rom_enabled: bool,
-    pub upper_rom_enabled: bool,
 }

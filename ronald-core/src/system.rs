@@ -8,8 +8,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::view::{CpuDebugView, MemoryDebugView, SystemDebugView};
+use crate::debug::view::{CpuDebugView, GateArrayDebugView, MemoryDebugView, SystemDebugView};
 use crate::debug::{record_debug_events, Snapshotable};
+use crate::system::bus::BusDebugView;
 use crate::system::clock::{MasterClock, MasterClockTick};
 use crate::system::instruction::{DecodedInstruction, Instruction};
 use crate::{AudioSink, VideoSink};
@@ -128,16 +129,18 @@ impl<C, M, B> Snapshotable for AmstradCpc<C, M, B>
 where
     C: Cpu + Snapshotable<View = CpuDebugView>,
     M: MemRead + MemWrite + MemManage + Snapshotable<View = MemoryDebugView> + Default,
-    B: Bus,
+    B: Bus + Snapshotable<View = BusDebugView>,
 {
     type View = SystemDebugView;
 
     fn debug_view(&self) -> Self::View {
         record_debug_events(false);
+        let bus_debug_view = self.bus.debug_view();
         let debug_view = Self::View {
             master_clock: self.master_clock.current(),
             cpu: self.cpu.debug_view(),
             memory: self.memory.debug_view(),
+            gate_array: bus_debug_view.gate_array,
         };
         record_debug_events(true);
 

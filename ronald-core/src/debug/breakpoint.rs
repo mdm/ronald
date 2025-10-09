@@ -552,7 +552,10 @@ impl Breakpoint for GateArrayInterruptBreakpoint {
             return false;
         }
 
-        matches!(event, DebugEvent::GateArray(GateArrayDebugEvent::InterruptGenerated))
+        matches!(
+            event,
+            DebugEvent::GateArray(GateArrayDebugEvent::InterruptGenerated)
+        )
     }
 
     fn enabled(&self) -> bool {

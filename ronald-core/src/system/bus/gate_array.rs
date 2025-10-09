@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::debug::view::GateArrayDebugView;
+use crate::debug::Snapshotable;
 use crate::system::bus::crtc;
 use crate::system::bus::screen;
 use crate::system::memory::MemManage;
@@ -225,6 +227,24 @@ impl GateArray for Amstrad40007 {
     }
 }
 
+impl Snapshotable for Amstrad40007 {
+    type View = GateArrayDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        GateArrayDebugView {
+            current_screen_mode: self.current_screen_mode,
+            requested_screen_mode: self.requested_screen_mode,
+            hsync_active: self.hsync_active,
+            vsync_active: self.vsync_active,
+            hsyncs_since_last_vsync: self.hsyncs_since_last_vsync,
+            interrupt_counter: self.interrupt_counter,
+            hold_interrupt: self.hold_interrupt,
+            selected_pen: self.selected_pen,
+            pen_colors: self.pen_colors.clone(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub enum AnyGateArray {
     Amstrad40007(Amstrad40007),
@@ -258,6 +278,16 @@ impl GateArray for AnyGateArray {
     ) -> bool {
         match self {
             AnyGateArray::Amstrad40007(gate_array) => gate_array.step(crtc, memory, screen, video),
+        }
+    }
+}
+
+impl Snapshotable for AnyGateArray {
+    type View = GateArrayDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        match self {
+            AnyGateArray::Amstrad40007(gate_array) => gate_array.debug_view(),
         }
     }
 }
