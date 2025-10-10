@@ -64,6 +64,7 @@ pub enum GateArrayDebugEvent {
     ScreenModeChanged {
         is: u8,
         was: u8,
+        applied: bool,
     },
     PenSelected {
         pen: usize,

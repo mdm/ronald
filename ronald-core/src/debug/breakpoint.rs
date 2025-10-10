@@ -394,15 +394,17 @@ impl fmt::Display for CpuShadowRegister16Breakpoint {
 #[derive(Debug, Clone)]
 pub struct GateArrayScreenModeBreakpoint {
     pub mode: Option<u8>,
+    pub applied: bool,
     enabled: bool,
     one_shot: bool,
     triggered: Option<MasterClockTick>,
 }
 
 impl GateArrayScreenModeBreakpoint {
-    pub fn new(mode: Option<u8>) -> Self {
+    pub fn new(mode: Option<u8>, applied: bool) -> Self {
         Self {
             mode,
+            applied,
             enabled: true,
             one_shot: false,
             triggered: None,
@@ -417,9 +419,9 @@ impl Breakpoint for GateArrayScreenModeBreakpoint {
         }
 
         match event {
-            DebugEvent::GateArray(GateArrayDebugEvent::ScreenModeChanged { is, .. }) => {
-                self.mode.is_none_or(|m| m == *is)
-            }
+            DebugEvent::GateArray(GateArrayDebugEvent::ScreenModeChanged {
+                is, applied, ..
+            }) => *applied == self.applied && self.mode.is_none_or(|m| m == *is),
             _ => false,
         }
     }
@@ -451,9 +453,10 @@ impl Breakpoint for GateArrayScreenModeBreakpoint {
 
 impl fmt::Display for GateArrayScreenModeBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let action = if self.applied { "applied" } else { "requested" };
         match self.mode {
-            Some(mode) => write!(f, "Screen mode = {}", mode),
-            None => write!(f, "Screen mode changed"),
+            Some(mode) => write!(f, "Screen mode {} = {}", action, mode),
+            None => write!(f, "Screen mode {}", action),
         }
     }
 }
@@ -639,8 +642,8 @@ impl AnyBreakpoint {
         Self::Memory(MemoryBreakpoint::new(address, on_read, on_write, value))
     }
 
-    pub fn gate_array_screen_mode_breakpoint(mode: Option<u8>) -> Self {
-        Self::GateArrayScreenMode(GateArrayScreenModeBreakpoint::new(mode))
+    pub fn gate_array_screen_mode_breakpoint(mode: Option<u8>, applied: bool) -> Self {
+        Self::GateArrayScreenMode(GateArrayScreenModeBreakpoint::new(mode, applied))
     }
 
     pub fn gate_array_pen_color_breakpoint(pen: Option<usize>, color: Option<u8>) -> Self {

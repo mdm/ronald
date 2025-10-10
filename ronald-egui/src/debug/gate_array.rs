@@ -9,7 +9,6 @@ use crate::frontend::Frontend;
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GateArrayDebugWindow {
-    #[serde(skip)]
     pub open: bool,
 
     // Screen mode breakpoint
@@ -17,6 +16,8 @@ pub struct GateArrayDebugWindow {
     screen_mode_value_input: String,
     #[serde(skip, default)]
     screen_mode_any_change: bool,
+    #[serde(skip, default)]
+    screen_mode_applied: bool,
 
     // Pen color breakpoint
     #[serde(skip, default)]
@@ -175,12 +176,15 @@ impl GateArrayDebugWindow {
                         .on_hover_text("Mode 0-3");
 
                     if ui
-                        .checkbox(&mut self.screen_mode_any_change, "Any Change")
+                        .checkbox(&mut self.screen_mode_any_change, "Any")
                         .changed()
                         && self.screen_mode_any_change
                     {
                         self.screen_mode_value_input.clear();
                     }
+
+                    ui.checkbox(&mut self.screen_mode_applied, "Applied")
+                        .on_hover_text("Break when mode is applied (at next HSYNC) vs when requested (written to register)");
 
                     let enter_pressed =
                         text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -312,10 +316,12 @@ impl GateArrayDebugWindow {
             }
         };
 
-        let breakpoint = AnyBreakpoint::gate_array_screen_mode_breakpoint(mode);
+        let breakpoint =
+            AnyBreakpoint::gate_array_screen_mode_breakpoint(mode, self.screen_mode_applied);
         frontend.breakpoint_manager().add_breakpoint(breakpoint);
         self.screen_mode_value_input.clear();
         self.screen_mode_any_change = false;
+        self.screen_mode_applied = false;
     }
 
     fn add_pen_color_breakpoint(&mut self, frontend: &mut Frontend) {
