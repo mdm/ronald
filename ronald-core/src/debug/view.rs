@@ -56,7 +56,7 @@ pub struct MemoryDebugView {
 
 pub struct GateArrayDebugView {
     pub current_screen_mode: u8,
-    pub requested_screen_mode: u8,
+    pub requested_screen_mode: Option<u8>,
     pub hsync_active: bool,
     pub vsync_active: bool,
     pub hsyncs_since_last_vsync: u16,

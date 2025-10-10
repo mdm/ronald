@@ -1,9 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+use crate::debug::event::GateArrayDebugEvent;
 use crate::debug::view::GateArrayDebugView;
+use crate::debug::DebugSource;
+use crate::debug::Debuggable;
 use crate::debug::Snapshottable;
 use crate::system::bus::crtc;
 use crate::system::bus::screen;
+use crate::system::clock::MasterClockTick;
 use crate::system::memory::MemManage;
 use crate::system::memory::MemRead;
 use crate::VideoSink;
@@ -17,6 +21,7 @@ pub trait GateArray: Default {
         memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
+        master_clock: MasterClockTick,
     ) -> bool;
 }
 
@@ -24,7 +29,7 @@ pub trait GateArray: Default {
 #[serde(rename_all = "camelCase")]
 pub struct Amstrad40007 {
     current_screen_mode: u8,
-    requested_screen_mode: u8,
+    requested_screen_mode: Option<u8>,
     hsync_active: bool,
     vsync_active: bool,
     hsyncs_since_last_vsync: u16,
@@ -32,13 +37,14 @@ pub struct Amstrad40007 {
     hold_interrupt: bool,
     selected_pen: usize,
     pen_colors: Vec<u8>,
+    master_clock: MasterClockTick,
 }
 
 impl Default for Amstrad40007 {
     fn default() -> Self {
         Amstrad40007 {
             current_screen_mode: 0,
-            requested_screen_mode: 0,
+            requested_screen_mode: None,
             hsync_active: false,
             vsync_active: false,
             hsyncs_since_last_vsync: 0,
@@ -46,6 +52,7 @@ impl Default for Amstrad40007 {
             hold_interrupt: false,
             selected_pen: 0,
             pen_colors: vec![0; 17], // 16 colors + border
+            master_clock: MasterClockTick::default(),
         }
     }
 }
@@ -74,13 +81,27 @@ impl Amstrad40007 {
             generate_interrupt = self.interrupt_counter & 0x20 == 0;
         }
 
+        if generate_interrupt {
+            self.emit_debug_event(GateArrayDebugEvent::InterruptGenerated, self.master_clock);
+        }
+
         generate_interrupt
     }
 
     fn update_screen_mode(&mut self, crtc: &impl crtc::CrtController) {
         if !self.hsync_active && crtc.read_horizontal_sync() {
-            self.current_screen_mode = self.requested_screen_mode;
-            log::trace!("New screen mode: {}", self.current_screen_mode);
+            if let Some(requested) = self.requested_screen_mode.take() {
+                let was = self.current_screen_mode;
+                self.current_screen_mode = requested;
+                log::trace!("New screen mode: {}", self.current_screen_mode);
+                self.emit_debug_event(
+                    GateArrayDebugEvent::ScreenModeChanged {
+                        is: self.current_screen_mode,
+                        was,
+                    },
+                    self.master_clock,
+                );
+            }
         }
     }
 
@@ -173,6 +194,12 @@ impl GateArray for Amstrad40007 {
                 } else {
                     self.selected_pen = 0x10; // select border
                 }
+                self.emit_debug_event(
+                    GateArrayDebugEvent::PenSelected {
+                        pen: self.selected_pen,
+                    },
+                    self.master_clock,
+                );
             }
             1 => {
                 log::trace!(
@@ -181,13 +208,33 @@ impl GateArray for Amstrad40007 {
                     value,
                     value & 0x1f
                 );
+                let was = self.pen_colors[self.selected_pen];
                 self.pen_colors[self.selected_pen] = value & 0x1f;
+                self.emit_debug_event(
+                    GateArrayDebugEvent::PenColorChanged {
+                        pen: self.selected_pen,
+                        is: value & 0x1f,
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             2 => {
-                self.requested_screen_mode = value & 0x03;
+                self.requested_screen_mode = Some(value & 0x03);
 
-                memory.enable_lower_rom(value & 0x04 == 0);
-                memory.enable_upper_rom(value & 0x08 == 0);
+                let lower_rom_enabled = value & 0x04 == 0;
+                let upper_rom_enabled = value & 0x08 == 0;
+
+                memory.enable_lower_rom(lower_rom_enabled);
+                memory.enable_upper_rom(upper_rom_enabled);
+
+                self.emit_debug_event(
+                    GateArrayDebugEvent::RomConfigChanged {
+                        lower_rom_enabled,
+                        upper_rom_enabled,
+                    },
+                    self.master_clock,
+                );
 
                 if value & 0x10 != 0 {
                     self.interrupt_counter = 0;
@@ -215,7 +262,10 @@ impl GateArray for Amstrad40007 {
         memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
+        master_clock: MasterClockTick,
     ) -> bool {
+        self.master_clock = master_clock;
+
         let generate_interrupt = self.update_interrupt_counter(crtc);
         self.update_screen_mode(crtc);
         self.write_to_screen(crtc, memory, screen, video);
@@ -243,6 +293,11 @@ impl Snapshottable for Amstrad40007 {
             pen_colors: self.pen_colors.clone(),
         }
     }
+}
+
+impl Debuggable for Amstrad40007 {
+    const SOURCE: DebugSource = DebugSource::GateArray;
+    type Event = GateArrayDebugEvent;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -275,9 +330,12 @@ impl GateArray for AnyGateArray {
         memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
+        master_clock: MasterClockTick,
     ) -> bool {
         match self {
-            AnyGateArray::Amstrad40007(gate_array) => gate_array.step(crtc, memory, screen, video),
+            AnyGateArray::Amstrad40007(gate_array) => {
+                gate_array.step(crtc, memory, screen, video, master_clock)
+            }
         }
     }
 }
