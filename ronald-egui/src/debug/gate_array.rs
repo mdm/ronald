@@ -20,7 +20,7 @@ impl Default for GateArrayDebugWindow {
 
 impl GateArrayDebugWindow {
     pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
-        egui::Window::new("Gate Array")
+        egui::Window::new("Gate Array Internals")
             .open(&mut self.open)
             .default_width(400.0)
             .show(ctx, |ui| {
@@ -34,7 +34,11 @@ impl GateArrayDebugWindow {
                     ui.label(format!("{}", ga.current_screen_mode));
                     ui.separator();
                     ui.label("Requested:");
-                    ui.label(format!("{}", ga.requested_screen_mode));
+                    let requested_text = match ga.requested_screen_mode {
+                        Some(mode) => format!("{}", mode),
+                        None => "-".to_string(),
+                    };
+                    ui.label(requested_text);
                 });
                 ui.add_space(8.0);
 

@@ -111,12 +111,12 @@ where
         memory: &mut (impl MemRead + MemManage),
         video: &mut impl VideoSink,
         audio: &mut impl AudioSink,
-        _master_clock: MasterClockTick,
+        master_clock: MasterClockTick,
     ) -> bool {
         self.psg.step(audio);
         self.crtc.step();
         self.gate_array
-            .step(&self.crtc, memory, &mut self.screen, video)
+            .step(&self.crtc, memory, &mut self.screen, video, master_clock)
     }
 
     fn acknowledge_interrupt(&mut self) {
