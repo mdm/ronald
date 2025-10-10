@@ -98,6 +98,7 @@ impl Amstrad40007 {
                     GateArrayDebugEvent::ScreenModeChanged {
                         is: self.current_screen_mode,
                         was,
+                        applied: true,
                     },
                     self.master_clock,
                 );
@@ -220,7 +221,21 @@ impl GateArray for Amstrad40007 {
                 );
             }
             2 => {
-                self.requested_screen_mode = Some(value & 0x03);
+                let new_mode = value & 0x03;
+                let was = self
+                    .requested_screen_mode
+                    .unwrap_or(self.current_screen_mode);
+                self.requested_screen_mode = Some(new_mode);
+
+                // Emit requested event
+                self.emit_debug_event(
+                    GateArrayDebugEvent::ScreenModeChanged {
+                        is: new_mode,
+                        was,
+                        applied: false,
+                    },
+                    self.master_clock,
+                );
 
                 let lower_rom_enabled = value & 0x04 == 0;
                 let upper_rom_enabled = value & 0x08 == 0;
