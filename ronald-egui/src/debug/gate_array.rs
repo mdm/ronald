@@ -23,7 +23,7 @@ pub struct GateArrayDebugWindow {
     #[serde(skip, default)]
     pen_number_input: String,
     #[serde(skip, default)]
-    pen_color_value_input: String,
+    pen_selected_color: Option<usize>,
     #[serde(skip, default)]
     pen_any_number: bool,
     #[serde(skip, default)]
@@ -31,6 +31,53 @@ pub struct GateArrayDebugWindow {
 }
 
 impl GateArrayDebugWindow {
+    fn get_all_hardware_colors() -> Vec<(usize, egui::Color32, String)> {
+        let mut colors = Vec::new();
+
+        for hardware_index in 0..32 {
+            let firmware_color_index = HARDWARE_TO_FIRMWARE_COLORS[hardware_index];
+            let rgba = FIRMWARE_COLORS[firmware_color_index];
+            let egui_color =
+                egui::Color32::from_rgba_premultiplied(rgba[0], rgba[1], rgba[2], rgba[3]);
+
+            let color_name = match firmware_color_index {
+                0 => "Black",
+                1 => "Blue",
+                2 => "Bright Blue",
+                3 => "Red",
+                4 => "Magenta",
+                5 => "Mauve",
+                6 => "Bright Red",
+                7 => "Purple",
+                8 => "Bright Magenta",
+                9 => "Green",
+                10 => "Cyan",
+                11 => "Sky Blue",
+                12 => "Yellow",
+                13 => "White", // Actually grey in some contexts
+                14 => "Pastel Blue",
+                15 => "Orange",
+                16 => "Pink",
+                17 => "Pastel Magenta",
+                18 => "Bright Green",
+                19 => "Sea Green",
+                20 => "Bright Cyan",
+                21 => "Lime",
+                22 => "Pastel Green",
+                23 => "Pastel Cyan",
+                24 => "Bright Yellow",
+                25 => "Pastel Yellow",
+                26 => "Bright White",
+                _ => "Unknown",
+            };
+
+            let display_name = format!("{} (0x{:02X})", color_name, hardware_index);
+            colors.push((hardware_index, egui_color, display_name));
+        }
+
+        colors
+    }
+
     pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
         let mut open = self.open;
         egui::Window::new("Gate Array Internals")
@@ -166,7 +213,6 @@ impl GateArrayDebugWindow {
                 ui.label("Screen mode:");
 
                 ui.horizontal(|ui| {
-                    ui.label("Mode:");
                     let text_edit = ui
                         .add_enabled(
                             !self.screen_mode_any_change,
@@ -197,10 +243,9 @@ impl GateArrayDebugWindow {
                 ui.end_row();
 
                 // Pen color breakpoint
-                ui.label("Pen color:");
+                ui.label("Pen:");
 
                 ui.horizontal(|ui| {
-                    ui.label("Pen:");
                     let pen_edit = ui
                         .add_enabled(
                             !self.pen_any_number,
@@ -216,18 +261,44 @@ impl GateArrayDebugWindow {
                     }
 
                     ui.label("Color:");
-                    let color_edit = ui
-                        .add_enabled(
-                            !self.pen_any_color,
-                            egui::TextEdit::singleline(&mut self.pen_color_value_input)
-                                .desired_width(40.0),
-                        )
-                        .on_hover_text("Hex value 0-1F");
 
-                    ui.checkbox(&mut self.pen_any_color, "Any");
+                    let colors = Self::get_all_hardware_colors();
+                    let (selected_color, selected_text) = match self.pen_selected_color {
+                        Some(selected) =>  {
+                            let (_, color, name) = &colors[selected];
+                            (*color, name.as_str())
+                        }
+                        None => (egui::Color32::BLACK, "Select color..."),
+                    };
 
-                    if self.pen_any_color {
-                        self.pen_color_value_input.clear();
+
+                    let color_edit = ui.add_enabled_ui(!self.pen_any_color, |ui| {
+                        ui.horizontal(|ui| {
+                            // Show swatch for currently selected color
+                            let (swatch_rect, _) = ui.allocate_exact_size(egui::vec2(20.0, 15.0), egui::Sense::hover());
+                            ui.painter().rect_filled(swatch_rect, 2.0, selected_color);
+
+                            // ComboBox with text only, disabled when pen_any_color is true
+                            egui::ComboBox::from_id_salt("pen_color_selector")
+                                .width(150.0)
+                                .selected_text(selected_text)
+                                .show_ui(ui, |ui| {
+                                    for (hardware_index, color, name) in colors.iter() {
+                                        ui.horizontal(|ui| {
+                                            // Color swatch
+                                            let (swatch_rect, _) = ui.allocate_exact_size(egui::vec2(20.0, 15.0), egui::Sense::hover());
+                                            ui.painter().rect_filled(swatch_rect, 2.0, *color);
+
+                                            // Color name with hardware value
+                                            ui.selectable_value(&mut self.pen_selected_color, Some(*hardware_index), name);
+                                        });
+                                    }
+                                })
+                        })
+                    }).response;
+
+                    if ui.checkbox(&mut self.pen_any_color, "Any").changed() && self.pen_any_color {
+                        self.pen_selected_color = None
                     }
 
                     let enter_pressed = (pen_edit.lost_focus() || color_edit.lost_focus())
@@ -333,23 +404,12 @@ impl GateArrayDebugWindow {
                 _ => return, // Invalid input
             }
         };
-
-        let color = if self.pen_any_color {
-            None
-        } else {
-            match usize::from_str_radix(
-                self.pen_color_value_input.trim().trim_start_matches("0x"),
-                16,
-            ) {
-                Ok(val) if val <= 0x1F => Some(val as u8),
-                _ => return, // Invalid input
-            }
-        };
+        let color = self.pen_selected_color.map(|c| c as u8);
 
         let breakpoint = AnyBreakpoint::gate_array_pen_color_breakpoint(pen, color);
         frontend.breakpoint_manager().add_breakpoint(breakpoint);
         self.pen_number_input.clear();
-        self.pen_color_value_input.clear();
+        self.pen_selected_color = None;
         self.pen_any_number = false;
         self.pen_any_color = false;
     }
