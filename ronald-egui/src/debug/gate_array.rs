@@ -13,7 +13,7 @@ pub struct GateArrayDebugWindow {
 
     // Screen mode breakpoint
     #[serde(skip, default)]
-    screen_mode_value_input: String,
+    screen_mode_value: Option<u8>,
     #[serde(skip, default)]
     screen_mode_any_change: bool,
     #[serde(skip, default)]
@@ -21,9 +21,9 @@ pub struct GateArrayDebugWindow {
 
     // Pen color breakpoint
     #[serde(skip, default)]
-    pen_number_input: String,
+    pen_number: Option<usize>,
     #[serde(skip, default)]
-    pen_selected_color: Option<usize>,
+    pen_color: Option<usize>,
     #[serde(skip, default)]
     pen_any_number: bool,
     #[serde(skip, default)]
@@ -213,30 +213,33 @@ impl GateArrayDebugWindow {
                 ui.label("Screen mode:");
 
                 ui.horizontal(|ui| {
-                    let text_edit = ui
-                        .add_enabled(
-                            !self.screen_mode_any_change,
-                            egui::TextEdit::singleline(&mut self.screen_mode_value_input)
-                                .desired_width(40.0),
-                        )
-                        .on_hover_text("Mode 0-3");
+                    ui.add_enabled_ui(!self.screen_mode_any_change, |ui| {
+                        egui::ComboBox::from_id_salt("screen_mode_selector")
+                            .width(60.0)
+                            .selected_text(match self.screen_mode_value {
+                                Some(mode) => format!("Mode {}", mode),
+                                None => "Select...".to_string(),
+                            })
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.screen_mode_value, Some(0), "Mode 0");
+                                ui.selectable_value(&mut self.screen_mode_value, Some(1), "Mode 1");
+                                ui.selectable_value(&mut self.screen_mode_value, Some(2), "Mode 2");
+                                ui.selectable_value(&mut self.screen_mode_value, Some(3), "Mode 3");
+                            });
+                    });
 
                     if ui
                         .checkbox(&mut self.screen_mode_any_change, "Any")
                         .changed()
                         && self.screen_mode_any_change
                     {
-                        self.screen_mode_value_input.clear();
+                        self.screen_mode_value = None;
                     }
 
                     ui.checkbox(&mut self.screen_mode_applied, "Applied")
                         .on_hover_text("Break when mode is applied (at next HSYNC) vs when requested (written to register)");
 
-                    let enter_pressed =
-                        text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    let add_clicked = ui.button("Add").clicked();
-
-                    if enter_pressed || add_clicked {
+                    if ui.button("Add").clicked() {
                         self.add_screen_mode_breakpoint(frontend);
                     }
                 });
@@ -246,33 +249,39 @@ impl GateArrayDebugWindow {
                 ui.label("Pen:");
 
                 ui.horizontal(|ui| {
-                    let pen_edit = ui
-                        .add_enabled(
-                            !self.pen_any_number,
-                            egui::TextEdit::singleline(&mut self.pen_number_input)
-                                .desired_width(40.0),
-                        )
-                        .on_hover_text("Pen 0-15 or 16 for border");
+                    ui.add_enabled_ui(!self.pen_any_number, |ui| {
+                        egui::ComboBox::from_id_salt("pen_number_selector")
+                            .width(80.0)
+                            .selected_text(match self.pen_number {
+                                Some(pen) if pen == 16 => "Border".to_string(),
+                                Some(pen) => format!("Pen {}", pen),
+                                None => "Select...".to_string(),
+                            })
+                            .show_ui(ui, |ui| {
+                                for pen in 0..16 {
+                                    ui.selectable_value(&mut self.pen_number, Some(pen), format!("Pen {}", pen));
+                                }
+                                ui.selectable_value(&mut self.pen_number, Some(16), "Border");
+                            });
+                    });
 
-                    ui.checkbox(&mut self.pen_any_number, "Any");
-
-                    if self.pen_any_number {
-                        self.pen_number_input.clear();
+                    if ui.checkbox(&mut self.pen_any_number, "Any").changed() && self.pen_any_number {
+                        self.pen_number = None;
                     }
 
                     ui.label("Color:");
 
                     let colors = Self::get_all_hardware_colors();
-                    let (selected_color, selected_text) = match self.pen_selected_color {
+                    let (selected_color, selected_text) = match self.pen_color {
                         Some(selected) =>  {
                             let (_, color, name) = &colors[selected];
                             (*color, name.as_str())
                         }
-                        None => (egui::Color32::BLACK, "Select color..."),
+                        None => (egui::Color32::BLACK, "Select..."),
                     };
 
 
-                    let color_edit = ui.add_enabled_ui(!self.pen_any_color, |ui| {
+                    ui.add_enabled_ui(!self.pen_any_color, |ui| {
                         ui.horizontal(|ui| {
                             // Show swatch for currently selected color
                             let (swatch_rect, _) = ui.allocate_exact_size(egui::vec2(20.0, 15.0), egui::Sense::hover());
@@ -290,22 +299,18 @@ impl GateArrayDebugWindow {
                                             ui.painter().rect_filled(swatch_rect, 2.0, *color);
 
                                             // Color name with hardware value
-                                            ui.selectable_value(&mut self.pen_selected_color, Some(*hardware_index), name);
+                                            ui.selectable_value(&mut self.pen_color, Some(*hardware_index), name);
                                         });
                                     }
                                 })
                         })
-                    }).response;
+                    });
 
                     if ui.checkbox(&mut self.pen_any_color, "Any").changed() && self.pen_any_color {
-                        self.pen_selected_color = None
+                        self.pen_color = None
                     }
 
-                    let enter_pressed = (pen_edit.lost_focus() || color_edit.lost_focus())
-                        && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    let add_clicked = ui.button("Add").clicked();
-
-                    if enter_pressed || add_clicked {
+                    if ui.button("Add").clicked() {
                         self.add_pen_color_breakpoint(frontend);
                     }
                 });
@@ -381,16 +386,13 @@ impl GateArrayDebugWindow {
         let mode = if self.screen_mode_any_change {
             None
         } else {
-            match self.screen_mode_value_input.trim().parse::<u8>() {
-                Ok(val) if val <= 3 => Some(val),
-                _ => return, // Invalid input
-            }
+            self.screen_mode_value
         };
 
         let breakpoint =
             AnyBreakpoint::gate_array_screen_mode_breakpoint(mode, self.screen_mode_applied);
         frontend.breakpoint_manager().add_breakpoint(breakpoint);
-        self.screen_mode_value_input.clear();
+        self.screen_mode_value = None;
         self.screen_mode_any_change = false;
         self.screen_mode_applied = false;
     }
@@ -399,17 +401,14 @@ impl GateArrayDebugWindow {
         let pen = if self.pen_any_number {
             None
         } else {
-            match self.pen_number_input.trim().parse::<usize>() {
-                Ok(val) if val <= 16 => Some(val),
-                _ => return, // Invalid input
-            }
+            self.pen_number
         };
-        let color = self.pen_selected_color.map(|c| c as u8);
+        let color = self.pen_color.map(|c| c as u8);
 
         let breakpoint = AnyBreakpoint::gate_array_pen_color_breakpoint(pen, color);
         frontend.breakpoint_manager().add_breakpoint(breakpoint);
-        self.pen_number_input.clear();
-        self.pen_selected_color = None;
+        self.pen_number = None;
+        self.pen_color = None;
         self.pen_any_number = false;
         self.pen_any_color = false;
     }
