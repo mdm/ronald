@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::debug::event::{CpuDebugEvent, GateArrayDebugEvent, MemoryDebugEvent};
+use crate::debug::event::{CpuDebugEvent, CrtcDebugEvent, GateArrayDebugEvent, MemoryDebugEvent};
 use crate::debug::{DebugEvent, DebugSource, EventSubscription};
+use crate::system::bus::crtc::Register as CrtcRegister;
 use crate::system::clock::MasterClockTick;
 use crate::system::cpu::{Register16, Register8};
 
@@ -593,6 +594,477 @@ impl fmt::Display for GateArrayInterruptBreakpoint {
 }
 
 #[derive(Debug, Clone)]
+pub struct CrtcRegisterWriteBreakpoint {
+    pub register: Option<CrtcRegister>,
+    pub value: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcRegisterWriteBreakpoint {
+    pub fn new(register: Option<CrtcRegister>, value: Option<u8>) -> Self {
+        Self {
+            register,
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcRegisterWriteBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::RegisterWritten { register, is, .. }) => {
+                self.register.is_none_or(|r| r == *register) && self.value.is_none_or(|v| v == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcRegisterWriteBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.register, self.value) {
+            (Some(reg), Some(val)) => write!(f, "{} = 0x{:02X}", reg, val),
+            (Some(reg), None) => write!(f, "{} written", reg),
+            (None, Some(val)) => write!(f, "Any register = 0x{:02X}", val),
+            (None, None) => write!(f, "Any register written"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcHorizontalSyncBreakpoint {
+    pub on_start: bool,
+    pub on_end: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcHorizontalSyncBreakpoint {
+    pub fn new(on_start: bool, on_end: bool) -> Self {
+        Self {
+            on_start,
+            on_end,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcHorizontalSyncBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::HorizontalSyncStart { .. }) => self.on_start,
+            DebugEvent::Crtc(CrtcDebugEvent::HorizontalSyncEnd { .. }) => self.on_end,
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcHorizontalSyncBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.on_start, self.on_end) {
+            (true, true) => write!(f, "HSYNC start or end"),
+            (true, false) => write!(f, "HSYNC start"),
+            (false, true) => write!(f, "HSYNC end"),
+            (false, false) => write!(f, "HSYNC (never)"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcVerticalSyncBreakpoint {
+    pub on_start: bool,
+    pub on_end: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcVerticalSyncBreakpoint {
+    pub fn new(on_start: bool, on_end: bool) -> Self {
+        Self {
+            on_start,
+            on_end,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcVerticalSyncBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::VerticalSyncStart { .. }) => self.on_start,
+            DebugEvent::Crtc(CrtcDebugEvent::VerticalSyncEnd { .. }) => self.on_end,
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcVerticalSyncBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.on_start, self.on_end) {
+            (true, true) => write!(f, "VSYNC start or end"),
+            (true, false) => write!(f, "VSYNC start"),
+            (false, true) => write!(f, "VSYNC end"),
+            (false, false) => write!(f, "VSYNC (never)"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcHorizontalCounterBreakpoint {
+    pub value: u8,
+    pub character_row: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcHorizontalCounterBreakpoint {
+    pub fn new(value: u8, character_row: Option<u8>) -> Self {
+        Self {
+            value,
+            character_row,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcHorizontalCounterBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::ScanlineStart { character_row, .. }) => {
+                self.character_row.is_none_or(|r| r == *character_row)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcHorizontalCounterBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.character_row {
+            Some(row) => write!(f, "Horizontal counter = {} (row {})", self.value, row),
+            None => write!(f, "Horizontal counter = {}", self.value),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcCharacterRowBreakpoint {
+    pub row: u8,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcCharacterRowBreakpoint {
+    pub fn new(row: u8) -> Self {
+        Self {
+            row,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcCharacterRowBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::CharacterRowStart { row }) => *row == self.row,
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcCharacterRowBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Character row = {}", self.row)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcScanlineBreakpoint {
+    pub scanline: u8,
+    pub character_row: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcScanlineBreakpoint {
+    pub fn new(scanline: u8, character_row: Option<u8>) -> Self {
+        Self {
+            scanline,
+            character_row,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcScanlineBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::ScanlineStart {
+                scanline,
+                character_row,
+            }) => {
+                *scanline == self.scanline && self.character_row.is_none_or(|r| r == *character_row)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcScanlineBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.character_row {
+            Some(row) => write!(f, "Scanline {} (row {})", self.scanline, row),
+            None => write!(f, "Scanline {}", self.scanline),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcFrameStartBreakpoint {
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcFrameStartBreakpoint {
+    pub fn new() -> Self {
+        Self {
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcFrameStartBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        matches!(event, DebugEvent::Crtc(CrtcDebugEvent::FrameStart))
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcFrameStartBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Frame start")
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum AnyBreakpoint {
     CpuRegister8(CpuRegister8Breakpoint),
     CpuRegister16(CpuRegister16Breakpoint),
@@ -602,6 +1074,13 @@ pub enum AnyBreakpoint {
     GateArrayScreenMode(GateArrayScreenModeBreakpoint),
     GateArrayPenColor(GateArrayPenColorBreakpoint),
     GateArrayInterrupt(GateArrayInterruptBreakpoint),
+    CrtcRegisterWrite(CrtcRegisterWriteBreakpoint),
+    CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint),
+    CrtcVerticalSync(CrtcVerticalSyncBreakpoint),
+    CrtcHorizontalCounter(CrtcHorizontalCounterBreakpoint),
+    CrtcCharacterRow(CrtcCharacterRowBreakpoint),
+    CrtcScanline(CrtcScanlineBreakpoint),
+    CrtcFrameStart(CrtcFrameStartBreakpoint),
 }
 
 impl AnyBreakpoint {
@@ -653,6 +1132,37 @@ impl AnyBreakpoint {
     pub fn gate_array_interrupt_breakpoint() -> Self {
         Self::GateArrayInterrupt(GateArrayInterruptBreakpoint::new())
     }
+
+    pub fn crtc_register_write_breakpoint(
+        register: Option<CrtcRegister>,
+        value: Option<u8>,
+    ) -> Self {
+        Self::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint::new(register, value))
+    }
+
+    pub fn crtc_horizontal_sync_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint::new(on_start, on_end))
+    }
+
+    pub fn crtc_vertical_sync_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcVerticalSync(CrtcVerticalSyncBreakpoint::new(on_start, on_end))
+    }
+
+    pub fn crtc_horizontal_counter_breakpoint(value: u8, character_row: Option<u8>) -> Self {
+        Self::CrtcHorizontalCounter(CrtcHorizontalCounterBreakpoint::new(value, character_row))
+    }
+
+    pub fn crtc_character_row_breakpoint(row: u8) -> Self {
+        Self::CrtcCharacterRow(CrtcCharacterRowBreakpoint::new(row))
+    }
+
+    pub fn crtc_scanline_breakpoint(scanline: u8, character_row: Option<u8>) -> Self {
+        Self::CrtcScanline(CrtcScanlineBreakpoint::new(scanline, character_row))
+    }
+
+    pub fn crtc_frame_start_breakpoint() -> Self {
+        Self::CrtcFrameStart(CrtcFrameStartBreakpoint::new())
+    }
 }
 
 impl Breakpoint for AnyBreakpoint {
@@ -666,6 +1176,13 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayScreenMode(bp) => bp.should_break(source, event),
             AnyBreakpoint::GateArrayPenColor(bp) => bp.should_break(source, event),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcCharacterRow(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcScanline(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcFrameStart(bp) => bp.should_break(source, event),
         }
     }
 
@@ -679,6 +1196,13 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayScreenMode(bp) => bp.enabled(),
             AnyBreakpoint::GateArrayPenColor(bp) => bp.enabled(),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcCharacterRow(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcScanline(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcFrameStart(bp) => bp.enabled(),
         }
     }
 
@@ -692,6 +1216,13 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::GateArrayPenColor(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcCharacterRow(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcScanline(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcFrameStart(bp) => bp.set_enabled(enabled),
         }
     }
 
@@ -705,6 +1236,13 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayScreenMode(bp) => bp.one_shot(),
             AnyBreakpoint::GateArrayPenColor(bp) => bp.one_shot(),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcCharacterRow(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcScanline(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcFrameStart(bp) => bp.one_shot(),
         }
     }
 
@@ -718,6 +1256,13 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::GateArrayPenColor(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcCharacterRow(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcScanline(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcFrameStart(bp) => bp.set_one_shot(one_shot),
         }
     }
 
@@ -731,6 +1276,13 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayScreenMode(bp) => bp.triggered(),
             AnyBreakpoint::GateArrayPenColor(bp) => bp.triggered(),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcCharacterRow(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcScanline(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcFrameStart(bp) => bp.triggered(),
         }
     }
 
@@ -744,6 +1296,13 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::GateArrayPenColor(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcCharacterRow(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcScanline(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcFrameStart(bp) => bp.set_triggered(triggered),
         }
     }
 }
@@ -759,6 +1318,13 @@ impl fmt::Display for AnyBreakpoint {
             AnyBreakpoint::GateArrayScreenMode(bp) => bp.fmt(f),
             AnyBreakpoint::GateArrayPenColor(bp) => bp.fmt(f),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcCharacterRow(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcScanline(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcFrameStart(bp) => bp.fmt(f),
         }
     }
 }
