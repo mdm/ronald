@@ -1,3 +1,4 @@
+use crate::system::bus::crtc::Register as CrtcRegister;
 use crate::system::cpu::{Register16, Register8};
 
 /// A DebugEvent is any internal state change and any input or output
@@ -57,7 +58,51 @@ impl From<MemoryDebugEvent> for DebugEvent {
 }
 
 #[derive(Debug, Clone)]
-pub enum CrtcDebugEvent {}
+pub enum CrtcDebugEvent {
+    RegisterSelected {
+        register: CrtcRegister,
+    },
+    RegisterWritten {
+        register: CrtcRegister,
+        is: u8,
+        was: u8,
+    },
+    HorizontalSyncStart {
+        horizontal_counter: u8,
+        character_row: u8,
+        scanline: u8,
+    },
+    HorizontalSyncEnd {
+        horizontal_counter: u8,
+        character_row: u8,
+        scanline: u8,
+    },
+    VerticalSyncStart {
+        character_row: u8,
+    },
+    VerticalSyncEnd {
+        character_row: u8,
+    },
+    FrameStart,
+    DisplayEnableChanged {
+        enabled: bool,
+        horizontal_counter: u8,
+        character_row: u8,
+    },
+    ScanlineStart {
+        scanline: u8,
+        character_row: u8,
+    },
+    CharacterRowStart {
+        row: u8,
+    },
+}
+
+impl From<CrtcDebugEvent> for DebugEvent {
+    fn from(event: CrtcDebugEvent) -> Self {
+        DebugEvent::Crtc(event)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum GateArrayDebugEvent {

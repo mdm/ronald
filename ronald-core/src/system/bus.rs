@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::view::GateArrayDebugView;
+use crate::debug::view::{CrtcDebugView, GateArrayDebugView};
 use crate::debug::Snapshottable;
 use crate::system::clock::MasterClockTick;
 use crate::system::memory::{AnyMemory, MemManage, MemRead};
@@ -28,6 +28,7 @@ use tape::TapeController;
 
 pub struct BusDebugView {
     pub gate_array: GateArrayDebugView,
+    pub crtc: CrtcDebugView,
 }
 
 pub trait Bus: Default {
@@ -114,7 +115,7 @@ where
         master_clock: MasterClockTick,
     ) -> bool {
         self.psg.step(audio);
-        self.crtc.step();
+        self.crtc.step(master_clock);
         self.gate_array
             .step(&self.crtc, memory, &mut self.screen, video, master_clock)
     }
@@ -138,7 +139,7 @@ where
 
 impl<C, G> Snapshottable for StandardBus<C, G>
 where
-    C: CrtController,
+    C: CrtController + Snapshottable<View = CrtcDebugView>,
     G: GateArray + Snapshottable<View = GateArrayDebugView>,
 {
     type View = BusDebugView;
@@ -146,6 +147,7 @@ where
     fn debug_view(&self) -> Self::View {
         BusDebugView {
             gate_array: self.gate_array.debug_view(),
+            crtc: self.crtc.debug_view(),
         }
     }
 }

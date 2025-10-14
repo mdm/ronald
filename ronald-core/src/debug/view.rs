@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 
-use crate::system::{clock::MasterClockTick, instruction::InterruptMode};
+use crate::system::{
+    bus::crtc::Register as CrtcRegister, clock::MasterClockTick, instruction::InterruptMode,
+};
 
 pub struct SystemDebugView {
     pub master_clock: MasterClockTick,
     pub cpu: CpuDebugView,
     pub memory: MemoryDebugView,
     pub gate_array: GateArrayDebugView,
+    pub crtc: CrtcDebugView,
 }
 
 pub struct CpuDebugView {
@@ -64,4 +67,17 @@ pub struct GateArrayDebugView {
     pub hold_interrupt: bool,
     pub selected_pen: usize,
     pub pen_colors: Vec<u8>, // Hardware color values (0-31)
+}
+
+pub struct CrtcDebugView {
+    pub registers: [u8; 18],
+    pub selected_register: CrtcRegister,
+    pub horizontal_counter: u8,
+    pub character_row_counter: u8,
+    pub scan_line_counter: u8,
+    pub display_start_address: u16,
+    pub hsync_active: bool,
+    pub vsync_active: bool,
+    pub display_enabled: bool,
+    pub current_address: usize,
 }
