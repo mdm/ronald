@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::system::cpu;
 use crate::system::memory::MemRead;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Operand {
     Immediate8(u8),
     Immediate16(u16),
@@ -93,7 +93,7 @@ impl fmt::Display for InterruptMode {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum JumpTest {
     Unconditional,
     NonZero,
@@ -139,7 +139,7 @@ impl fmt::Display for JumpTest {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Instruction {
     Adc(Operand, Operand),
     Add(Operand, Operand),
@@ -1627,7 +1627,7 @@ impl AlgorithmicDecoder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DecodedInstruction {
     pub address: u16,
     pub instruction: Instruction,

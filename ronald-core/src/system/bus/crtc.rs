@@ -1,17 +1,24 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
+
+use crate::debug::event::CrtcDebugEvent;
+use crate::debug::view::CrtcDebugView;
+use crate::debug::{DebugSource, Debuggable, Snapshottable};
+use crate::system::clock::MasterClockTick;
 
 pub trait CrtController: Default {
     fn read_byte(&mut self, port: u16) -> u8;
     fn write_byte(&mut self, port: u16, value: u8);
-    fn step(&mut self);
+    fn step(&mut self, master_clock: MasterClockTick);
     fn read_address(&self) -> usize;
     fn read_display_enabled(&self) -> bool;
     fn read_horizontal_sync(&self) -> bool;
     fn read_vertical_sync(&self) -> bool;
 }
 
-enum Register {
-    // TODO: use all registers
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Register {
     HorizontalTotal,
     HorizontalDisplayed,
     HorizontalSyncPosition,
@@ -32,6 +39,57 @@ enum Register {
     LightPenAddressLow,
 }
 
+impl From<usize> for Register {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => Register::HorizontalTotal,
+            1 => Register::HorizontalDisplayed,
+            2 => Register::HorizontalSyncPosition,
+            3 => Register::HorizontalAndVerticalSyncWidths,
+            4 => Register::VerticalTotal,
+            5 => Register::VerticalTotalAdjust,
+            6 => Register::VerticalDisplayed,
+            7 => Register::VerticalSyncPosition,
+            8 => Register::InterlaceAndSkew,
+            9 => Register::MaximumRasterAddress,
+            10 => Register::CursorStartRaster,
+            11 => Register::CursorEndRaster,
+            12 => Register::DisplayStartAddressHigh,
+            13 => Register::DisplayStartAddressLow,
+            14 => Register::CursorAddressHigh,
+            15 => Register::CursorAddressLow,
+            16 => Register::LightPenAddressHigh,
+            17 => Register::LightPenAddressLow,
+            _ => panic!("Invalid CRTC register: {}", value),
+        }
+    }
+}
+
+impl fmt::Display for Register {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Register::HorizontalTotal => write!(f, "R0 (Horizontal Total)"),
+            Register::HorizontalDisplayed => write!(f, "R1 (Horizontal Displayed)"),
+            Register::HorizontalSyncPosition => write!(f, "R2 (H. Sync Position)"),
+            Register::HorizontalAndVerticalSyncWidths => write!(f, "R3 (H/V Sync Widths)"),
+            Register::VerticalTotal => write!(f, "R4 (Vertical Total)"),
+            Register::VerticalTotalAdjust => write!(f, "R5 (V. Total Adjust)"),
+            Register::VerticalDisplayed => write!(f, "R6 (Vertical Displayed)"),
+            Register::VerticalSyncPosition => write!(f, "R7 (V. Sync Position)"),
+            Register::InterlaceAndSkew => write!(f, "R8 (Interlace/Skew)"),
+            Register::MaximumRasterAddress => write!(f, "R9 (Max Raster Address)"),
+            Register::CursorStartRaster => write!(f, "R10 (Cursor Start)"),
+            Register::CursorEndRaster => write!(f, "R11 (Cursor End)"),
+            Register::DisplayStartAddressHigh => write!(f, "R12 (Display Start High)"),
+            Register::DisplayStartAddressLow => write!(f, "R13 (Display Start Low)"),
+            Register::CursorAddressHigh => write!(f, "R14 (Cursor Address High)"),
+            Register::CursorAddressLow => write!(f, "R15 (Cursor Address Low)"),
+            Register::LightPenAddressHigh => write!(f, "R16 (Light Pen High)"),
+            Register::LightPenAddressLow => write!(f, "R17 (Light Pen Low)"),
+        }
+    }
+}
+
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HitachiHd6845s {
@@ -42,20 +100,64 @@ pub struct HitachiHd6845s {
     character_row_counter: u8,
     scan_line_counter: u8,
     display_start_address: u16,
+    master_clock: MasterClockTick,
+    previous_hsync: bool,
+    previous_vsync: bool,
+    previous_display_enabled: bool,
 }
 
 impl HitachiHd6845s {
     fn select_register(&mut self, register: usize) {
         self.selected_register = register;
+        self.emit_debug_event(
+            CrtcDebugEvent::RegisterSelected {
+                register: register.into(),
+            },
+            self.master_clock,
+        );
     }
 
     fn write_register(&mut self, value: u8) {
+        let was = self.registers[self.selected_register];
         self.registers[self.selected_register] = value; // TODO: restrict to registers 0-15, TODO: restrict bit-width
+
+        self.emit_debug_event(
+            CrtcDebugEvent::RegisterWritten {
+                register: self.selected_register.into(),
+                is: value,
+                was,
+            },
+            self.master_clock,
+        );
     }
 
     fn read_register(&self) -> u8 {
         self.registers[self.selected_register] // TODO: restrict to registers 14-17
     }
+}
+
+impl Snapshottable for HitachiHd6845s {
+    type View = CrtcDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        CrtcDebugView {
+            registers: self.registers,
+            selected_register: self.selected_register.into(),
+            horizontal_counter: self.horizontal_counter,
+            character_row_counter: self.character_row_counter,
+            scan_line_counter: self.scan_line_counter,
+            display_start_address: self.display_start_address,
+            hsync_active: self.read_horizontal_sync(),
+            vsync_active: self.read_vertical_sync(),
+            display_enabled: self.read_display_enabled(),
+            current_address: self.read_address(),
+        }
+    }
+}
+
+impl Debuggable for HitachiHd6845s {
+    const SOURCE: DebugSource = DebugSource::Crtc;
+    type Event = CrtcDebugEvent;
 }
 
 impl CrtController for HitachiHd6845s {
@@ -75,7 +177,36 @@ impl CrtController for HitachiHd6845s {
         }
     }
 
-    fn step(&mut self) {
+    fn step(&mut self, master_clock: MasterClockTick) {
+        self.master_clock = master_clock;
+
+        // Emit events when counters are at 0 (before incrementing)
+        if self.horizontal_counter == 0 {
+            self.emit_debug_event(
+                CrtcDebugEvent::ScanlineStart {
+                    scanline: self.scan_line_counter,
+                    character_row: self.character_row_counter,
+                },
+                master_clock,
+            );
+        }
+
+        if self.scan_line_counter == 0 && self.horizontal_counter == 0 {
+            self.emit_debug_event(
+                CrtcDebugEvent::CharacterRowStart {
+                    row: self.character_row_counter,
+                },
+                master_clock,
+            );
+        }
+
+        if self.character_row_counter == 0
+            && self.scan_line_counter == 0
+            && self.horizontal_counter == 0
+        {
+            self.emit_debug_event(CrtcDebugEvent::FrameStart, master_clock);
+        }
+
         self.horizontal_counter += 1;
 
         if self.horizontal_counter > self.registers[Register::HorizontalTotal as usize] {
@@ -97,6 +228,65 @@ impl CrtController for HitachiHd6845s {
             self.display_start_address =
                 ((self.registers[Register::DisplayStartAddressHigh as usize] as u16) << 8)
                     + self.registers[Register::DisplayStartAddressLow as usize] as u16;
+        }
+
+        // Check for sync state changes
+        let new_hsync = self.read_horizontal_sync();
+        let new_vsync = self.read_vertical_sync();
+        let new_display_enabled = self.read_display_enabled();
+
+        if new_hsync != self.previous_hsync {
+            if new_hsync {
+                self.emit_debug_event(
+                    CrtcDebugEvent::HorizontalSyncStart {
+                        horizontal_counter: self.horizontal_counter,
+                        character_row: self.character_row_counter,
+                        scanline: self.scan_line_counter,
+                    },
+                    master_clock,
+                );
+            } else {
+                self.emit_debug_event(
+                    CrtcDebugEvent::HorizontalSyncEnd {
+                        horizontal_counter: self.horizontal_counter,
+                        character_row: self.character_row_counter,
+                        scanline: self.scan_line_counter,
+                    },
+                    master_clock,
+                );
+            }
+            self.previous_hsync = new_hsync;
+        }
+
+        if new_vsync != self.previous_vsync {
+            if new_vsync {
+                self.emit_debug_event(
+                    CrtcDebugEvent::VerticalSyncStart {
+                        character_row: self.character_row_counter,
+                    },
+                    master_clock,
+                );
+            } else {
+                self.emit_debug_event(
+                    CrtcDebugEvent::VerticalSyncEnd {
+                        character_row: self.character_row_counter,
+                    },
+                    master_clock,
+                );
+            }
+            self.previous_vsync = new_vsync;
+        }
+
+        if new_display_enabled != self.previous_display_enabled {
+            self.emit_debug_event(
+                CrtcDebugEvent::DisplayEnableChanged {
+                    enabled: new_display_enabled,
+                    horizontal_counter: self.horizontal_counter,
+                    character_row: self.character_row_counter,
+                },
+                master_clock,
+            );
+            self.previous_display_enabled = new_display_enabled;
         }
     }
 
@@ -150,6 +340,16 @@ impl Default for AnyCrtController {
     }
 }
 
+impl Snapshottable for AnyCrtController {
+    type View = CrtcDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        match self {
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.debug_view(),
+        }
+    }
+}
+
 impl CrtController for AnyCrtController {
     fn read_byte(&mut self, port: u16) -> u8 {
         match self {
@@ -163,9 +363,9 @@ impl CrtController for AnyCrtController {
         }
     }
 
-    fn step(&mut self) {
+    fn step(&mut self, master_clock: MasterClockTick) {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.step(),
+            AnyCrtController::HitachiHd6845s(crtc) => crtc.step(master_clock),
         }
     }
 

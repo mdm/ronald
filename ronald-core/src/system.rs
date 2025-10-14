@@ -40,7 +40,6 @@ where
     bus: B,
     master_clock: MasterClock,
     disk_drives: DiskDrives,
-    #[serde(skip)]
     last_instruction: Option<DecodedInstruction>,
 }
 
@@ -141,6 +140,7 @@ where
             cpu: self.cpu.debug_view(),
             memory: self.memory.debug_view(),
             gate_array: bus_debug_view.gate_array,
+            crtc: bus_debug_view.crtc,
         };
         record_debug_events(true);
 
