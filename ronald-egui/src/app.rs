@@ -2,7 +2,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
-use crate::debug::{CpuDebugWindow, GateArrayDebugWindow, MemoryDebugWindow};
+use crate::debug::{CpuDebugWindow, CrtcDebugWindow, GateArrayDebugWindow, MemoryDebugWindow};
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
@@ -31,6 +31,7 @@ where
     #[serde(skip)]
     system_config_modal: SystemConfigModal,
     cpu_debug_window: CpuDebugWindow,
+    crtc_debug_window: CrtcDebugWindow,
     gate_array_debug_window: GateArrayDebugWindow,
     memory_debug_window: MemoryDebugWindow,
 }
@@ -49,6 +50,7 @@ where
             key_mapper: KeyMapper::default(),
             system_config_modal: SystemConfigModal::default(),
             cpu_debug_window: CpuDebugWindow::default(),
+            crtc_debug_window: CrtcDebugWindow::default(),
             gate_array_debug_window: GateArrayDebugWindow::default(),
             memory_debug_window: MemoryDebugWindow::default(),
         }
@@ -95,6 +97,7 @@ where
             && let Some(frontend) = &mut self.frontend
         {
             self.cpu_debug_window.ui(ctx, frontend);
+            self.crtc_debug_window.ui(ctx, frontend);
             self.gate_array_debug_window.ui(ctx, frontend);
             self.memory_debug_window.ui(ctx, frontend);
         }
@@ -147,6 +150,13 @@ where
                             .clicked()
                         {
                             self.memory_debug_window.show = !self.memory_debug_window.show;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .add(egui::Button::new("CRTC").selected(self.crtc_debug_window.open))
+                            .clicked()
+                        {
+                            self.crtc_debug_window.open = !self.crtc_debug_window.open;
                             ui.close_menu();
                         }
                         if ui
