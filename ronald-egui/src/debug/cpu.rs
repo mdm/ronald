@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
 use ronald_core::system::cpu::{Register8, Register16 as PrimaryRegister16};
 
+use crate::colors;
 use crate::frontend::Frontend;
 
 fn default_register8() -> Register8 {
@@ -358,27 +359,27 @@ impl CpuDebugWindow {
             ui.label("IFF1:");
             ui.colored_label(
                 if data.iff1 {
-                    egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
+                    colors::FORREST_GREEN
                 } else {
-                    egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
+                    colors::DARK_RED
                 },
                 if data.iff1 { "ON" } else { "OFF" },
             );
             ui.label("IFF2:");
             ui.colored_label(
                 if data.iff2 {
-                    egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
+                    colors::FORREST_GREEN
                 } else {
-                    egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
+                    colors::DARK_RED
                 },
                 if data.iff2 { "ON" } else { "OFF" },
             );
             ui.label("Halted:");
             ui.colored_label(
                 if data.halted {
-                    egui::Color32::from_rgb(200, 150, 0) // Dark yellow/gold - better contrast
+                    colors::DARK_YELLOW_GOLD
                 } else {
-                    egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
+                    colors::FORREST_GREEN
                 },
                 if data.halted { "YES" } else { "NO" },
             );
@@ -400,9 +401,9 @@ impl CpuDebugWindow {
                 let is_set = (flags >> bit) & 1 != 0;
                 ui.colored_label(
                     if is_set {
-                        egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
+                        colors::FORREST_GREEN
                     } else {
-                        egui::Color32::from_gray(120) // Darker gray - better contrast
+                        colors::MEDIUM_GRAY
                     },
                     format!("{}: {}", name, if is_set { "1" } else { "0" }),
                 );
@@ -556,7 +557,7 @@ impl CpuDebugWindow {
 
                 if let Some(master_clock) = breakpoint.triggered() {
                     ui.colored_label(
-                        egui::Color32::from_rgb(200, 50, 50), // Dark red - better contrast
+                        colors::DARK_RED,
                         format!("(triggered at {})", master_clock.value()),
                     );
                 }

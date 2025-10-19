@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ronald_core::constants::{FIRMWARE_COLORS, HARDWARE_TO_FIRMWARE_COLORS};
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
 
+use crate::colors;
 use crate::frontend::Frontend;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -115,18 +116,18 @@ impl GateArrayDebugWindow {
         ui.heading("Sync Status");
         ui.horizontal(|ui| {
             let hsync_color = if ga.hsync_active {
-                egui::Color32::GREEN
+                colors::FORREST_GREEN
             } else {
-                egui::Color32::DARK_GRAY
+                colors::MEDIUM_GRAY
             };
             ui.colored_label(hsync_color, "HSYNC");
 
             ui.separator();
 
             let vsync_color = if ga.vsync_active {
-                egui::Color32::GREEN
+                colors::FORREST_GREEN
             } else {
-                egui::Color32::DARK_GRAY
+                colors::MEDIUM_GRAY
             };
             ui.colored_label(vsync_color, "VSYNC");
 
@@ -277,7 +278,7 @@ impl GateArrayDebugWindow {
                             let (_, color, name) = &colors[selected];
                             (*color, name.as_str())
                         }
-                        None => (egui::Color32::BLACK, "Select..."),
+                        None => (colors::BLACK, "Select..."),
                     };
 
 
@@ -362,7 +363,7 @@ impl GateArrayDebugWindow {
 
                 if let Some(master_clock) = breakpoint.triggered() {
                     ui.colored_label(
-                        egui::Color32::from_rgb(200, 50, 50),
+                        colors::DARK_RED,
                         format!("(triggered at {})", master_clock.value()),
                     );
                 }
