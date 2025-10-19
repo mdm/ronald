@@ -9,6 +9,7 @@ use ronald_core::{
     system::{cpu::Register16, instruction::DecodedInstruction},
 };
 
+use crate::colors;
 use crate::frontend::Frontend;
 
 #[derive(Deserialize, Serialize)]
@@ -61,10 +62,10 @@ impl Default for MemoryDebugWindow {
 impl Default for MemorySourceColors {
     fn default() -> Self {
         Self {
-            lower_rom: egui::Color32::from_rgb(255, 140, 0), // Dark orange - good contrast in both themes
-            upper_rom: egui::Color32::from_rgb(220, 20, 120), // Deep magenta - better contrast than pink
-            ram: egui::Color32::from_rgb(0, 150, 0), // Forest green - better contrast than lime
-            extension_ram: egui::Color32::from_rgb(30, 144, 255), // Dodger blue - better contrast than sky blue
+            lower_rom: colors::DARK_ORANGE,
+            upper_rom: colors::DEEP_MAGENTA,
+            ram: colors::FORREST_GREEN,
+            extension_ram: colors::DODGER_BLUE,
         }
     }
 }
@@ -76,7 +77,7 @@ impl MemorySourceColors {
             MemoryViewMode::UpperRomOnly(_) => self.upper_rom,
             MemoryViewMode::RamOnly => self.ram,
             MemoryViewMode::ExtensionRamOnly => self.extension_ram,
-            _ => egui::Color32::from_gray(160), // Better contrast - darker gray for both themes
+            _ => colors::DARK_GRAY,
         }
     }
 }
@@ -294,9 +295,9 @@ impl MemoryDebugWindow {
                     ui.label("Lower ROM:");
                     ui.colored_label(
                         if data.lower_rom_enabled {
-                            egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
+                            colors::FORREST_GREEN
                         } else {
-                            egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
+                            colors::DARK_RED
                         },
                         if data.lower_rom_enabled {
                             "ENABLED"
@@ -308,9 +309,9 @@ impl MemoryDebugWindow {
                     ui.label("Upper ROM:");
                     ui.colored_label(
                         if data.upper_rom_enabled {
-                            egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
+                            colors::FORREST_GREEN
                         } else {
-                            egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
+                            colors::DARK_RED
                         },
                         if data.upper_rom_enabled {
                             "ENABLED"
@@ -327,9 +328,9 @@ impl MemoryDebugWindow {
                     ui.label("Lower ROM:");
                     ui.colored_label(
                         if data.lower_rom_enabled {
-                            egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
+                            colors::FORREST_GREEN
                         } else {
-                            egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
+                            colors::DARK_RED
                         },
                         if data.lower_rom_enabled {
                             "ENABLED"
@@ -345,9 +346,9 @@ impl MemoryDebugWindow {
                     ui.label("Upper ROM:");
                     ui.colored_label(
                         if data.upper_rom_enabled {
-                            egui::Color32::from_rgb(0, 150, 0) // Forest green - better contrast
+                            colors::FORREST_GREEN
                         } else {
-                            egui::Color32::from_rgb(200, 50, 50) // Dark red - better contrast
+                            colors::DARK_RED
                         },
                         if data.upper_rom_enabled {
                             "ENABLED"
@@ -529,7 +530,7 @@ impl MemoryDebugWindow {
 
                                 row.col(|ui| {
                                     let mut color = if is_current_instruction {
-                                        egui::Color32::WHITE
+                                        colors::WHITE
                                     } else {
                                         self.get_memory_source_color(
                                             instruction.address as usize,
@@ -543,7 +544,7 @@ impl MemoryDebugWindow {
                                     if has_breakpoint {
                                         addr_text = format!("● {:04X}:", instruction.address);
                                         if !is_current_instruction {
-                                            color = egui::Color32::from_rgb(255, 100, 100); // Light red
+                                            color = colors::LIGHT_RED;
                                         }
                                     }
 
@@ -555,9 +556,9 @@ impl MemoryDebugWindow {
 
                                 row.col(|ui| {
                                     let color = if is_current_instruction {
-                                        egui::Color32::WHITE
+                                        colors::WHITE
                                     } else {
-                                        egui::Color32::from_rgb(70, 130, 180) // Steel blue - better contrast
+                                        colors::STEEL_BLUE
                                     };
                                     ui.colored_label(color, instruction.instruction.to_string());
                                 });
@@ -577,7 +578,7 @@ impl MemoryDebugWindow {
                                         }
                                     }
                                     let response = if is_current_instruction {
-                                        ui.colored_label(egui::Color32::WHITE, hex_bytes)
+                                        ui.colored_label(colors::WHITE, hex_bytes)
                                     } else {
                                         ui.monospace(hex_bytes)
                                     };
@@ -664,7 +665,7 @@ impl MemoryDebugWindow {
 
                 if let Some(master_clock) = breakpoint.triggered() {
                     ui.colored_label(
-                        egui::Color32::from_rgb(200, 50, 50), // Dark red - better contrast
+                        colors::DARK_RED,
                         format!("(triggered at {})", master_clock.value()),
                     );
                 }

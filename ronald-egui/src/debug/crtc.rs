@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
 use ronald_core::system::bus::crtc::Register as CrtcRegister;
 
+use crate::colors;
 use crate::frontend::Frontend;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -86,7 +87,7 @@ impl CrtcDebugWindow {
 
                     let label = format!("{}", register);
                     if is_selected {
-                        ui.colored_label(egui::Color32::YELLOW, label);
+                        ui.colored_label(colors::DARK_YELLOW_GOLD, label);
                     } else {
                         ui.label(label);
                     }
@@ -145,27 +146,27 @@ impl CrtcDebugWindow {
         ui.heading("Status");
         ui.horizontal(|ui| {
             let hsync_color = if crtc.hsync_active {
-                egui::Color32::GREEN
+                colors::FORREST_GREEN
             } else {
-                egui::Color32::DARK_GRAY
+                colors::MEDIUM_GRAY
             };
             ui.colored_label(hsync_color, "HSYNC");
 
             ui.separator();
 
             let vsync_color = if crtc.vsync_active {
-                egui::Color32::GREEN
+                colors::FORREST_GREEN
             } else {
-                egui::Color32::DARK_GRAY
+                colors::MEDIUM_GRAY
             };
             ui.colored_label(vsync_color, "VSYNC");
 
             ui.separator();
 
             let display_color = if crtc.display_enabled {
-                egui::Color32::GREEN
+                colors::FORREST_GREEN
             } else {
-                egui::Color32::DARK_GRAY
+                colors::MEDIUM_GRAY
             };
             ui.colored_label(display_color, "DISPLAY");
         });
@@ -382,7 +383,7 @@ impl CrtcDebugWindow {
 
                 if let Some(master_clock) = breakpoint.triggered() {
                     ui.colored_label(
-                        egui::Color32::from_rgb(200, 50, 50),
+                        colors::DARK_RED,
                         format!("(triggered at {})", master_clock.value()),
                     );
                 }
