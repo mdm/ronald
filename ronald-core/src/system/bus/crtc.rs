@@ -135,7 +135,7 @@ impl CrtController for HitachiHd6845s {
             (self.registers[Register::MaximumRasterAddress as usize] as i32 + 1)
                 * character_rows_since_start
                 + self.scan_line_counter as i32;
-        (0..16 * 8).contains(&scan_lines_since_start) // should be 16, not 16 * 8 - TODO: find out why shortening this messes with Fruity Frank colors
+        (0..16).contains(&scan_lines_since_start)
     }
 }
 
