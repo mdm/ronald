@@ -114,7 +114,10 @@ impl CpuRegister16Breakpoint {
     }
 
     pub fn step_into() -> Self {
-        Self::new(Register16::PC, None)
+        let mut breakpoint = Self::new(Register16::PC, None);
+        breakpoint.set_one_shot(true);
+
+        breakpoint
     }
 }
 
@@ -1093,11 +1096,17 @@ impl AnyBreakpoint {
     }
 
     pub fn step_out() -> Self {
-        Self::CallStack(CallStackBreakpoint::new(1))
+        let mut breakpoint = CallStackBreakpoint::new(1);
+        breakpoint.set_one_shot(true);
+
+        Self::CallStack(breakpoint)
     }
 
     pub fn step_over() -> Self {
-        Self::CallStack(CallStackBreakpoint::new(0))
+        let mut breakpoint = CallStackBreakpoint::new(0);
+        breakpoint.set_one_shot(true);
+
+        Self::CallStack(breakpoint)
     }
 
     pub fn cpu_register8_breakpoint(register: Register8, value: Option<u8>) -> Self {
