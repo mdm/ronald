@@ -2,9 +2,9 @@ name: Ronald CI
 
 on:
   push:
-    branches: [$default-branch]
+    branches: [master]
   pull_request:
-    branches: [$default-branch]
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,7 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check formatting
-        run: cargo fmt --verbose
+        run: cargo fmt --verbose --all --check
+      - name: Install dependencies
+        run: sudo apt install -y libasound2-dev
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Build
         run: cargo build --verbose
       - name: Run tests
