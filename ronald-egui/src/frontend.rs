@@ -535,24 +535,21 @@ impl Frontend {
     }
 
     fn step_into(&mut self) {
-        let mut breakpoint = AnyBreakpoint::step_into();
-        breakpoint.set_one_shot(true);
+        let breakpoint = AnyBreakpoint::step_into();
         self.driver.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.resume();
     }
 
     fn step_over(&mut self) {
-        let mut breakpoint = AnyBreakpoint::step_over();
-        breakpoint.set_one_shot(true);
+        let breakpoint = AnyBreakpoint::step_over();
         self.driver.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.resume();
     }
 
     fn step_out(&mut self) {
-        let mut breakpoint = AnyBreakpoint::step_out();
-        breakpoint.set_one_shot(true);
+        let breakpoint = AnyBreakpoint::step_out();
         self.driver.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.resume();
