@@ -1,13 +1,17 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
+use debug::{breakpoint::BreakpointManager, view::SystemDebugView, Snapshottable};
 use system::bus::{crtc::AnyCrtController, gate_array::AnyGateArray, StandardBus};
 use system::cpu::ZilogZ80;
 use system::instruction::AlgorithmicDecoder;
 use system::memory::AnyMemory;
 use system::{AmstradCpc, SystemConfig};
 
+use crate::system::instruction::DecodedInstruction;
+
 pub mod constants;
+pub mod debug;
 pub mod system;
 
 pub trait VideoSink {
@@ -28,6 +32,8 @@ pub struct Driver {
         StandardBus<AnyCrtController, AnyGateArray>,
     >,
     keys: HashMap<&'static str, KeyDefinition>,
+    breakpoint_manager: BreakpointManager,
+    cached_debug_view: Option<SystemDebugView>,
 }
 
 impl Driver {
@@ -36,6 +42,8 @@ impl Driver {
         Self {
             system: AmstradCpc::default(),
             keys,
+            breakpoint_manager: BreakpointManager::default(),
+            cached_debug_view: None,
         }
     }
 
@@ -44,23 +52,30 @@ impl Driver {
         Self {
             system: config.clone().into(),
             keys,
+            breakpoint_manager: BreakpointManager::default(),
+            cached_debug_view: None,
         }
     }
 
-    pub fn step(&mut self, usecs: usize, video: &mut impl VideoSink, audio: &mut impl AudioSink) {
+    pub fn step(
+        &mut self,
+        usecs: usize,
+        video: &mut impl VideoSink,
+        audio: &mut impl AudioSink,
+    ) -> bool {
+        self.cached_debug_view = None;
+
         let mut elapsed_microseconds = 0;
         while elapsed_microseconds < usecs {
             // TODO: tie this to vsync instead of fixed value
             elapsed_microseconds += self.system.emulate(video, audio) as usize;
+
+            self.breakpoint_manager.evaluate_breakpoints();
+            if self.breakpoint_manager.any_triggered() {
+                return true;
+            }
         }
-    }
-
-    pub fn step_single(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) {
-        self.system.emulate(video, audio);
-    }
-
-    pub fn activate_debugger(&self) {
-        todo!()
+        false // No breakpoint hit
     }
 
     pub fn press_key(&mut self, key: &str) {
@@ -85,11 +100,6 @@ impl Driver {
         serde_json::to_string(&self.system)
     }
 
-    pub fn disassemble(&mut self, count: usize) -> serde_json::Result<String> {
-        let disassembly = self.system.disassemble(count);
-        serde_json::to_string(&disassembly)
-    }
-
     pub fn save_rom(&self) -> Vec<u8> {
         todo!()
     }
@@ -100,6 +110,22 @@ impl Driver {
 
     pub fn save_snapshot(&self) -> Vec<u8> {
         todo!()
+    }
+
+    pub fn debug_view(&mut self) -> &SystemDebugView {
+        if self.cached_debug_view.is_none() {
+            self.cached_debug_view = Some(self.system.debug_view());
+        }
+
+        self.cached_debug_view.as_ref().unwrap()
+    }
+
+    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
+        self.system.disassemble(start_address, count)
+    }
+
+    pub fn breakpoint_manager(&mut self) -> &mut BreakpointManager {
+        &mut self.breakpoint_manager
     }
 }
 

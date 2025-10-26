@@ -1,4 +1,6 @@
 mod app;
+mod colors;
+mod debug;
 mod frontend;
 mod key_map_editor;
 mod key_mapper;
