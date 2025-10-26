@@ -150,200 +150,86 @@ impl CpuDebugWindow {
     fn render_cpu_registers(&self, ui: &mut egui::Ui, frontend: &mut Frontend) {
         let data = &frontend.debug_view().cpu;
         ui.heading("Main Registers");
-        egui_extras::TableBuilder::new(ui)
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .body(|mut body| {
-                body.row(20.0, |mut row| {
-                    row.col(|ui| {
-                        ui.label("A:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_a));
-                    });
-                    row.col(|ui| {
-                        ui.label("F:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_f));
-                    });
-                    row.col(|ui| {
-                        ui.label("B:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_b));
-                    });
-                    row.col(|ui| {
-                        ui.label("C:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_c));
-                    });
-                });
-                body.row(20.0, |mut row| {
-                    row.col(|ui| {
-                        ui.label("D:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_d));
-                    });
-                    row.col(|ui| {
-                        ui.label("E:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_e));
-                    });
-                    row.col(|ui| {
-                        ui.label("H:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_h));
-                    });
-                    row.col(|ui| {
-                        ui.label("L:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_l));
-                    });
-                });
+        egui::Grid::new("cpu_main_registers_grid")
+            .num_columns(8)
+            .show(ui, |ui| {
+                ui.label("A:");
+                ui.monospace(format!("{:02X}", data.register_a));
+                ui.label("F:");
+                ui.monospace(format!("{:02X}", data.register_f));
+                ui.label("B:");
+                ui.monospace(format!("{:02X}", data.register_b));
+                ui.label("C:");
+                ui.monospace(format!("{:02X}", data.register_c));
+                ui.end_row();
+
+                ui.label("D:");
+                ui.monospace(format!("{:02X}", data.register_d));
+                ui.label("E:");
+                ui.monospace(format!("{:02X}", data.register_e));
+                ui.label("H:");
+                ui.monospace(format!("{:02X}", data.register_h));
+                ui.label("L:");
+                ui.monospace(format!("{:02X}", data.register_l));
+                ui.end_row();
             });
 
         ui.heading("Shadow Registers");
-        egui_extras::TableBuilder::new(ui)
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(20.0))
-            .body(|mut body| {
-                body.row(20.0, |mut row| {
-                    row.col(|ui| {
-                        ui.label("A':");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.shadow_register_a));
-                    });
-                    row.col(|ui| {
-                        ui.label("F':");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.shadow_register_f));
-                    });
-                    row.col(|ui| {
-                        ui.label("B':");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.shadow_register_b));
-                    });
-                    row.col(|ui| {
-                        ui.label("C':");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.shadow_register_c));
-                    });
-                });
-                body.row(20.0, |mut row| {
-                    row.col(|ui| {
-                        ui.label("D':");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.shadow_register_d));
-                    });
-                    row.col(|ui| {
-                        ui.label("E':");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.shadow_register_e));
-                    });
-                    row.col(|ui| {
-                        ui.label("H':");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.shadow_register_h));
-                    });
-                    row.col(|ui| {
-                        ui.label("L':");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.shadow_register_l));
-                    });
-                });
+        egui::Grid::new("cpu_shadow_registers_grid")
+            .num_columns(8)
+            .show(ui, |ui| {
+                ui.label("A':");
+                ui.monospace(format!("{:02X}", data.shadow_register_a));
+                ui.label("F':");
+                ui.monospace(format!("{:02X}", data.shadow_register_f));
+                ui.label("B':");
+                ui.monospace(format!("{:02X}", data.shadow_register_b));
+                ui.label("C':");
+                ui.monospace(format!("{:02X}", data.shadow_register_c));
+                ui.end_row();
+
+                ui.label("D':");
+                ui.monospace(format!("{:02X}", data.shadow_register_d));
+                ui.label("E':");
+                ui.monospace(format!("{:02X}", data.shadow_register_e));
+                ui.label("H':");
+                ui.monospace(format!("{:02X}", data.shadow_register_h));
+                ui.label("L':");
+                ui.monospace(format!("{:02X}", data.shadow_register_l));
+                ui.end_row();
             });
 
         ui.heading("Index & Special Registers");
-        egui_extras::TableBuilder::new(ui)
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(40.0))
-            .column(egui_extras::Column::exact(20.0))
-            .column(egui_extras::Column::exact(40.0))
-            .body(|mut body| {
-                body.row(20.0, |mut row| {
-                    row.col(|ui| {
-                        ui.label("IX:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!(
-                            "{:02X}{:02X}",
-                            data.register_ixh, data.register_ixl
-                        ));
-                    });
-                    row.col(|ui| {
-                        ui.label("IY:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!(
-                            "{:02X}{:02X}",
-                            data.register_iyh, data.register_iyl
-                        ));
-                    });
-                });
-                body.row(20.0, |mut row| {
-                    row.col(|ui| {
-                        ui.label("SP:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:04X}", data.register_sp));
-                    });
-                    row.col(|ui| {
-                        ui.label("PC:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:04X}", data.register_pc));
-                    });
-                });
-                body.row(20.0, |mut row| {
-                    row.col(|ui| {
-                        ui.label("I:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_i));
-                    });
-                    row.col(|ui| {
-                        ui.label("R:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{:02X}", data.register_r));
-                    });
-                });
-                body.row(20.0, |mut row| {
-                    row.col(|ui| {
-                        ui.label("IM:");
-                    });
-                    row.col(|ui| {
-                        ui.monospace(format!("{}", data.interrupt_mode));
-                    });
-                    row.col(|_ui| {});
-                    row.col(|_ui| {});
-                });
+        egui::Grid::new("cpu_special_registers_grid")
+            .num_columns(4)
+            .show(ui, |ui| {
+                ui.label("IX:");
+                ui.monospace(format!(
+                    "{:02X}{:02X}",
+                    data.register_ixh, data.register_ixl
+                ));
+                ui.label("IY:");
+                ui.monospace(format!(
+                    "{:02X}{:02X}",
+                    data.register_iyh, data.register_iyl
+                ));
+                ui.end_row();
+
+                ui.label("SP:");
+                ui.monospace(format!("{:04X}", data.register_sp));
+                ui.label("PC:");
+                ui.monospace(format!("{:04X}", data.register_pc));
+                ui.end_row();
+
+                ui.label("I:");
+                ui.monospace(format!("{:02X}", data.register_i));
+                ui.label("R:");
+                ui.monospace(format!("{:02X}", data.register_r));
+                ui.end_row();
+
+                ui.label("IM:");
+                ui.monospace(format!("{}", data.interrupt_mode));
+                ui.end_row();
             });
 
         ui.heading("Flags (F Register)");
