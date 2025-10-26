@@ -137,9 +137,8 @@ impl CpuDebugWindow {
 
         let mut open = self.show;
         egui::Window::new("CPU Internals")
-            .open(&mut open)
-            .default_size([400.0, 600.0])
             .resizable(false)
+            .open(&mut open)
             .show(ctx, |ui| {
                 self.render_cpu_registers(ui, frontend);
                 ui.separator();
@@ -215,7 +214,6 @@ impl CpuDebugWindow {
                 });
             });
 
-        ui.separator();
         ui.heading("Shadow Registers");
         egui_extras::TableBuilder::new(ui)
             .column(egui_extras::Column::exact(20.0))
@@ -281,7 +279,6 @@ impl CpuDebugWindow {
                 });
             });
 
-        ui.separator();
         ui.heading("Index & Special Registers");
         egui_extras::TableBuilder::new(ui)
             .column(egui_extras::Column::exact(20.0))
@@ -349,11 +346,9 @@ impl CpuDebugWindow {
                 });
             });
 
-        ui.separator();
         ui.heading("Flags (F Register)");
         self.render_flags(ui, data.register_f);
 
-        ui.separator();
         ui.heading("Status");
         ui.horizontal(|ui| {
             ui.label("IFF1:");

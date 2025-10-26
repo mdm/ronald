@@ -59,9 +59,8 @@ impl CrtcDebugWindow {
     pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
         let mut open = self.open;
         egui::Window::new("CRTC Internals")
+            .resizable(false)
             .open(&mut open)
-            .default_width(500.0)
-            .default_height(700.0)
             .show(ctx, |ui| {
                 self.render_crtc_state(ui, frontend);
                 ui.separator();
@@ -85,14 +84,14 @@ impl CrtcDebugWindow {
                     let register: CrtcRegister = i.into();
                     let is_selected = matches!(crtc.selected_register, ref r if std::mem::discriminant(r) == std::mem::discriminant(&register));
 
-                    let label = format!("{}", register);
+                    let label = format!("{}:", register);
                     if is_selected {
                         ui.colored_label(colors::DARK_YELLOW_GOLD, label);
                     } else {
                         ui.label(label);
                     }
 
-                    ui.label(format!("{:#04x}", value));
+                    ui.monospace(format!("{:02x}", value));
 
                     if (i + 1) % 2 == 0 {
                         ui.end_row();
@@ -132,11 +131,11 @@ impl CrtcDebugWindow {
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
                 ui.label("Display Start Address:");
-                ui.label(format!("{:#06x}", crtc.display_start_address));
+                ui.monospace(format!("{:04x}", crtc.display_start_address));
                 ui.end_row();
 
                 ui.label("Current Address:");
-                ui.label(format!("{:#06x}", crtc.current_address));
+                ui.monospace(format!("{:04x}", crtc.current_address));
                 ui.end_row();
             });
 
@@ -202,7 +201,7 @@ impl CrtcDebugWindow {
                     });
 
                     if ui
-                        .checkbox(&mut self.register_write_any_register, "Any Reg")
+                        .checkbox(&mut self.register_write_any_register, "Any")
                         .changed()
                         && self.register_write_any_register
                     {
@@ -268,10 +267,10 @@ impl CrtcDebugWindow {
                 // Horizontal counter breakpoint
                 ui.label("Horizontal counter:");
                 ui.horizontal(|ui| {
-                    ui.label("Value:");
                     ui.add(
                         egui::DragValue::new(&mut self.hcounter_value)
                             .speed(1)
+                            .hexadecimal(2, false, false)
                             .range(0..=255),
                     );
 
@@ -299,7 +298,6 @@ impl CrtcDebugWindow {
                 // Character row breakpoint
                 ui.label("Character row:");
                 ui.horizontal(|ui| {
-                    ui.label("Row:");
                     ui.add(
                         egui::DragValue::new(&mut self.char_row_value)
                             .speed(1)
@@ -315,7 +313,6 @@ impl CrtcDebugWindow {
                 // Scanline breakpoint
                 ui.label("Scanline:");
                 ui.horizontal(|ui| {
-                    ui.label("Line:");
                     ui.add(
                         egui::DragValue::new(&mut self.scanline_value)
                             .speed(1)
