@@ -82,9 +82,8 @@ impl GateArrayDebugWindow {
     pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
         let mut open = self.open;
         egui::Window::new("Gate Array Internals")
+            .resizable(false)
             .open(&mut open)
-            .default_width(400.0)
-            .default_height(600.0)
             .show(ctx, |ui| {
                 self.render_gate_array_state(ui, frontend);
                 ui.separator();

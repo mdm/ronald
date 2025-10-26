@@ -179,7 +179,6 @@ impl MemoryDebugWindow {
                     );
                 });
         });
-        ui.separator();
     }
 
     fn render_color_configuration(&mut self, ui: &mut egui::Ui) {
@@ -208,7 +207,6 @@ impl MemoryDebugWindow {
                 self.memory_colors = MemorySourceColors::default();
             }
         });
-        ui.separator();
     }
 
     pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
@@ -219,15 +217,17 @@ impl MemoryDebugWindow {
         let mut open = self.show;
         egui::Window::new("Memory Internals")
             .open(&mut open)
-            .default_size([600.0, 500.0])
-            .resizable(false)
             .show(ctx, |ui| {
                 ui.heading("View Config");
                 self.render_view_mode_selector(ui, frontend);
                 self.render_color_configuration(ui);
                 self.render_memory_controls(ui);
+                ui.separator();
                 self.render_memory_status(ui, frontend);
                 self.render_memory_view(ui, frontend);
+
+                // Reserve remaining vertical space so the window can grow larger
+                // ui.allocate_space(ui.available_size());
             });
         self.show = open;
     }
@@ -284,7 +284,6 @@ impl MemoryDebugWindow {
                 self.disassembly_start = None;
             }
         });
-        ui.separator();
     }
 
     fn render_memory_status(&self, ui: &mut egui::Ui, frontend: &mut Frontend) {
@@ -403,7 +402,6 @@ impl MemoryDebugWindow {
         };
 
         egui::ScrollArea::vertical()
-            .max_height(400.0)
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
@@ -497,7 +495,6 @@ impl MemoryDebugWindow {
 
         ui.heading("Disassembly");
         egui::ScrollArea::vertical()
-            .max_height(350.0)
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
@@ -612,7 +609,7 @@ impl MemoryDebugWindow {
         ui: &mut egui::Ui,
         breakpoint_manager: &mut BreakpointManager,
     ) {
-        ui.heading("Breakpoints");
+        ui.heading("PC Breakpoints");
 
         // PC breakpoint input
         ui.horizontal(|ui| {
