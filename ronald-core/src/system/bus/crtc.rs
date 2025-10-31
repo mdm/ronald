@@ -180,32 +180,9 @@ impl CrtController for HitachiHd6845s {
     fn step(&mut self, master_clock: MasterClockTick) {
         self.master_clock = master_clock;
 
-        // Emit events when counters are at 0 (before incrementing)
-        if self.horizontal_counter == 0 {
-            self.emit_debug_event(
-                CrtcDebugEvent::ScanlineStart {
-                    scanline: self.scan_line_counter,
-                    character_row: self.character_row_counter,
-                },
-                master_clock,
-            );
-        }
-
-        if self.scan_line_counter == 0 && self.horizontal_counter == 0 {
-            self.emit_debug_event(
-                CrtcDebugEvent::CharacterRowStart {
-                    row: self.character_row_counter,
-                },
-                master_clock,
-            );
-        }
-
-        if self.character_row_counter == 0
-            && self.scan_line_counter == 0
-            && self.horizontal_counter == 0
-        {
-            self.emit_debug_event(CrtcDebugEvent::FrameStart, master_clock);
-        }
+        let horizontal_counter_was = self.horizontal_counter;
+        let scan_line_was = self.scan_line_counter;
+        let character_row_was = self.character_row_counter;
 
         self.horizontal_counter += 1;
 
@@ -224,6 +201,18 @@ impl CrtController for HitachiHd6845s {
             self.character_row_counter = 0;
         }
 
+        self.emit_debug_event(
+            CrtcDebugEvent::CountersChanged {
+                character_row_is: self.character_row_counter,
+                character_row_was,
+                scan_line_is: self.scan_line_counter,
+                scan_line_was,
+                horizontal_counter_is: self.horizontal_counter,
+                horizontal_counter_was,
+            },
+            master_clock,
+        );
+
         if self.horizontal_counter == 0 && self.character_row_counter == 0 {
             self.display_start_address =
                 ((self.registers[Register::DisplayStartAddressHigh as usize] as u16) << 8)
@@ -236,44 +225,18 @@ impl CrtController for HitachiHd6845s {
         let new_display_enabled = self.read_display_enabled();
 
         if new_hsync != self.previous_hsync {
-            if new_hsync {
-                self.emit_debug_event(
-                    CrtcDebugEvent::HorizontalSyncStart {
-                        horizontal_counter: self.horizontal_counter,
-                        character_row: self.character_row_counter,
-                        scanline: self.scan_line_counter,
-                    },
-                    master_clock,
-                );
-            } else {
-                self.emit_debug_event(
-                    CrtcDebugEvent::HorizontalSyncEnd {
-                        horizontal_counter: self.horizontal_counter,
-                        character_row: self.character_row_counter,
-                        scanline: self.scan_line_counter,
-                    },
-                    master_clock,
-                );
-            }
+            self.emit_debug_event(
+                CrtcDebugEvent::HorizontalSync { enabled: new_hsync },
+                master_clock,
+            );
             self.previous_hsync = new_hsync;
         }
 
         if new_vsync != self.previous_vsync {
-            if new_vsync {
-                self.emit_debug_event(
-                    CrtcDebugEvent::VerticalSyncStart {
-                        character_row: self.character_row_counter,
-                    },
-                    master_clock,
-                );
-            } else {
-                self.emit_debug_event(
-                    CrtcDebugEvent::VerticalSyncEnd {
-                        character_row: self.character_row_counter,
-                    },
-                    master_clock,
-                );
-            }
+            self.emit_debug_event(
+                CrtcDebugEvent::VerticalSync { enabled: new_vsync },
+                master_clock,
+            );
             self.previous_vsync = new_vsync;
         }
 
@@ -281,8 +244,6 @@ impl CrtController for HitachiHd6845s {
             self.emit_debug_event(
                 CrtcDebugEvent::DisplayEnableChanged {
                     enabled: new_display_enabled,
-                    horizontal_counter: self.horizontal_counter,
-                    character_row: self.character_row_counter,
                 },
                 master_clock,
             );

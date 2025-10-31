@@ -695,8 +695,9 @@ impl Breakpoint for CrtcHorizontalSyncBreakpoint {
         }
 
         match event {
-            DebugEvent::Crtc(CrtcDebugEvent::HorizontalSyncStart { .. }) => self.on_start,
-            DebugEvent::Crtc(CrtcDebugEvent::HorizontalSyncEnd { .. }) => self.on_end,
+            DebugEvent::Crtc(CrtcDebugEvent::HorizontalSync { enabled }) => {
+                (*enabled && self.on_start) || (!*enabled && self.on_end)
+            }
             _ => false,
         }
     }
@@ -765,8 +766,9 @@ impl Breakpoint for CrtcVerticalSyncBreakpoint {
         }
 
         match event {
-            DebugEvent::Crtc(CrtcDebugEvent::VerticalSyncStart { .. }) => self.on_start,
-            DebugEvent::Crtc(CrtcDebugEvent::VerticalSyncEnd { .. }) => self.on_end,
+            DebugEvent::Crtc(CrtcDebugEvent::VerticalSync { enabled }) => {
+                (*enabled && self.on_start) || (!*enabled && self.on_end)
+            }
             _ => false,
         }
     }
@@ -808,19 +810,19 @@ impl fmt::Display for CrtcVerticalSyncBreakpoint {
 }
 
 #[derive(Debug, Clone)]
-pub struct CrtcHorizontalCounterBreakpoint {
-    pub value: u8,
-    pub character_row: Option<u8>,
+pub struct CrtcDisplayEnableBreakpoint {
+    pub on_start: bool,
+    pub on_end: bool,
     enabled: bool,
     one_shot: bool,
     triggered: Option<MasterClockTick>,
 }
 
-impl CrtcHorizontalCounterBreakpoint {
-    pub fn new(value: u8, character_row: Option<u8>) -> Self {
+impl CrtcDisplayEnableBreakpoint {
+    pub fn new(on_start: bool, on_end: bool) -> Self {
         Self {
-            value,
-            character_row,
+            on_start,
+            on_end,
             enabled: true,
             one_shot: false,
             triggered: None,
@@ -828,15 +830,15 @@ impl CrtcHorizontalCounterBreakpoint {
     }
 }
 
-impl Breakpoint for CrtcHorizontalCounterBreakpoint {
+impl Breakpoint for CrtcDisplayEnableBreakpoint {
     fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Crtc {
             return false;
         }
 
         match event {
-            DebugEvent::Crtc(CrtcDebugEvent::ScanlineStart { character_row, .. }) => {
-                self.character_row.is_none_or(|r| r == *character_row)
+            DebugEvent::Crtc(CrtcDebugEvent::DisplayEnableChanged { enabled }) => {
+                (*enabled && self.on_start) || (!*enabled && self.on_end)
             }
             _ => false,
         }
@@ -867,91 +869,37 @@ impl Breakpoint for CrtcHorizontalCounterBreakpoint {
     }
 }
 
-impl fmt::Display for CrtcHorizontalCounterBreakpoint {
+impl fmt::Display for CrtcDisplayEnableBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.character_row {
-            Some(row) => write!(f, "Horizontal counter = {} (row {})", self.value, row),
-            None => write!(f, "Horizontal counter = {}", self.value),
+        match (self.on_start, self.on_end) {
+            (true, true) => write!(f, "DISP. ENABLE start or end"),
+            (true, false) => write!(f, "DISP. ENABLE start"),
+            (false, true) => write!(f, "DISP. ENABLE end"),
+            (false, false) => write!(f, "DISP. ENABLE (never)"),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct CrtcCharacterRowBreakpoint {
-    pub row: u8,
-    enabled: bool,
-    one_shot: bool,
-    triggered: Option<MasterClockTick>,
-}
-
-impl CrtcCharacterRowBreakpoint {
-    pub fn new(row: u8) -> Self {
-        Self {
-            row,
-            enabled: true,
-            one_shot: false,
-            triggered: None,
-        }
-    }
-}
-
-impl Breakpoint for CrtcCharacterRowBreakpoint {
-    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
-        if !self.enabled || source != DebugSource::Crtc {
-            return false;
-        }
-
-        match event {
-            DebugEvent::Crtc(CrtcDebugEvent::CharacterRowStart { row }) => *row == self.row,
-            _ => false,
-        }
-    }
-
-    fn enabled(&self) -> bool {
-        self.enabled
-    }
-
-    fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
-    }
-
-    fn one_shot(&self) -> bool {
-        self.one_shot
-    }
-
-    fn set_one_shot(&mut self, one_shot: bool) {
-        self.one_shot = one_shot;
-    }
-
-    fn triggered(&self) -> Option<MasterClockTick> {
-        self.triggered
-    }
-
-    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
-        self.triggered = triggered;
-    }
-}
-
-impl fmt::Display for CrtcCharacterRowBreakpoint {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Character row = {}", self.row)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CrtcScanlineBreakpoint {
-    pub scanline: u8,
+pub struct CrtcCountersBreakpoint {
     pub character_row: Option<u8>,
+    pub scan_line: Option<u8>,
+    pub horizontal_counter: Option<u8>,
     enabled: bool,
     one_shot: bool,
     triggered: Option<MasterClockTick>,
 }
 
-impl CrtcScanlineBreakpoint {
-    pub fn new(scanline: u8, character_row: Option<u8>) -> Self {
+impl CrtcCountersBreakpoint {
+    pub fn new(
+        character_row: Option<u8>,
+        scan_line: Option<u8>,
+        horizontal_counter: Option<u8>,
+    ) -> Self {
         Self {
-            scanline,
             character_row,
+            scan_line,
+            horizontal_counter,
             enabled: true,
             one_shot: false,
             triggered: None,
@@ -959,18 +907,24 @@ impl CrtcScanlineBreakpoint {
     }
 }
 
-impl Breakpoint for CrtcScanlineBreakpoint {
+impl Breakpoint for CrtcCountersBreakpoint {
     fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
         if !self.enabled || source != DebugSource::Crtc {
             return false;
         }
 
         match event {
-            DebugEvent::Crtc(CrtcDebugEvent::ScanlineStart {
-                scanline,
-                character_row,
+            DebugEvent::Crtc(CrtcDebugEvent::CountersChanged {
+                character_row_is,
+                scan_line_is,
+                horizontal_counter_is,
+                ..
             }) => {
-                *scanline == self.scanline && self.character_row.is_none_or(|r| r == *character_row)
+                self.character_row.is_none_or(|i| i == *character_row_is)
+                    && self.scan_line.is_none_or(|i| i == *scan_line_is)
+                    && self
+                        .horizontal_counter
+                        .is_none_or(|i| i == *horizontal_counter_is)
             }
             _ => false,
         }
@@ -1001,69 +955,21 @@ impl Breakpoint for CrtcScanlineBreakpoint {
     }
 }
 
-impl fmt::Display for CrtcScanlineBreakpoint {
+impl fmt::Display for CrtcCountersBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Counters = ")?;
         match self.character_row {
-            Some(row) => write!(f, "Scanline {} (row {})", self.scanline, row),
-            None => write!(f, "Scanline {}", self.scanline),
+            Some(character_row) => write!(f, "{:#04x}/", character_row)?,
+            None => write!(f, "Any/")?,
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CrtcFrameStartBreakpoint {
-    enabled: bool,
-    one_shot: bool,
-    triggered: Option<MasterClockTick>,
-}
-
-impl CrtcFrameStartBreakpoint {
-    pub fn new() -> Self {
-        Self {
-            enabled: true,
-            one_shot: false,
-            triggered: None,
+        match self.scan_line {
+            Some(scan_line) => write!(f, "{:#04x}/", scan_line)?,
+            None => write!(f, "Any/")?,
         }
-    }
-}
-
-impl Breakpoint for CrtcFrameStartBreakpoint {
-    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
-        if !self.enabled || source != DebugSource::Crtc {
-            return false;
+        match self.horizontal_counter {
+            Some(horiontal_counter) => write!(f, "{:#04x}", horiontal_counter),
+            None => write!(f, "Any"),
         }
-
-        matches!(event, DebugEvent::Crtc(CrtcDebugEvent::FrameStart))
-    }
-
-    fn enabled(&self) -> bool {
-        self.enabled
-    }
-
-    fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
-    }
-
-    fn one_shot(&self) -> bool {
-        self.one_shot
-    }
-
-    fn set_one_shot(&mut self, one_shot: bool) {
-        self.one_shot = one_shot;
-    }
-
-    fn triggered(&self) -> Option<MasterClockTick> {
-        self.triggered
-    }
-
-    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
-        self.triggered = triggered;
-    }
-}
-
-impl fmt::Display for CrtcFrameStartBreakpoint {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Frame start")
     }
 }
 
@@ -1080,10 +986,8 @@ pub enum AnyBreakpoint {
     CrtcRegisterWrite(CrtcRegisterWriteBreakpoint),
     CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint),
     CrtcVerticalSync(CrtcVerticalSyncBreakpoint),
-    CrtcHorizontalCounter(CrtcHorizontalCounterBreakpoint),
-    CrtcCharacterRow(CrtcCharacterRowBreakpoint),
-    CrtcScanline(CrtcScanlineBreakpoint),
-    CrtcFrameStart(CrtcFrameStartBreakpoint),
+    CrtcDisplayEnable(CrtcDisplayEnableBreakpoint),
+    CrtcCounters(CrtcCountersBreakpoint),
 }
 
 impl AnyBreakpoint {
@@ -1157,20 +1061,20 @@ impl AnyBreakpoint {
         Self::CrtcVerticalSync(CrtcVerticalSyncBreakpoint::new(on_start, on_end))
     }
 
-    pub fn crtc_horizontal_counter_breakpoint(value: u8, character_row: Option<u8>) -> Self {
-        Self::CrtcHorizontalCounter(CrtcHorizontalCounterBreakpoint::new(value, character_row))
+    pub fn crtc_dispaly_enable_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcDisplayEnable(CrtcDisplayEnableBreakpoint::new(on_start, on_end))
     }
 
-    pub fn crtc_character_row_breakpoint(row: u8) -> Self {
-        Self::CrtcCharacterRow(CrtcCharacterRowBreakpoint::new(row))
-    }
-
-    pub fn crtc_scanline_breakpoint(scanline: u8, character_row: Option<u8>) -> Self {
-        Self::CrtcScanline(CrtcScanlineBreakpoint::new(scanline, character_row))
-    }
-
-    pub fn crtc_frame_start_breakpoint() -> Self {
-        Self::CrtcFrameStart(CrtcFrameStartBreakpoint::new())
+    pub fn crtc_counters_breakpoint(
+        character_row: Option<u8>,
+        scan_line: Option<u8>,
+        horizontal_counter: Option<u8>,
+    ) -> Self {
+        Self::CrtcCounters(CrtcCountersBreakpoint::new(
+            character_row,
+            scan_line,
+            horizontal_counter,
+        ))
     }
 }
 
@@ -1188,10 +1092,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.should_break(source, event),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.should_break(source, event),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.should_break(source, event),
-            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.should_break(source, event),
-            AnyBreakpoint::CrtcCharacterRow(bp) => bp.should_break(source, event),
-            AnyBreakpoint::CrtcScanline(bp) => bp.should_break(source, event),
-            AnyBreakpoint::CrtcFrameStart(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcCounters(bp) => bp.should_break(source, event),
         }
     }
 
@@ -1208,10 +1110,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.enabled(),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.enabled(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.enabled(),
-            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.enabled(),
-            AnyBreakpoint::CrtcCharacterRow(bp) => bp.enabled(),
-            AnyBreakpoint::CrtcScanline(bp) => bp.enabled(),
-            AnyBreakpoint::CrtcFrameStart(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.enabled(),
         }
     }
 
@@ -1228,10 +1128,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_enabled(enabled),
-            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.set_enabled(enabled),
-            AnyBreakpoint::CrtcCharacterRow(bp) => bp.set_enabled(enabled),
-            AnyBreakpoint::CrtcScanline(bp) => bp.set_enabled(enabled),
-            AnyBreakpoint::CrtcFrameStart(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_enabled(enabled),
         }
     }
 
@@ -1248,10 +1146,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.one_shot(),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.one_shot(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.one_shot(),
-            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.one_shot(),
-            AnyBreakpoint::CrtcCharacterRow(bp) => bp.one_shot(),
-            AnyBreakpoint::CrtcScanline(bp) => bp.one_shot(),
-            AnyBreakpoint::CrtcFrameStart(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.one_shot(),
         }
     }
 
@@ -1268,10 +1164,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_one_shot(one_shot),
-            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.set_one_shot(one_shot),
-            AnyBreakpoint::CrtcCharacterRow(bp) => bp.set_one_shot(one_shot),
-            AnyBreakpoint::CrtcScanline(bp) => bp.set_one_shot(one_shot),
-            AnyBreakpoint::CrtcFrameStart(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_one_shot(one_shot),
         }
     }
 
@@ -1288,10 +1182,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.triggered(),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.triggered(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.triggered(),
-            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.triggered(),
-            AnyBreakpoint::CrtcCharacterRow(bp) => bp.triggered(),
-            AnyBreakpoint::CrtcScanline(bp) => bp.triggered(),
-            AnyBreakpoint::CrtcFrameStart(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.triggered(),
         }
     }
 
@@ -1308,10 +1200,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_triggered(triggered),
-            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.set_triggered(triggered),
-            AnyBreakpoint::CrtcCharacterRow(bp) => bp.set_triggered(triggered),
-            AnyBreakpoint::CrtcScanline(bp) => bp.set_triggered(triggered),
-            AnyBreakpoint::CrtcFrameStart(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_triggered(triggered),
         }
     }
 }
@@ -1330,10 +1220,8 @@ impl fmt::Display for AnyBreakpoint {
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.fmt(f),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.fmt(f),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.fmt(f),
-            AnyBreakpoint::CrtcHorizontalCounter(bp) => bp.fmt(f),
-            AnyBreakpoint::CrtcCharacterRow(bp) => bp.fmt(f),
-            AnyBreakpoint::CrtcScanline(bp) => bp.fmt(f),
-            AnyBreakpoint::CrtcFrameStart(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcCounters(bp) => bp.fmt(f),
         }
     }
 }

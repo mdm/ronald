@@ -67,34 +67,22 @@ pub enum CrtcDebugEvent {
         is: u8,
         was: u8,
     },
-    HorizontalSyncStart {
-        horizontal_counter: u8,
-        character_row: u8,
-        scanline: u8,
+    CountersChanged {
+        character_row_is: u8,
+        character_row_was: u8,
+        scan_line_is: u8,
+        scan_line_was: u8,
+        horizontal_counter_is: u8,
+        horizontal_counter_was: u8,
     },
-    HorizontalSyncEnd {
-        horizontal_counter: u8,
-        character_row: u8,
-        scanline: u8,
+    HorizontalSync {
+        enabled: bool,
     },
-    VerticalSyncStart {
-        character_row: u8,
+    VerticalSync {
+        enabled: bool,
     },
-    VerticalSyncEnd {
-        character_row: u8,
-    },
-    FrameStart,
     DisplayEnableChanged {
         enabled: bool,
-        horizontal_counter: u8,
-        character_row: u8,
-    },
-    ScanlineStart {
-        scanline: u8,
-        character_row: u8,
-    },
-    CharacterRowStart {
-        row: u8,
     },
 }
 

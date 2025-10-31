@@ -16,7 +16,7 @@ pub struct CrtcDebugWindow {
     #[serde(skip, default)]
     register_write_register: Option<CrtcRegister>,
     #[serde(skip, default)]
-    register_write_value: Option<u8>,
+    register_write_value_input: String,
     #[serde(skip, default)]
     register_write_any_register: bool,
     #[serde(skip, default)]
@@ -34,25 +34,25 @@ pub struct CrtcDebugWindow {
     #[serde(skip, default)]
     vsync_on_end: bool,
 
-    // Horizontal counter breakpoint
+    // Display enable breakpoint
     #[serde(skip, default)]
-    hcounter_value: u8,
+    display_enable_on_start: bool,
     #[serde(skip, default)]
-    hcounter_character_row: Option<u8>,
-    #[serde(skip, default)]
-    hcounter_any_row: bool,
+    display_enable_on_end: bool,
 
-    // Character row breakpoint
+    // Counters breakpoint
     #[serde(skip, default)]
-    char_row_value: u8,
-
-    // Scanline breakpoint
+    character_row_value_input: String,
     #[serde(skip, default)]
-    scanline_value: u8,
+    scan_line_value_input: String,
     #[serde(skip, default)]
-    scanline_character_row: Option<u8>,
+    horizontal_counter_value_input: String,
     #[serde(skip, default)]
-    scanline_any_row: bool,
+    character_row_any_value: bool,
+    #[serde(skip, default)]
+    scan_line_any_value: bool,
+    #[serde(skip, default)]
+    horizontal_counter_any_value: bool,
 }
 
 impl CrtcDebugWindow {
@@ -82,7 +82,7 @@ impl CrtcDebugWindow {
             .show(ui, |ui| {
                 for (i, value) in crtc.registers.iter().enumerate() {
                     let register: CrtcRegister = i.into();
-                    let is_selected = matches!(crtc.selected_register, ref r if std::mem::discriminant(r) == std::mem::discriminant(&register));
+                    let is_selected = register == crtc.selected_register;
 
                     let label = format!("{}:", register);
                     if is_selected {
@@ -110,15 +110,15 @@ impl CrtcDebugWindow {
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
                 ui.label("Horizontal Counter:");
-                ui.label(format!("{}", crtc.horizontal_counter));
+                ui.label(format!("{:02x}", crtc.horizontal_counter));
                 ui.end_row();
 
                 ui.label("Character Row Counter:");
-                ui.label(format!("{}", crtc.character_row_counter));
+                ui.label(format!("{:02x}", crtc.character_row_counter));
                 ui.end_row();
 
                 ui.label("Scan Line Counter:");
-                ui.label(format!("{}", crtc.scan_line_counter));
+                ui.label(format!("{:02x}", crtc.scan_line_counter));
                 ui.end_row();
             });
 
@@ -209,24 +209,98 @@ impl CrtcDebugWindow {
                     }
 
                     ui.label("Value:");
-                    ui.add_enabled_ui(!self.register_write_any_value, |ui| {
-                        ui.add(
-                            egui::DragValue::new(self.register_write_value.get_or_insert(0))
-                                .speed(1)
-                                .range(0..=255),
-                        );
-                    });
+                    let text_edit = ui
+                        .add_enabled(
+                            !self.register_write_any_value,
+                            egui::TextEdit::singleline(&mut self.register_write_value_input)
+                                .desired_width(40.0),
+                        )
+                        .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
 
                     if ui
                         .checkbox(&mut self.register_write_any_value, "Any")
                         .changed()
                         && self.register_write_any_value
                     {
-                        self.register_write_value = None;
+                        self.register_write_value_input.clear();
                     }
 
-                    if ui.button("Add").clicked() {
+                    let enter_pressed =
+                        text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    let add_clicked = ui.button("Add").clicked();
+
+                    if enter_pressed || add_clicked {
                         self.add_register_write_breakpoint(frontend);
+                    }
+                });
+                ui.end_row();
+
+                // Counters breakpoint
+                ui.label("Counters:");
+                ui.horizontal(|ui| {
+                    let enter_pressed = false;
+
+                    ui.label("Char. row:");
+                    let text_edit = ui
+                        .add_enabled(
+                            !self.character_row_any_value,
+                            egui::TextEdit::singleline(&mut self.character_row_value_input)
+                                .desired_width(40.0),
+                        )
+                        .on_hover_text("Hex value (e.g., 10 or 0x10)");
+
+                    if ui
+                        .checkbox(&mut self.character_row_any_value, "Any")
+                        .changed()
+                        && self.character_row_any_value
+                    {
+                        self.character_row_value_input.clear();
+                    }
+
+                    let enter_pressed = enter_pressed
+                        || text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+
+                    ui.label("Scan line:");
+                    let text_edit = ui
+                        .add_enabled(
+                            !self.scan_line_any_value,
+                            egui::TextEdit::singleline(&mut self.scan_line_value_input)
+                                .desired_width(40.0),
+                        )
+                        .on_hover_text("Hex value (e.g., 10 or 0x10)");
+
+                    if ui.checkbox(&mut self.scan_line_any_value, "Any").changed()
+                        && self.scan_line_any_value
+                    {
+                        self.scan_line_value_input.clear();
+                    }
+
+                    let enter_pressed = enter_pressed
+                        || text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+
+                    ui.label("Horizontal:");
+                    let text_edit = ui
+                        .add_enabled(
+                            !self.horizontal_counter_any_value,
+                            egui::TextEdit::singleline(&mut self.horizontal_counter_value_input)
+                                .desired_width(40.0),
+                        )
+                        .on_hover_text("Hex value (e.g., 10 or 0x10)");
+
+                    if ui
+                        .checkbox(&mut self.horizontal_counter_any_value, "Any")
+                        .changed()
+                        && self.horizontal_counter_any_value
+                    {
+                        self.horizontal_counter_value_input.clear();
+                    }
+
+                    let enter_pressed = enter_pressed
+                        || text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    let add_clicked = ui.button("Add").clicked();
+
+                    if enter_pressed || add_clicked {
+                        self.add_counters_breakpoint(frontend);
                     }
                 });
                 ui.end_row();
@@ -255,87 +329,14 @@ impl CrtcDebugWindow {
                 });
                 ui.end_row();
 
-                // Frame start breakpoint
-                ui.label("Frame start:");
+                // Display enable breakpoint
+                ui.label("Display enable:");
                 ui.horizontal(|ui| {
-                    if ui.button("Add Frame Start Breakpoint").clicked() {
-                        self.add_frame_start_breakpoint(frontend);
-                    }
-                });
-                ui.end_row();
-
-                // Horizontal counter breakpoint
-                ui.label("Horizontal counter:");
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut self.hcounter_value)
-                            .speed(1)
-                            .hexadecimal(2, false, false)
-                            .range(0..=255),
-                    );
-
-                    ui.label("Char Row:");
-                    ui.add_enabled_ui(!self.hcounter_any_row, |ui| {
-                        ui.add(
-                            egui::DragValue::new(self.hcounter_character_row.get_or_insert(0))
-                                .speed(1)
-                                .range(0..=255),
-                        );
-                    });
-
-                    if ui.checkbox(&mut self.hcounter_any_row, "Any").changed()
-                        && self.hcounter_any_row
-                    {
-                        self.hcounter_character_row = None;
-                    }
+                    ui.checkbox(&mut self.display_enable_on_start, "Start");
+                    ui.checkbox(&mut self.display_enable_on_end, "End");
 
                     if ui.button("Add").clicked() {
-                        self.add_horizontal_counter_breakpoint(frontend);
-                    }
-                });
-                ui.end_row();
-
-                // Character row breakpoint
-                ui.label("Character row:");
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut self.char_row_value)
-                            .speed(1)
-                            .range(0..=255),
-                    );
-
-                    if ui.button("Add").clicked() {
-                        self.add_character_row_breakpoint(frontend);
-                    }
-                });
-                ui.end_row();
-
-                // Scanline breakpoint
-                ui.label("Scanline:");
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut self.scanline_value)
-                            .speed(1)
-                            .range(0..=255),
-                    );
-
-                    ui.label("Char Row:");
-                    ui.add_enabled_ui(!self.scanline_any_row, |ui| {
-                        ui.add(
-                            egui::DragValue::new(self.scanline_character_row.get_or_insert(0))
-                                .speed(1)
-                                .range(0..=255),
-                        );
-                    });
-
-                    if ui.checkbox(&mut self.scanline_any_row, "Any").changed()
-                        && self.scanline_any_row
-                    {
-                        self.scanline_character_row = None;
-                    }
-
-                    if ui.button("Add").clicked() {
-                        self.add_scanline_breakpoint(frontend);
+                        self.add_display_enable_breakpoint(frontend);
                     }
                 });
                 ui.end_row();
@@ -357,10 +358,8 @@ impl CrtcDebugWindow {
                     AnyBreakpoint::CrtcRegisterWrite(_)
                         | AnyBreakpoint::CrtcHorizontalSync(_)
                         | AnyBreakpoint::CrtcVerticalSync(_)
-                        | AnyBreakpoint::CrtcHorizontalCounter(_)
-                        | AnyBreakpoint::CrtcCharacterRow(_)
-                        | AnyBreakpoint::CrtcScanline(_)
-                        | AnyBreakpoint::CrtcFrameStart(_)
+                        | AnyBreakpoint::CrtcDisplayEnable(_)
+                        | AnyBreakpoint::CrtcCounters(_)
                 )
             {
                 continue;
@@ -404,21 +403,30 @@ impl CrtcDebugWindow {
         let register = if self.register_write_any_register {
             None
         } else {
-            self.register_write_register
+            match self.register_write_register {
+                Some(reg) => Some(reg),
+                None => return, // No register selected, don't add breakpoint
+            }
         };
 
         let value = if self.register_write_any_value {
             None
         } else {
-            self.register_write_value
+            match usize::from_str_radix(
+                self.register_write_value_input.trim_start_matches("0x"),
+                16,
+            ) {
+                Ok(val) => Some((val & 0xFF) as u8),
+                Err(_) => return, // Invalid input, don't add breakpoint
+            }
         };
 
         let breakpoint = AnyBreakpoint::crtc_register_write_breakpoint(register, value);
         frontend.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.register_write_register = None;
-        self.register_write_value = None;
         self.register_write_any_register = false;
+        self.register_write_value_input.clear();
         self.register_write_any_value = false;
     }
 
@@ -440,47 +448,58 @@ impl CrtcDebugWindow {
         self.vsync_on_end = false;
     }
 
-    fn add_frame_start_breakpoint(&mut self, frontend: &mut Frontend) {
-        let breakpoint = AnyBreakpoint::crtc_frame_start_breakpoint();
+    fn add_display_enable_breakpoint(&mut self, frontend: &mut Frontend) {
+        let breakpoint = AnyBreakpoint::crtc_vertical_sync_breakpoint(
+            self.display_enable_on_start,
+            self.display_enable_on_end,
+        );
         frontend.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.display_enable_on_start = false;
+        self.display_enable_on_end = false;
     }
 
-    fn add_horizontal_counter_breakpoint(&mut self, frontend: &mut Frontend) {
-        let character_row = if self.hcounter_any_row {
+    fn add_counters_breakpoint(&mut self, frontend: &mut Frontend) {
+        let character_row = if self.character_row_any_value {
             None
         } else {
-            self.hcounter_character_row
+            match usize::from_str_radix(self.character_row_value_input.trim_start_matches("0x"), 16)
+            {
+                Ok(val) => Some((val & 0xFF) as u8),
+                Err(_) => return, // Invalid input, don't add breakpoint
+            }
+        };
+
+        let scan_line = if self.scan_line_any_value {
+            None
+        } else {
+            match usize::from_str_radix(self.scan_line_value_input.trim_start_matches("0x"), 16) {
+                Ok(val) => Some((val & 0xFF) as u8),
+                Err(_) => return, // Invalid input, don't add breakpoint
+            }
+        };
+
+        let horizontal_counter = if self.horizontal_counter_any_value {
+            None
+        } else {
+            match usize::from_str_radix(
+                self.horizontal_counter_value_input.trim_start_matches("0x"),
+                16,
+            ) {
+                Ok(val) => Some((val & 0xFF) as u8),
+                Err(_) => return, // Invalid input, don't add breakpoint
+            }
         };
 
         let breakpoint =
-            AnyBreakpoint::crtc_horizontal_counter_breakpoint(self.hcounter_value, character_row);
+            AnyBreakpoint::crtc_counters_breakpoint(character_row, scan_line, horizontal_counter);
         frontend.breakpoint_manager().add_breakpoint(breakpoint);
 
-        self.hcounter_value = 0;
-        self.hcounter_character_row = None;
-        self.hcounter_any_row = false;
-    }
-
-    fn add_character_row_breakpoint(&mut self, frontend: &mut Frontend) {
-        let breakpoint = AnyBreakpoint::crtc_character_row_breakpoint(self.char_row_value);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.char_row_value = 0;
-    }
-
-    fn add_scanline_breakpoint(&mut self, frontend: &mut Frontend) {
-        let character_row = if self.scanline_any_row {
-            None
-        } else {
-            self.scanline_character_row
-        };
-
-        let breakpoint =
-            AnyBreakpoint::crtc_scanline_breakpoint(self.scanline_value, character_row);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.scanline_value = 0;
-        self.scanline_character_row = None;
-        self.scanline_any_row = false;
+        self.character_row_value_input.clear();
+        self.character_row_any_value = false;
+        self.scan_line_value_input.clear();
+        self.scan_line_any_value = false;
+        self.horizontal_counter_value_input.clear();
+        self.horizontal_counter_any_value = false;
     }
 }

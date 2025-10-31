@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
@@ -475,7 +477,7 @@ impl MemoryDebugWindow {
         ui.separator();
 
         // Build a HashMap from PC addresses to BreakpointIds for efficient lookup
-        let pc_breakpoints: std::collections::HashMap<u16, BreakpointId> = frontend
+        let pc_breakpoints: HashMap<u16, BreakpointId> = frontend
             .breakpoint_manager()
             .breakpoints_iter()
             .filter_map(|(id, breakpoint)| {
