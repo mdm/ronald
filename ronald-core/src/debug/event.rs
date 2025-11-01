@@ -75,6 +75,10 @@ pub enum CrtcDebugEvent {
         horizontal_counter_is: u8,
         horizontal_counter_was: u8,
     },
+    AddressChanged {
+        is: usize,
+        was: usize,
+    },
     HorizontalSync {
         enabled: bool,
     },
