@@ -631,7 +631,7 @@ impl MemoryDebugWindow {
         ui.separator();
         ui.label("Active PC Breakpoints:");
 
-        let mut pc_breakpoint_found = false;
+        let mut breakpoint_found = false;
         let mut to_remove = None;
         let mut to_toggle = None;
 
@@ -647,7 +647,7 @@ impl MemoryDebugWindow {
                 continue;
             }
 
-            pc_breakpoint_found = true;
+            breakpoint_found = true;
 
             ui.horizontal(|ui| {
                 let mut enabled = breakpoint.enabled();
@@ -668,7 +668,7 @@ impl MemoryDebugWindow {
             });
         }
 
-        if !pc_breakpoint_found {
+        if !breakpoint_found {
             ui.label("No PC breakpoints set");
         }
 

@@ -22,6 +22,26 @@ pub struct CrtcDebugWindow {
     #[serde(skip, default)]
     register_write_any_value: bool,
 
+    // Counters breakpoint
+    #[serde(skip, default)]
+    character_row_value_input: String,
+    #[serde(skip, default)]
+    scan_line_value_input: String,
+    #[serde(skip, default)]
+    horizontal_counter_value_input: String,
+    #[serde(skip, default)]
+    character_row_any_value: bool,
+    #[serde(skip, default)]
+    scan_line_any_value: bool,
+    #[serde(skip, default)]
+    horizontal_counter_any_value: bool,
+
+    // Address breakpoint
+    #[serde(skip, default)]
+    address_value_input: String,
+    #[serde(skip, default)]
+    address_any_value: bool,
+
     // Horizontal sync breakpoint
     #[serde(skip, default)]
     hsync_on_start: bool,
@@ -39,20 +59,6 @@ pub struct CrtcDebugWindow {
     display_enable_on_start: bool,
     #[serde(skip, default)]
     display_enable_on_end: bool,
-
-    // Counters breakpoint
-    #[serde(skip, default)]
-    character_row_value_input: String,
-    #[serde(skip, default)]
-    scan_line_value_input: String,
-    #[serde(skip, default)]
-    horizontal_counter_value_input: String,
-    #[serde(skip, default)]
-    character_row_any_value: bool,
-    #[serde(skip, default)]
-    scan_line_any_value: bool,
-    #[serde(skip, default)]
-    horizontal_counter_any_value: bool,
 }
 
 impl CrtcDebugWindow {
@@ -285,6 +291,24 @@ impl CrtcDebugWindow {
                 });
                 ui.end_row();
 
+                // Address breakpoint
+                ui.label("Address:");
+                ui.horizontal(|ui| {
+                    ui.add_enabled(
+                        !self.address_any_value,
+                        egui::TextEdit::singleline(&mut self.address_value_input)
+                            .desired_width(60.0),
+                    )
+                    .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
+
+                    ui.checkbox(&mut self.address_any_value, "Any");
+
+                    if ui.button("Add").clicked() {
+                        self.add_address_breakpoint(frontend);
+                    }
+                });
+                ui.end_row();
+
                 // Horizontal sync breakpoint
                 ui.label("Horizontal sync:");
                 ui.horizontal(|ui| {
@@ -326,7 +350,7 @@ impl CrtcDebugWindow {
         ui.separator();
         ui.label("Active CRTC Breakpoints:");
 
-        let mut crtc_breakpoint_found = false;
+        let mut breakpoint_found = false;
         let mut to_remove = None;
         let mut to_toggle = None;
 
@@ -336,16 +360,17 @@ impl CrtcDebugWindow {
                 || !matches!(
                     breakpoint,
                     AnyBreakpoint::CrtcRegisterWrite(_)
+                        | AnyBreakpoint::CrtcCounters(_)
+                        | AnyBreakpoint::CrtcAddress(_)
                         | AnyBreakpoint::CrtcHorizontalSync(_)
                         | AnyBreakpoint::CrtcVerticalSync(_)
                         | AnyBreakpoint::CrtcDisplayEnable(_)
-                        | AnyBreakpoint::CrtcCounters(_)
                 )
             {
                 continue;
             }
 
-            crtc_breakpoint_found = true;
+            breakpoint_found = true;
 
             ui.horizontal(|ui| {
                 let mut enabled = breakpoint.enabled();
@@ -366,7 +391,7 @@ impl CrtcDebugWindow {
             });
         }
 
-        if !crtc_breakpoint_found {
+        if !breakpoint_found {
             ui.label("No CRTC breakpoints set");
         }
 
@@ -408,35 +433,6 @@ impl CrtcDebugWindow {
         self.register_write_any_register = false;
         self.register_write_value_input.clear();
         self.register_write_any_value = false;
-    }
-
-    fn add_horizontal_sync_breakpoint(&mut self, frontend: &mut Frontend) {
-        let breakpoint =
-            AnyBreakpoint::crtc_horizontal_sync_breakpoint(self.hsync_on_start, self.hsync_on_end);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.hsync_on_start = false;
-        self.hsync_on_end = false;
-    }
-
-    fn add_vertical_sync_breakpoint(&mut self, frontend: &mut Frontend) {
-        let breakpoint =
-            AnyBreakpoint::crtc_vertical_sync_breakpoint(self.vsync_on_start, self.vsync_on_end);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.vsync_on_start = false;
-        self.vsync_on_end = false;
-    }
-
-    fn add_display_enable_breakpoint(&mut self, frontend: &mut Frontend) {
-        let breakpoint = AnyBreakpoint::crtc_vertical_sync_breakpoint(
-            self.display_enable_on_start,
-            self.display_enable_on_end,
-        );
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.display_enable_on_start = false;
-        self.display_enable_on_end = false;
     }
 
     fn add_counters_breakpoint(&mut self, frontend: &mut Frontend) {
@@ -481,5 +477,51 @@ impl CrtcDebugWindow {
         self.scan_line_any_value = false;
         self.horizontal_counter_value_input.clear();
         self.horizontal_counter_any_value = false;
+    }
+
+    fn add_address_breakpoint(&mut self, frontend: &mut Frontend) {
+        let address = if self.address_any_value {
+            None
+        } else {
+            match usize::from_str_radix(self.address_value_input.trim_start_matches("0x"), 16) {
+                Ok(val) => Some(val & 0xFFFF),
+                Err(_) => return, // Invalid input, don't add breakpoint
+            }
+        };
+
+        let breakpoint = AnyBreakpoint::crtc_address_breakpoint(address);
+        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.address_value_input.clear();
+        self.address_any_value = false;
+    }
+
+    fn add_horizontal_sync_breakpoint(&mut self, frontend: &mut Frontend) {
+        let breakpoint =
+            AnyBreakpoint::crtc_horizontal_sync_breakpoint(self.hsync_on_start, self.hsync_on_end);
+        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.hsync_on_start = false;
+        self.hsync_on_end = false;
+    }
+
+    fn add_vertical_sync_breakpoint(&mut self, frontend: &mut Frontend) {
+        let breakpoint =
+            AnyBreakpoint::crtc_vertical_sync_breakpoint(self.vsync_on_start, self.vsync_on_end);
+        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.vsync_on_start = false;
+        self.vsync_on_end = false;
+    }
+
+    fn add_display_enable_breakpoint(&mut self, frontend: &mut Frontend) {
+        let breakpoint = AnyBreakpoint::crtc_vertical_sync_breakpoint(
+            self.display_enable_on_start,
+            self.display_enable_on_end,
+        );
+        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.display_enable_on_start = false;
+        self.display_enable_on_end = false;
     }
 }

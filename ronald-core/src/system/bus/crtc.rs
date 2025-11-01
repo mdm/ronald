@@ -104,6 +104,7 @@ pub struct HitachiHd6845s {
     previous_hsync: bool,
     previous_vsync: bool,
     previous_display_enabled: bool,
+    previous_address: usize,
 }
 
 impl HitachiHd6845s {
@@ -223,6 +224,7 @@ impl CrtController for HitachiHd6845s {
         let new_hsync = self.read_horizontal_sync();
         let new_vsync = self.read_vertical_sync();
         let new_display_enabled = self.read_display_enabled();
+        let new_address = self.read_address();
 
         if new_hsync != self.previous_hsync {
             self.emit_debug_event(
@@ -248,6 +250,17 @@ impl CrtController for HitachiHd6845s {
                 master_clock,
             );
             self.previous_display_enabled = new_display_enabled;
+        }
+
+        if new_address != self.previous_address {
+            self.emit_debug_event(
+                CrtcDebugEvent::AddressChanged {
+                    is: new_address,
+                    was: self.previous_address,
+                },
+                master_clock,
+            );
+            self.previous_address = new_address;
         }
     }
 

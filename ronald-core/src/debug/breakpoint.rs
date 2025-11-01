@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use serde::de::value;
+
 use crate::debug::event::{CpuDebugEvent, CrtcDebugEvent, GateArrayDebugEvent, MemoryDebugEvent};
 use crate::debug::{DebugEvent, DebugSource, EventSubscription};
 use crate::system::bus::crtc::Register as CrtcRegister;
@@ -974,6 +976,73 @@ impl fmt::Display for CrtcCountersBreakpoint {
 }
 
 #[derive(Debug, Clone)]
+pub struct CrtcAddressBreakpoint {
+    pub value: Option<usize>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcAddressBreakpoint {
+    pub fn new(value: Option<usize>) -> Self {
+        Self {
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcAddressBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::AddressChanged { is, .. }) => {
+                self.value.is_none_or(|value| value == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcAddressBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.value {
+            Some(value) => write!(f, "Address = {:#06x}", value),
+            None => write!(f, "Any address change"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum AnyBreakpoint {
     CpuRegister8(CpuRegister8Breakpoint),
     CpuRegister16(CpuRegister16Breakpoint),
@@ -984,10 +1053,11 @@ pub enum AnyBreakpoint {
     GateArrayPenColor(GateArrayPenColorBreakpoint),
     GateArrayInterrupt(GateArrayInterruptBreakpoint),
     CrtcRegisterWrite(CrtcRegisterWriteBreakpoint),
+    CrtcCounters(CrtcCountersBreakpoint),
+    CrtcAddress(CrtcAddressBreakpoint),
     CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint),
     CrtcVerticalSync(CrtcVerticalSyncBreakpoint),
     CrtcDisplayEnable(CrtcDisplayEnableBreakpoint),
-    CrtcCounters(CrtcCountersBreakpoint),
 }
 
 impl AnyBreakpoint {
@@ -1053,18 +1123,6 @@ impl AnyBreakpoint {
         Self::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint::new(register, value))
     }
 
-    pub fn crtc_horizontal_sync_breakpoint(on_start: bool, on_end: bool) -> Self {
-        Self::CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint::new(on_start, on_end))
-    }
-
-    pub fn crtc_vertical_sync_breakpoint(on_start: bool, on_end: bool) -> Self {
-        Self::CrtcVerticalSync(CrtcVerticalSyncBreakpoint::new(on_start, on_end))
-    }
-
-    pub fn crtc_dispaly_enable_breakpoint(on_start: bool, on_end: bool) -> Self {
-        Self::CrtcDisplayEnable(CrtcDisplayEnableBreakpoint::new(on_start, on_end))
-    }
-
     pub fn crtc_counters_breakpoint(
         character_row: Option<u8>,
         scan_line: Option<u8>,
@@ -1075,6 +1133,22 @@ impl AnyBreakpoint {
             scan_line,
             horizontal_counter,
         ))
+    }
+
+    pub fn crtc_address_breakpoint(value: Option<usize>) -> Self {
+        Self::CrtcAddress(CrtcAddressBreakpoint::new(value))
+    }
+
+    pub fn crtc_horizontal_sync_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint::new(on_start, on_end))
+    }
+
+    pub fn crtc_vertical_sync_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcVerticalSync(CrtcVerticalSyncBreakpoint::new(on_start, on_end))
+    }
+
+    pub fn crtc_dispaly_enable_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcDisplayEnable(CrtcDisplayEnableBreakpoint::new(on_start, on_end))
     }
 }
 
@@ -1090,10 +1164,11 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayPenColor(bp) => bp.should_break(source, event),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.should_break(source, event),
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcCounters(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcAddress(bp) => bp.should_break(source, event),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.should_break(source, event),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.should_break(source, event),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.should_break(source, event),
-            AnyBreakpoint::CrtcCounters(bp) => bp.should_break(source, event),
         }
     }
 
@@ -1108,10 +1183,11 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayPenColor(bp) => bp.enabled(),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.enabled(),
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcAddress(bp) => bp.enabled(),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.enabled(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.enabled(),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.enabled(),
-            AnyBreakpoint::CrtcCounters(bp) => bp.enabled(),
         }
     }
 
@@ -1126,10 +1202,11 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayPenColor(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcAddress(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_enabled(enabled),
-            AnyBreakpoint::CrtcCounters(bp) => bp.set_enabled(enabled),
         }
     }
 
@@ -1144,10 +1221,11 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayPenColor(bp) => bp.one_shot(),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.one_shot(),
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcAddress(bp) => bp.one_shot(),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.one_shot(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.one_shot(),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.one_shot(),
-            AnyBreakpoint::CrtcCounters(bp) => bp.one_shot(),
         }
     }
 
@@ -1162,10 +1240,11 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayPenColor(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcAddress(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_one_shot(one_shot),
-            AnyBreakpoint::CrtcCounters(bp) => bp.set_one_shot(one_shot),
         }
     }
 
@@ -1180,10 +1259,11 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayPenColor(bp) => bp.triggered(),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.triggered(),
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcAddress(bp) => bp.triggered(),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.triggered(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.triggered(),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.triggered(),
-            AnyBreakpoint::CrtcCounters(bp) => bp.triggered(),
         }
     }
 
@@ -1198,10 +1278,11 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::GateArrayPenColor(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcAddress(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_triggered(triggered),
-            AnyBreakpoint::CrtcCounters(bp) => bp.set_triggered(triggered),
         }
     }
 }
@@ -1218,10 +1299,11 @@ impl fmt::Display for AnyBreakpoint {
             AnyBreakpoint::GateArrayPenColor(bp) => bp.fmt(f),
             AnyBreakpoint::GateArrayInterrupt(bp) => bp.fmt(f),
             AnyBreakpoint::CrtcRegisterWrite(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcCounters(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcAddress(bp) => bp.fmt(f),
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.fmt(f),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.fmt(f),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.fmt(f),
-            AnyBreakpoint::CrtcCounters(bp) => bp.fmt(f),
         }
     }
 }
