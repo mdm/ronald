@@ -209,13 +209,12 @@ impl CrtcDebugWindow {
                     }
 
                     ui.label("Value:");
-                    let text_edit = ui
-                        .add_enabled(
-                            !self.register_write_any_value,
-                            egui::TextEdit::singleline(&mut self.register_write_value_input)
-                                .desired_width(40.0),
-                        )
-                        .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
+                    ui.add_enabled(
+                        !self.register_write_any_value,
+                        egui::TextEdit::singleline(&mut self.register_write_value_input)
+                            .desired_width(40.0),
+                    )
+                    .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
 
                     if ui
                         .checkbox(&mut self.register_write_any_value, "Any")
@@ -225,11 +224,7 @@ impl CrtcDebugWindow {
                         self.register_write_value_input.clear();
                     }
 
-                    let enter_pressed =
-                        text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    let add_clicked = ui.button("Add").clicked();
-
-                    if enter_pressed || add_clicked {
+                    if ui.button("Add").clicked() {
                         self.add_register_write_breakpoint(frontend);
                     }
                 });
@@ -238,16 +233,13 @@ impl CrtcDebugWindow {
                 // Counters breakpoint
                 ui.label("Counters:");
                 ui.horizontal(|ui| {
-                    let enter_pressed = false;
-
                     ui.label("Char. row:");
-                    let text_edit = ui
-                        .add_enabled(
-                            !self.character_row_any_value,
-                            egui::TextEdit::singleline(&mut self.character_row_value_input)
-                                .desired_width(40.0),
-                        )
-                        .on_hover_text("Hex value (e.g., 10 or 0x10)");
+                    ui.add_enabled(
+                        !self.character_row_any_value,
+                        egui::TextEdit::singleline(&mut self.character_row_value_input)
+                            .desired_width(40.0),
+                    )
+                    .on_hover_text("Hex value (e.g., 10 or 0x10)");
 
                     if ui
                         .checkbox(&mut self.character_row_any_value, "Any")
@@ -257,17 +249,13 @@ impl CrtcDebugWindow {
                         self.character_row_value_input.clear();
                     }
 
-                    let enter_pressed = enter_pressed
-                        || text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-
                     ui.label("Scan line:");
-                    let text_edit = ui
-                        .add_enabled(
-                            !self.scan_line_any_value,
-                            egui::TextEdit::singleline(&mut self.scan_line_value_input)
-                                .desired_width(40.0),
-                        )
-                        .on_hover_text("Hex value (e.g., 10 or 0x10)");
+                    ui.add_enabled(
+                        !self.scan_line_any_value,
+                        egui::TextEdit::singleline(&mut self.scan_line_value_input)
+                            .desired_width(40.0),
+                    )
+                    .on_hover_text("Hex value (e.g., 10 or 0x10)");
 
                     if ui.checkbox(&mut self.scan_line_any_value, "Any").changed()
                         && self.scan_line_any_value
@@ -275,17 +263,13 @@ impl CrtcDebugWindow {
                         self.scan_line_value_input.clear();
                     }
 
-                    let enter_pressed = enter_pressed
-                        || text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-
                     ui.label("Horizontal:");
-                    let text_edit = ui
-                        .add_enabled(
-                            !self.horizontal_counter_any_value,
-                            egui::TextEdit::singleline(&mut self.horizontal_counter_value_input)
-                                .desired_width(40.0),
-                        )
-                        .on_hover_text("Hex value (e.g., 10 or 0x10)");
+                    ui.add_enabled(
+                        !self.horizontal_counter_any_value,
+                        egui::TextEdit::singleline(&mut self.horizontal_counter_value_input)
+                            .desired_width(40.0),
+                    )
+                    .on_hover_text("Hex value (e.g., 10 or 0x10)");
 
                     if ui
                         .checkbox(&mut self.horizontal_counter_any_value, "Any")
@@ -295,11 +279,7 @@ impl CrtcDebugWindow {
                         self.horizontal_counter_value_input.clear();
                     }
 
-                    let enter_pressed = enter_pressed
-                        || text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    let add_clicked = ui.button("Add").clicked();
-
-                    if enter_pressed || add_clicked {
+                    if ui.button("Add").clicked() {
                         self.add_counters_breakpoint(frontend);
                     }
                 });
