@@ -616,12 +616,9 @@ impl MemoryDebugWindow {
         // PC breakpoint input
         ui.horizontal(|ui| {
             ui.label("PC:");
-            let text_edit = ui.text_edit_singleline(&mut self.pc_breakpoint_input);
-            let enter_pressed =
-                text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let add_clicked = ui.button("Add").clicked();
+            ui.text_edit_singleline(&mut self.pc_breakpoint_input);
 
-            if (enter_pressed || add_clicked)
+            if ui.button("Add").clicked()
                 && let Ok(addr) =
                     u16::from_str_radix(self.pc_breakpoint_input.trim_start_matches("0x"), 16)
             {

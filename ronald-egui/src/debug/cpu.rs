@@ -104,7 +104,7 @@ pub struct CpuDebugWindow {
     #[serde(skip, default)]
     register8_value_input: String,
     #[serde(skip, default)]
-    register8_any_change: bool,
+    register8_any_value: bool,
 
     // 16-bit register breakpoints (main + shadow)
     #[serde(skip, default = "default_ui_register16")]
@@ -112,7 +112,7 @@ pub struct CpuDebugWindow {
     #[serde(skip, default)]
     register16_value_input: String,
     #[serde(skip, default)]
-    register16_any_change: bool,
+    register16_any_value: bool,
 }
 
 impl Default for CpuDebugWindow {
@@ -121,10 +121,10 @@ impl Default for CpuDebugWindow {
             show: false,
             selected_register8: Register8::A,
             register8_value_input: String::new(),
-            register8_any_change: false,
+            register8_any_value: false,
             selected_register16: Register16::PC,
             register16_value_input: String::new(),
-            register16_any_change: false,
+            register16_any_value: false,
         }
     }
 }
@@ -332,27 +332,20 @@ impl CpuDebugWindow {
                         });
 
                     ui.label("Value:");
-                    let text_edit = ui
-                        .add_enabled(
-                            !self.register8_any_change,
-                            egui::TextEdit::singleline(&mut self.register8_value_input)
-                                .desired_width(60.0),
-                        )
-                        .on_hover_text("Hex value (e.g., 42 or 0x42)");
+                    ui.add_enabled(
+                        !self.register8_any_value,
+                        egui::TextEdit::singleline(&mut self.register8_value_input)
+                            .desired_width(60.0),
+                    )
+                    .on_hover_text("Hex value (e.g., 42 or 0x42)");
 
-                    if ui
-                        .checkbox(&mut self.register8_any_change, "Any Change")
-                        .changed()
-                        && self.register8_any_change
+                    if ui.checkbox(&mut self.register8_any_value, "Any").changed()
+                        && self.register8_any_value
                     {
                         self.register8_value_input.clear();
                     }
 
-                    let enter_pressed =
-                        text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    let add_clicked = ui.button("Add").clicked();
-
-                    if enter_pressed || add_clicked {
+                    if ui.button("Add").clicked() {
                         self.add_register8_breakpoint(frontend);
                     }
                 });
@@ -376,27 +369,22 @@ impl CpuDebugWindow {
                         });
 
                     ui.label("Value:");
-                    let text_edit = ui
-                        .add_enabled(
-                            !self.register16_any_change,
-                            egui::TextEdit::singleline(&mut self.register16_value_input)
-                                .desired_width(60.0),
-                        )
-                        .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
+                    ui.add_enabled(
+                        !self.register16_any_value,
+                        egui::TextEdit::singleline(&mut self.register16_value_input)
+                            .desired_width(60.0),
+                    )
+                    .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
 
                     if ui
-                        .checkbox(&mut self.register16_any_change, "Any Change")
+                        .checkbox(&mut self.register16_any_value, "Any Change")
                         .changed()
-                        && self.register16_any_change
+                        && self.register16_any_value
                     {
                         self.register16_value_input.clear();
                     }
 
-                    let enter_pressed =
-                        text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    let add_clicked = ui.button("Add").clicked();
-
-                    if enter_pressed || add_clicked {
+                    if ui.button("Add").clicked() {
                         self.add_register16_breakpoint(frontend);
                     }
                 });
@@ -459,7 +447,7 @@ impl CpuDebugWindow {
     }
 
     fn add_register8_breakpoint(&mut self, frontend: &mut Frontend) {
-        let value = if self.register8_any_change {
+        let value = if self.register8_any_value {
             None
         } else {
             match usize::from_str_radix(self.register8_value_input.trim_start_matches("0x"), 16) {
@@ -474,7 +462,7 @@ impl CpuDebugWindow {
     }
 
     fn add_register16_breakpoint(&mut self, frontend: &mut Frontend) {
-        let value = if self.register16_any_change {
+        let value = if self.register16_any_value {
             None
         } else {
             match usize::from_str_radix(self.register16_value_input.trim_start_matches("0x"), 16) {
@@ -496,11 +484,11 @@ impl CpuDebugWindow {
 
     fn clear_register8_inputs(&mut self) {
         self.register8_value_input.clear();
-        self.register8_any_change = false;
+        self.register8_any_value = false;
     }
 
     fn clear_register16_inputs(&mut self) {
         self.register16_value_input.clear();
-        self.register16_any_change = false;
+        self.register16_any_value = false;
     }
 }
