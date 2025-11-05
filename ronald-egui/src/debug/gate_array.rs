@@ -253,7 +253,7 @@ impl GateArrayDebugWindow {
                         egui::ComboBox::from_id_salt("pen_number_selector")
                             .width(80.0)
                             .selected_text(match self.pen_number {
-                                Some(pen) if pen == 16 => "Border".to_string(),
+                                Some(16) => "Border".to_string(),
                                 Some(pen) => format!("Pen {}", pen),
                                 None => "Select...".to_string(),
                             })
