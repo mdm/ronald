@@ -11,8 +11,7 @@ use ronald_core::{
     system::{cpu::Register16, instruction::DecodedInstruction},
 };
 
-use crate::colors;
-use crate::frontend::Frontend;
+use crate::{colors, debug::Debugger};
 
 #[derive(Deserialize, Serialize)]
 pub struct MemoryDebugWindow {
@@ -111,8 +110,8 @@ impl MemoryDebugWindow {
             }
         }
     }
-    fn render_view_mode_selector(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
-        let data = &frontend.debug_view().memory;
+    fn render_view_mode_selector(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        let data = &debugger.debug_view().memory;
         ui.horizontal(|ui| {
             ui.label("View:");
             egui::ComboBox::from_label("")
@@ -211,7 +210,7 @@ impl MemoryDebugWindow {
         });
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
+    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
         if !self.show {
             return;
         }
@@ -221,12 +220,12 @@ impl MemoryDebugWindow {
             .open(&mut open)
             .show(ctx, |ui| {
                 ui.heading("View Config");
-                self.render_view_mode_selector(ui, frontend);
+                self.render_view_mode_selector(ui, debugger);
                 self.render_color_configuration(ui);
                 self.render_memory_controls(ui);
                 ui.separator();
-                self.render_memory_status(ui, frontend);
-                self.render_memory_view(ui, frontend);
+                self.render_memory_status(ui, debugger);
+                self.render_memory_view(ui, debugger);
 
                 // Reserve remaining vertical space so the window can grow larger
                 // ui.allocate_space(ui.available_size());
@@ -288,8 +287,8 @@ impl MemoryDebugWindow {
         });
     }
 
-    fn render_memory_status(&self, ui: &mut egui::Ui, frontend: &mut Frontend) {
-        let data = &frontend.debug_view().memory;
+    fn render_memory_status(&self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        let data = &debugger.debug_view().memory;
         match &self.view_mode {
             MemoryViewMode::CompositeRomRam => {
                 ui.horizontal(|ui| {
@@ -370,19 +369,19 @@ impl MemoryDebugWindow {
         }
     }
 
-    fn render_memory_view(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+    fn render_memory_view(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         match &self.view_mode {
             MemoryViewMode::Disassembly => {
-                self.render_disassembly_view(ui, frontend);
+                self.render_disassembly_view(ui, debugger);
             }
             _ => {
-                self.render_memory_hex_dump(ui, frontend);
+                self.render_memory_hex_dump(ui, debugger);
             }
         }
     }
 
-    fn render_memory_hex_dump(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
-        let data = &frontend.debug_view().memory;
+    fn render_memory_hex_dump(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        let data = &debugger.debug_view().memory;
         ui.heading("Memory Contents:");
 
         let memory_data = match &self.view_mode {
@@ -464,20 +463,20 @@ impl MemoryDebugWindow {
         .response
     }
 
-    fn render_disassembly_view(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+    fn render_disassembly_view(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         // Generate disassembly if we are tracking the current PC or if cache is empty
         if self.disassembly_start.is_none() || self.cached_disassembly.is_none() {
-            let current_pc = frontend.debug_view().cpu.register_pc;
+            let current_pc = debugger.debug_view().cpu.register_pc;
             let start_addr = self.disassembly_start.unwrap_or(current_pc);
-            self.cached_disassembly = Some(frontend.disassemble(start_addr, 100));
+            self.cached_disassembly = Some(debugger.disassemble(start_addr, 100));
         }
 
         // Add PC breakpoint controls
-        self.render_pc_breakpoint_controls(ui, frontend.breakpoint_manager());
+        self.render_pc_breakpoint_controls(ui, debugger.breakpoint_manager());
         ui.separator();
 
         // Build a HashMap from PC addresses to BreakpointIds for efficient lookup
-        let pc_breakpoints: HashMap<u16, BreakpointId> = frontend
+        let pc_breakpoints: HashMap<u16, BreakpointId> = debugger
             .breakpoint_manager()
             .breakpoints_iter()
             .filter_map(|(id, breakpoint)| {
@@ -510,7 +509,7 @@ impl MemoryDebugWindow {
                     .column(Column::remainder())
                     .column(Column::remainder())
                     .body(|mut body| {
-                        let data = frontend.debug_view();
+                        let data = debugger.debug_view();
 
                         for instruction in self
                             .cached_disassembly
@@ -594,7 +593,7 @@ impl MemoryDebugWindow {
 
                 // Handle breakpoint toggling after the table to avoid borrowing issues
                 if let Some(addr) = to_toggle {
-                    let breakpoint_manager = frontend.breakpoint_manager();
+                    let breakpoint_manager = debugger.breakpoint_manager();
                     if let Some(&id) = pc_breakpoints.get(&addr) {
                         // Remove existing breakpoint
                         breakpoint_manager.remove_breakpoint(id);

@@ -5,7 +5,7 @@ use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
 use ronald_core::system::cpu::{Register8, Register16 as PrimaryRegister16};
 
 use crate::colors;
-use crate::frontend::Frontend;
+use crate::debug::Debugger;
 
 fn default_register8() -> Register8 {
     Register8::A
@@ -130,7 +130,7 @@ impl Default for CpuDebugWindow {
 }
 
 impl CpuDebugWindow {
-    pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
+    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
         if !self.show {
             return;
         }
@@ -140,15 +140,15 @@ impl CpuDebugWindow {
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                self.render_cpu_registers(ui, frontend);
+                self.render_cpu_registers(ui, debugger);
                 ui.separator();
-                self.render_breakpoints_section(ui, frontend);
+                self.render_breakpoints_section(ui, debugger);
             });
         self.show = open;
     }
 
-    fn render_cpu_registers(&self, ui: &mut egui::Ui, frontend: &mut Frontend) {
-        let data = &frontend.debug_view().cpu;
+    fn render_cpu_registers(&self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        let data = &debugger.debug_view().cpu;
         ui.heading("Main Registers");
         egui::Grid::new("cpu_main_registers_grid")
             .num_columns(8)
@@ -292,7 +292,7 @@ impl CpuDebugWindow {
         });
     }
 
-    fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+    fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         ui.heading("CPU Breakpoints");
 
         egui::Grid::new("breakpoint_grid")
@@ -346,7 +346,7 @@ impl CpuDebugWindow {
                     }
 
                     if ui.button("Add").clicked() {
-                        self.add_register8_breakpoint(frontend);
+                        self.add_register8_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -385,7 +385,7 @@ impl CpuDebugWindow {
                     }
 
                     if ui.button("Add").clicked() {
-                        self.add_register16_breakpoint(frontend);
+                        self.add_register16_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -399,7 +399,7 @@ impl CpuDebugWindow {
         let mut to_remove = None;
         let mut to_toggle = None;
 
-        let breakpoint_manager = frontend.breakpoint_manager();
+        let breakpoint_manager = debugger.breakpoint_manager();
         for (id, breakpoint) in breakpoint_manager.breakpoints_iter() {
             if breakpoint.one_shot()
                 || !matches!(
@@ -446,7 +446,7 @@ impl CpuDebugWindow {
         }
     }
 
-    fn add_register8_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_register8_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let value = if self.register8_any_value {
             None
         } else {
@@ -457,11 +457,12 @@ impl CpuDebugWindow {
         };
 
         let breakpoint = AnyBreakpoint::cpu_register8_breakpoint(self.selected_register8, value);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
-        self.clear_register8_inputs();
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
+        self.register8_value_input.clear();
+        self.register8_any_value = false;
     }
 
-    fn add_register16_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_register16_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let value = if self.register16_any_value {
             None
         } else {
@@ -478,17 +479,41 @@ impl CpuDebugWindow {
             AnyBreakpoint::cpu_register16_breakpoint(primary_register, value)
         };
 
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
-        self.clear_register16_inputs();
-    }
-
-    fn clear_register8_inputs(&mut self) {
-        self.register8_value_input.clear();
-        self.register8_any_value = false;
-    }
-
-    fn clear_register16_inputs(&mut self) {
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
         self.register16_value_input.clear();
         self.register16_any_value = false;
+    }
+}
+
+#[cfg(test)]
+mod gui_tests {
+    use super::*;
+
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    use crate::debug::mock::TestDebugger;
+
+    #[test]
+    fn test_cpu_debug_window_opens_and_closes() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow::default();
+
+        let app = move |ctx: &egui::Context| {
+            window.show = true;
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Check that the window title is actually rendered
+        harness.get_by_label("CPU Internals");
+
+        // Click OK button to close
+        harness.get_by_label("OK").click();
+        harness.run();
+
+        // Modal should no longer be visible
+        assert!(harness.query_by_label("System Configuration").is_none());
     }
 }

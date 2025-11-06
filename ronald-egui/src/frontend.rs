@@ -18,9 +18,12 @@ use ronald_core::{
     system::{SystemConfig, instruction::DecodedInstruction},
 };
 
-use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
 use crate::key_mapper::{KeyEvent, KeyMapStore, KeyMapper};
 use crate::utils::sync::{Shared, SharedExt, shared};
+use crate::{
+    debug::Debugger,
+    frontend::{audio::CpalAudio, video::EguiWgpuVideo},
+};
 
 mod audio;
 mod video;
@@ -456,22 +459,6 @@ impl Frontend {
         }
     }
 
-    pub fn is_paused(&self) -> bool {
-        self.paused
-    }
-
-    pub fn debug_view(&mut self) -> &SystemDebugView {
-        self.driver.debug_view()
-    }
-
-    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
-        self.driver.disassemble(start_address, count)
-    }
-
-    pub fn breakpoint_manager(&mut self) -> &mut BreakpointManager {
-        self.driver.breakpoint_manager()
-    }
-
     fn draw_pause_overlay(
         &mut self,
         ui: &mut egui::Ui,
@@ -553,5 +540,19 @@ impl Frontend {
         self.driver.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.resume();
+    }
+}
+
+impl Debugger for Frontend {
+    fn debug_view(&mut self) -> &SystemDebugView {
+        self.driver.debug_view()
+    }
+
+    fn breakpoint_manager(&mut self) -> &mut BreakpointManager {
+        self.driver.breakpoint_manager()
+    }
+
+    fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
+        self.driver.disassemble(start_address, count)
     }
 }

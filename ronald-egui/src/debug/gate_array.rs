@@ -5,7 +5,7 @@ use ronald_core::constants::{FIRMWARE_COLORS, HARDWARE_TO_FIRMWARE_COLORS};
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
 
 use crate::colors;
-use crate::frontend::Frontend;
+use crate::debug::Debugger;
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -79,21 +79,21 @@ impl GateArrayDebugWindow {
         colors
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
+    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
         let mut open = self.open;
         egui::Window::new("Gate Array Internals")
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                self.render_gate_array_state(ui, frontend);
+                self.render_gate_array_state(ui, debugger);
                 ui.separator();
-                self.render_breakpoints_section(ui, frontend);
+                self.render_breakpoints_section(ui, debugger);
             });
         self.open = open;
     }
 
-    fn render_gate_array_state(&self, ui: &mut egui::Ui, frontend: &mut Frontend) {
-        let debug_view = frontend.debug_view();
+    fn render_gate_array_state(&self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        let debug_view = debugger.debug_view();
         let ga = &debug_view.gate_array;
 
         // Screen Mode Section
@@ -202,7 +202,7 @@ impl GateArrayDebugWindow {
         });
     }
 
-    fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+    fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         ui.heading("Gate Array Breakpoints");
 
         egui::Grid::new("ga_breakpoint_grid")
@@ -240,7 +240,7 @@ impl GateArrayDebugWindow {
                         .on_hover_text("Break when mode is applied (at next HSYNC) vs when requested (written to register)");
 
                     if ui.button("Add").clicked() {
-                        self.add_screen_mode_breakpoint(frontend);
+                        self.add_screen_mode_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -311,7 +311,7 @@ impl GateArrayDebugWindow {
                     }
 
                     if ui.button("Add").clicked() {
-                        self.add_pen_color_breakpoint(frontend);
+                        self.add_pen_color_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -321,7 +321,7 @@ impl GateArrayDebugWindow {
 
                 ui.horizontal(|ui| {
                     if ui.button("Add Interrupt Breakpoint").clicked() {
-                        self.add_interrupt_breakpoint(frontend);
+                        self.add_interrupt_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -335,7 +335,7 @@ impl GateArrayDebugWindow {
         let mut to_remove = None;
         let mut to_toggle = None;
 
-        let breakpoint_manager = frontend.breakpoint_manager();
+        let breakpoint_manager = debugger.breakpoint_manager();
         for (id, breakpoint) in breakpoint_manager.breakpoints_iter() {
             if breakpoint.one_shot()
                 || !matches!(
@@ -382,7 +382,7 @@ impl GateArrayDebugWindow {
         }
     }
 
-    fn add_screen_mode_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_screen_mode_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let mode = if self.screen_mode_any_change {
             None
         } else {
@@ -391,13 +391,13 @@ impl GateArrayDebugWindow {
 
         let breakpoint =
             AnyBreakpoint::gate_array_screen_mode_breakpoint(mode, self.screen_mode_applied);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
         self.screen_mode_value = None;
         self.screen_mode_any_change = false;
         self.screen_mode_applied = false;
     }
 
-    fn add_pen_color_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_pen_color_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let pen = if self.pen_any_number {
             None
         } else {
@@ -406,15 +406,15 @@ impl GateArrayDebugWindow {
         let color = self.pen_color.map(|c| c as u8);
 
         let breakpoint = AnyBreakpoint::gate_array_pen_color_breakpoint(pen, color);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
         self.pen_number = None;
         self.pen_color = None;
         self.pen_any_number = false;
         self.pen_any_color = false;
     }
 
-    fn add_interrupt_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_interrupt_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let breakpoint = AnyBreakpoint::gate_array_interrupt_breakpoint();
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
     }
 }
