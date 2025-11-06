@@ -5,7 +5,7 @@ use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
 use ronald_core::system::bus::crtc::Register as CrtcRegister;
 
 use crate::colors;
-use crate::frontend::Frontend;
+use crate::debug::Debugger;
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -62,21 +62,21 @@ pub struct CrtcDebugWindow {
 }
 
 impl CrtcDebugWindow {
-    pub fn ui(&mut self, ctx: &egui::Context, frontend: &mut Frontend) {
+    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
         let mut open = self.open;
         egui::Window::new("CRTC Internals")
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                self.render_crtc_state(ui, frontend);
+                self.render_crtc_state(ui, debugger);
                 ui.separator();
-                self.render_breakpoints_section(ui, frontend);
+                self.render_breakpoints_section(ui, debugger);
             });
         self.open = open;
     }
 
-    fn render_crtc_state(&self, ui: &mut egui::Ui, frontend: &mut Frontend) {
-        let debug_view = frontend.debug_view();
+    fn render_crtc_state(&self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        let debug_view = debugger.debug_view();
         let crtc = &debug_view.crtc;
 
         // Registers Section
@@ -177,7 +177,7 @@ impl CrtcDebugWindow {
         });
     }
 
-    fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, frontend: &mut Frontend) {
+    fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         ui.heading("CRTC Breakpoints");
 
         egui::Grid::new("crtc_breakpoint_grid")
@@ -231,7 +231,7 @@ impl CrtcDebugWindow {
                     }
 
                     if ui.button("Add").clicked() {
-                        self.add_register_write_breakpoint(frontend);
+                        self.add_register_write_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -286,7 +286,7 @@ impl CrtcDebugWindow {
                     }
 
                     if ui.button("Add").clicked() {
-                        self.add_counters_breakpoint(frontend);
+                        self.add_counters_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -304,7 +304,7 @@ impl CrtcDebugWindow {
                     ui.checkbox(&mut self.address_any_value, "Any");
 
                     if ui.button("Add").clicked() {
-                        self.add_address_breakpoint(frontend);
+                        self.add_address_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -316,7 +316,7 @@ impl CrtcDebugWindow {
                     ui.checkbox(&mut self.hsync_on_end, "End");
 
                     if ui.button("Add").clicked() {
-                        self.add_horizontal_sync_breakpoint(frontend);
+                        self.add_horizontal_sync_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -328,7 +328,7 @@ impl CrtcDebugWindow {
                     ui.checkbox(&mut self.vsync_on_end, "End");
 
                     if ui.button("Add").clicked() {
-                        self.add_vertical_sync_breakpoint(frontend);
+                        self.add_vertical_sync_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -340,7 +340,7 @@ impl CrtcDebugWindow {
                     ui.checkbox(&mut self.display_enable_on_end, "End");
 
                     if ui.button("Add").clicked() {
-                        self.add_display_enable_breakpoint(frontend);
+                        self.add_display_enable_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -354,7 +354,7 @@ impl CrtcDebugWindow {
         let mut to_remove = None;
         let mut to_toggle = None;
 
-        let breakpoint_manager = frontend.breakpoint_manager();
+        let breakpoint_manager = debugger.breakpoint_manager();
         for (id, breakpoint) in breakpoint_manager.breakpoints_iter() {
             if breakpoint.one_shot()
                 || !matches!(
@@ -404,7 +404,7 @@ impl CrtcDebugWindow {
         }
     }
 
-    fn add_register_write_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_register_write_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let register = if self.register_write_any_register {
             None
         } else {
@@ -427,7 +427,7 @@ impl CrtcDebugWindow {
         };
 
         let breakpoint = AnyBreakpoint::crtc_register_write_breakpoint(register, value);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.register_write_register = None;
         self.register_write_any_register = false;
@@ -435,7 +435,7 @@ impl CrtcDebugWindow {
         self.register_write_any_value = false;
     }
 
-    fn add_counters_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_counters_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let character_row = if self.character_row_any_value {
             None
         } else {
@@ -469,7 +469,7 @@ impl CrtcDebugWindow {
 
         let breakpoint =
             AnyBreakpoint::crtc_counters_breakpoint(character_row, scan_line, horizontal_counter);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.character_row_value_input.clear();
         self.character_row_any_value = false;
@@ -479,7 +479,7 @@ impl CrtcDebugWindow {
         self.horizontal_counter_any_value = false;
     }
 
-    fn add_address_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_address_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let address = if self.address_any_value {
             None
         } else {
@@ -490,36 +490,36 @@ impl CrtcDebugWindow {
         };
 
         let breakpoint = AnyBreakpoint::crtc_address_breakpoint(address);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.address_value_input.clear();
         self.address_any_value = false;
     }
 
-    fn add_horizontal_sync_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_horizontal_sync_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let breakpoint =
             AnyBreakpoint::crtc_horizontal_sync_breakpoint(self.hsync_on_start, self.hsync_on_end);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.hsync_on_start = false;
         self.hsync_on_end = false;
     }
 
-    fn add_vertical_sync_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_vertical_sync_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let breakpoint =
             AnyBreakpoint::crtc_vertical_sync_breakpoint(self.vsync_on_start, self.vsync_on_end);
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.vsync_on_start = false;
         self.vsync_on_end = false;
     }
 
-    fn add_display_enable_breakpoint(&mut self, frontend: &mut Frontend) {
+    fn add_display_enable_breakpoint(&mut self, debugger: &mut impl Debugger) {
         let breakpoint = AnyBreakpoint::crtc_vertical_sync_breakpoint(
             self.display_enable_on_start,
             self.display_enable_on_end,
         );
-        frontend.breakpoint_manager().add_breakpoint(breakpoint);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.display_enable_on_start = false;
         self.display_enable_on_end = false;
