@@ -35,9 +35,9 @@ impl GateArrayDebugWindow {
     fn get_all_hardware_colors() -> Vec<(usize, egui::Color32, String)> {
         let mut colors = Vec::new();
 
-        for hardware_index in 0..32 {
-            let firmware_color_index = HARDWARE_TO_FIRMWARE_COLORS[hardware_index];
-            let rgba = FIRMWARE_COLORS[firmware_color_index];
+        for (hardware_index, firmware_color_index) in HARDWARE_TO_FIRMWARE_COLORS.iter().enumerate()
+        {
+            let rgba = FIRMWARE_COLORS[*firmware_color_index];
             let egui_color =
                 egui::Color32::from_rgba_premultiplied(rgba[0], rgba[1], rgba[2], rgba[3]);
 
