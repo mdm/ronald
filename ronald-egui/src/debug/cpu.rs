@@ -496,24 +496,26 @@ mod gui_tests {
     #[test]
     fn test_cpu_debug_window_opens_and_closes() {
         let mut debugger = TestDebugger::default();
-        let mut window = CpuDebugWindow::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
 
-        let app = move |ctx: &egui::Context| {
-            window.show = true;
+        let app = |ctx: &egui::Context| {
             window.ui(ctx, &mut debugger);
         };
 
         let mut harness = Harness::new(app);
         harness.run();
 
-        // Check that the window title is actually rendered
+        // Check that the window title is rendered
         harness.get_by_label("CPU Internals");
 
-        // Click OK button to close
-        harness.get_by_label("OK").click();
+        // Click close button
+        harness.get_by_label("Close window").click();
         harness.run();
 
-        // Modal should no longer be visible
-        assert!(harness.query_by_label("System Configuration").is_none());
+        // Window should no longer be visible
+        assert!(harness.query_by_label("CPU Internals").is_none());
     }
 }
