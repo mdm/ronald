@@ -554,20 +554,20 @@ impl RegisterFile {
 
 impl fmt::Display for RegisterFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "AF: {:#06x}    ", self.data[0])?;
-        writeln!(f, "AF': {:#06x}", self.data[4])?;
-        write!(f, "BC: {:#06x}    ", self.data[1])?;
-        writeln!(f, "BC': {:#06x}", self.data[5])?;
-        write!(f, "DE: {:#06x}    ", self.data[2])?;
-        writeln!(f, "DE': {:#06x}", self.data[6])?;
-        write!(f, "HL: {:#06x}    ", self.data[3])?;
-        writeln!(f, "HL': {:#06x}", self.data[7])?;
-        writeln!(f, " I: {:#04x}", self.data[8] & 0xff)?;
-        writeln!(f, " R: {:#04x}", self.data[9] & 0xff)?;
-        writeln!(f, "IX: {:#06x}", self.data[10])?;
-        writeln!(f, "IY: {:#06x}", self.data[11])?;
-        writeln!(f, "SP: {:#06x}", self.data[12])?;
-        writeln!(f, "PC: {:#06x}", self.data[13])
+        write!(f, "AF: {:#06X}    ", self.data[0])?;
+        writeln!(f, "AF': {:#06X}", self.data[4])?;
+        write!(f, "BC: {:#06X}    ", self.data[1])?;
+        writeln!(f, "BC': {:#06X}", self.data[5])?;
+        write!(f, "DE: {:#06X}    ", self.data[2])?;
+        writeln!(f, "DE': {:#06X}", self.data[6])?;
+        write!(f, "HL: {:#06X}    ", self.data[3])?;
+        writeln!(f, "HL': {:#06X}", self.data[7])?;
+        writeln!(f, " I: {:#04X}", self.data[8] & 0xff)?;
+        writeln!(f, " R: {:#04X}", self.data[9] & 0xff)?;
+        writeln!(f, "IX: {:#06X}", self.data[10])?;
+        writeln!(f, "IY: {:#06X}", self.data[11])?;
+        writeln!(f, "SP: {:#06X}", self.data[12])?;
+        writeln!(f, "PC: {:#06X}", self.data[13])
     }
 }
 
@@ -921,7 +921,7 @@ where
 
         let (instruction, next_address) = self.decoder.decode(memory, pc as usize);
 
-        log::trace!("{:#06x}: {}", pc, &instruction);
+        log::trace!("{:#06X}: {}", pc, &instruction);
 
         let mut timing_in_nops = instruction.timing();
 

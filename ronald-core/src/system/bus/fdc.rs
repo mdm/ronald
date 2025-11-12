@@ -144,7 +144,7 @@ impl FloppyDiskController {
                 match self.phase {
                     Phase::Execution => {
                         let data = if let Some(data) = self.data_buffer.pop_front() {
-                            log::trace!("Reading data from FDC: {data:#04x}");
+                            log::trace!("Reading data from FDC: {data:#04X}");
                             data
                         } else {
                             unreachable!()
@@ -159,7 +159,7 @@ impl FloppyDiskController {
                     }
                     Phase::Result => {
                         let result = if let Some(result) = self.result_buffer.pop_front() {
-                            log::debug!("Reading result from FDC: {result:#04x}");
+                            log::debug!("Reading result from FDC: {result:#04X}");
                             result
                         } else {
                             // TODO: we hit this if no disk is loaded and CAT is executed
@@ -223,13 +223,13 @@ impl FloppyDiskController {
                 },
                 _ => {
                     log::error!(
-                        "FDC write outside command phase using port {port:#06x}: {value:#010b}"
+                        "FDC write outside command phase using port {port:#06X}: {value:#010b}"
                     );
                     unimplemented!();
                 }
             },
             _ => {
-                log::error!("Unexpected FDC write using port {port:#06x}: {value:#010b}");
+                log::error!("Unexpected FDC write using port {port:#06X}: {value:#010b}");
                 unreachable!();
             }
         }

@@ -21,8 +21,8 @@ pub enum Operand {
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Operand::Immediate8(value) => write!(f, "{value:#04x}"),
-            Operand::Immediate16(value) => write!(f, "{value:#06x}"),
+            Operand::Immediate8(value) => write!(f, "{value:#04X}"),
+            Operand::Immediate16(value) => write!(f, "{value:#06X}"),
             Operand::Register8(register) => match register {
                 cpu::Register8::A => write!(f, "a"),
                 cpu::Register8::F => write!(f, "f"),
@@ -60,8 +60,8 @@ impl fmt::Display for Operand {
                 cpu::Register16::SP => write!(f, "(sp)"),
                 cpu::Register16::PC => write!(f, "(pc)"),
             },
-            Operand::Direct8(address) => write!(f, "({address:#04x})"),
-            Operand::Direct16(address) => write!(f, "({address:#06x})"),
+            Operand::Direct8(address) => write!(f, "({address:#04X})"),
+            Operand::Direct16(address) => write!(f, "({address:#06X})"),
             Operand::Indexed(register, displacement) => match register {
                 cpu::Register16::IX => write!(f, "(ix{displacement:+})"),
                 cpu::Register16::IY => write!(f, "(iy{displacement:+})"),

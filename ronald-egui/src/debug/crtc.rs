@@ -10,7 +10,7 @@ use crate::debug::Debugger;
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CrtcDebugWindow {
-    pub open: bool,
+    pub show: bool,
 
     // Register write breakpoint
     #[serde(skip, default)]
@@ -63,7 +63,7 @@ pub struct CrtcDebugWindow {
 
 impl CrtcDebugWindow {
     pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
-        let mut open = self.open;
+        let mut open = self.show;
         egui::Window::new("CRTC Internals")
             .resizable(false)
             .open(&mut open)
@@ -72,7 +72,7 @@ impl CrtcDebugWindow {
                 ui.separator();
                 self.render_breakpoints_section(ui, debugger);
             });
-        self.open = open;
+        self.show = open;
     }
 
     fn render_crtc_state(&self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
@@ -97,7 +97,7 @@ impl CrtcDebugWindow {
                         ui.label(label);
                     }
 
-                    ui.monospace(format!("{:02x}", value));
+                    ui.monospace(format!("{:02X}", value));
 
                     if (i + 1) % 2 == 0 {
                         ui.end_row();
@@ -116,15 +116,15 @@ impl CrtcDebugWindow {
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
                 ui.label("Horizontal Counter:");
-                ui.label(format!("{:02x}", crtc.horizontal_counter));
+                ui.label(format!("{:02X}", crtc.horizontal_counter));
                 ui.end_row();
 
                 ui.label("Character Row Counter:");
-                ui.label(format!("{:02x}", crtc.character_row_counter));
+                ui.label(format!("{:02X}", crtc.character_row_counter));
                 ui.end_row();
 
                 ui.label("Scan Line Counter:");
-                ui.label(format!("{:02x}", crtc.scan_line_counter));
+                ui.label(format!("{:02X}", crtc.scan_line_counter));
                 ui.end_row();
             });
 
@@ -137,11 +137,11 @@ impl CrtcDebugWindow {
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
                 ui.label("Display Start Address:");
-                ui.monospace(format!("{:04x}", crtc.display_start_address));
+                ui.monospace(format!("{:04X}", crtc.display_start_address));
                 ui.end_row();
 
                 ui.label("Current Address:");
-                ui.monospace(format!("{:04x}", crtc.current_address));
+                ui.monospace(format!("{:04X}", crtc.current_address));
                 ui.end_row();
             });
 
@@ -214,12 +214,13 @@ impl CrtcDebugWindow {
                         self.register_write_register = None;
                     }
 
-                    ui.label("Value:");
+                    let label = ui.label("Value:");
                     ui.add_enabled(
                         !self.register_write_any_value,
                         egui::TextEdit::singleline(&mut self.register_write_value_input)
                             .desired_width(40.0),
                     )
+                    .labelled_by(label.id)
                     .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
 
                     if ui
@@ -239,12 +240,13 @@ impl CrtcDebugWindow {
                 // Counters breakpoint
                 ui.label("Counters:");
                 ui.horizontal(|ui| {
-                    ui.label("Char. row:");
+                    let label = ui.label("Char. row:");
                     ui.add_enabled(
                         !self.character_row_any_value,
                         egui::TextEdit::singleline(&mut self.character_row_value_input)
                             .desired_width(40.0),
                     )
+                    .labelled_by(label.id)
                     .on_hover_text("Hex value (e.g., 10 or 0x10)");
 
                     if ui
@@ -255,12 +257,13 @@ impl CrtcDebugWindow {
                         self.character_row_value_input.clear();
                     }
 
-                    ui.label("Scan line:");
+                    let label = ui.label("Scan line:");
                     ui.add_enabled(
                         !self.scan_line_any_value,
                         egui::TextEdit::singleline(&mut self.scan_line_value_input)
                             .desired_width(40.0),
                     )
+                    .labelled_by(label.id)
                     .on_hover_text("Hex value (e.g., 10 or 0x10)");
 
                     if ui.checkbox(&mut self.scan_line_any_value, "Any").changed()
@@ -269,12 +272,13 @@ impl CrtcDebugWindow {
                         self.scan_line_value_input.clear();
                     }
 
-                    ui.label("Horizontal:");
+                    let label = ui.label("Horizontal:");
                     ui.add_enabled(
                         !self.horizontal_counter_any_value,
                         egui::TextEdit::singleline(&mut self.horizontal_counter_value_input)
                             .desired_width(40.0),
                     )
+                    .labelled_by(label.id)
                     .on_hover_text("Hex value (e.g., 10 or 0x10)");
 
                     if ui
@@ -292,13 +296,14 @@ impl CrtcDebugWindow {
                 ui.end_row();
 
                 // Address breakpoint
-                ui.label("Address:");
+                let label = ui.label("Address:");
                 ui.horizontal(|ui| {
                     ui.add_enabled(
                         !self.address_any_value,
                         egui::TextEdit::singleline(&mut self.address_value_input)
                             .desired_width(60.0),
                     )
+                    .labelled_by(label.id)
                     .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
 
                     ui.checkbox(&mut self.address_any_value, "Any");
@@ -523,5 +528,293 @@ impl CrtcDebugWindow {
 
         self.display_enable_on_start = false;
         self.display_enable_on_end = false;
+    }
+}
+
+#[cfg(test)]
+mod gui_tests {
+    use super::*;
+
+    use egui::accesskit;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    use ronald_core::debug::breakpoint::CrtcRegisterWriteBreakpoint;
+
+    use crate::debug::mock::TestDebugger;
+
+    #[test]
+    fn test_cpu_debug_window_opens_and_closes() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CrtcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Check that the window title is rendered
+        harness.get_by_label("CRTC Internals");
+
+        // Click close button
+        harness.get_by_label("Close window").click();
+        harness.run();
+
+        // Window should no longer be visible
+        assert!(harness.query_by_label("CRTC Internals").is_none());
+    }
+
+    #[test]
+    fn test_crtc_debug_window_register_breakpoint_with_register_and_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CrtcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select register "Vertical Total"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("R4 (Vertical Total)").click();
+        harness.run();
+
+        // Enter value "0x42"
+        harness
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
+            .type_text("0x42");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(
+            harness
+                .query_by_label("R4 (Vertical Total) = 0x42")
+                .is_some()
+        );
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(
+            harness
+                .query_by_label("R4 (Vertical Total) = 0x42")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_crtc_debug_window_register_breakpoint_with_any_register() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CrtcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select any register
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Enter value "0x42"
+        harness
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
+            .type_text("0x42");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        harness.get_by_label("Any register = 0x42").click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint {
+                            register: None,
+                            value: Some(0x42),
+                            ..
+                        })
+                    ) && !bp.enabled()
+                })
+        );
+    }
+
+    #[test]
+    fn test_crtc_debug_window_register_breakpoint_with_any_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CrtcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select register "Vertical Total"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("R4 (Vertical Total)").click();
+        harness.run();
+
+        // Check any value
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(i + 1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        harness.get_by_label("R4 (Vertical Total) written").click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint {
+                            register: Some(CrtcRegister::VerticalTotal),
+                            value: None,
+                            ..
+                        })
+                    ) && !bp.enabled()
+                })
+        );
+    }
+
+    #[test]
+    fn test_crtc_debug_window_counters_breakpoint_with_values() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CrtcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Enter character row value "0x42"
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Char. row:")
+            .type_text("0x42");
+        harness.run();
+
+        // Enter scan line value "0x42"
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Scan line:")
+            .type_text("0x08");
+        harness.run();
+
+        // Enter horizontal value "0x42"
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Horizontal:")
+            .type_text("0xaf");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(
+            harness
+                .query_by_label("R4 (Vertical Total) = 0x42")
+                .is_some()
+        );
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(
+            harness
+                .query_by_label("R4 (Vertical Total) = 0x42")
+                .is_none()
+        );
     }
 }

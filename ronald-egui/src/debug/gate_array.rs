@@ -10,7 +10,7 @@ use crate::debug::Debugger;
 #[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GateArrayDebugWindow {
-    pub open: bool,
+    pub show: bool,
 
     // Screen mode breakpoint
     #[serde(skip, default)]
@@ -80,7 +80,7 @@ impl GateArrayDebugWindow {
     }
 
     pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
-        let mut open = self.open;
+        let mut open = self.show;
         egui::Window::new("Gate Array Internals")
             .resizable(false)
             .open(&mut open)
@@ -89,7 +89,7 @@ impl GateArrayDebugWindow {
                 ui.separator();
                 self.render_breakpoints_section(ui, debugger);
             });
-        self.open = open;
+        self.show = open;
     }
 
     fn render_gate_array_state(&self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
@@ -175,7 +175,7 @@ impl GateArrayDebugWindow {
                         ui.painter().rect_filled(rect, 2.0, egui_color);
 
                         // Show hardware color value
-                        ui.label(format!("{:#04x}", ga.pen_colors[pen]));
+                        ui.label(format!("{:#04X}", ga.pen_colors[pen]));
                     });
 
                     if (pen + 1) % 4 == 0 {
