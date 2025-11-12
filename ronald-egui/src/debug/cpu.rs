@@ -566,25 +566,16 @@ mod gui_tests {
             .unwrap()
             .click();
         harness.run();
-        drop(harness);
 
-        // Breakpoint should be added
-        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
-        assert!(
-            debugger
-                .breakpoint_manager()
-                .breakpoints_iter()
-                .any(|(_, bp)| {
-                    matches!(
-                        bp,
-                        AnyBreakpoint::CpuRegister8(CpuRegister8Breakpoint {
-                            register: Register8::B,
-                            value: Some(0x42),
-                            ..
-                        })
-                    )
-                })
-        );
+        assert!(harness.query_by_label("B = 0x42").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("B = 0x42").is_none());
     }
 
     #[test]
@@ -677,6 +668,10 @@ mod gui_tests {
             .unwrap()
             .click();
         harness.run();
+
+        // Disable breakpoint
+        harness.get_by_label("B written").click();
+        harness.run();
         drop(harness);
 
         // Breakpoint should be added
@@ -693,7 +688,7 @@ mod gui_tests {
                             value: None,
                             ..
                         })
-                    )
+                    ) && !bp.enabled()
                 })
         );
     }
@@ -740,25 +735,16 @@ mod gui_tests {
             .unwrap()
             .click();
         harness.run();
-        drop(harness);
 
-        // Breakpoint should be added
-        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
-        assert!(
-            debugger
-                .breakpoint_manager()
-                .breakpoints_iter()
-                .any(|(_, bp)| {
-                    matches!(
-                        bp,
-                        AnyBreakpoint::CpuRegister16(CpuRegister16Breakpoint {
-                            register: PrimaryRegister16::SP,
-                            value: Some(0xbeef),
-                            ..
-                        })
-                    )
-                })
-        );
+        assert!(harness.query_by_label("SP = 0xBEEF").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("SP = 0xBEEF").is_none());
     }
 
     #[test]
@@ -851,6 +837,10 @@ mod gui_tests {
             .unwrap()
             .click();
         harness.run();
+
+        // Disable breakpoint
+        harness.get_by_label("SP written").click();
+        harness.run();
         drop(harness);
 
         // Breakpoint should be added
@@ -867,7 +857,7 @@ mod gui_tests {
                             value: None,
                             ..
                         })
-                    )
+                    ) && !bp.enabled()
                 })
         );
     }
@@ -914,25 +904,16 @@ mod gui_tests {
             .unwrap()
             .click();
         harness.run();
-        drop(harness);
 
-        // Breakpoint should be added
-        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
-        assert!(
-            debugger
-                .breakpoint_manager()
-                .breakpoints_iter()
-                .any(|(_, bp)| {
-                    matches!(
-                        bp,
-                        AnyBreakpoint::CpuShadowRegister16(CpuShadowRegister16Breakpoint {
-                            register: PrimaryRegister16::HL,
-                            value: Some(0xbeef),
-                            ..
-                        })
-                    )
-                })
-        );
+        assert!(harness.query_by_label("HL' = 0xBEEF").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("HL' = 0xBEEF").is_none());
     }
 
     #[test]
@@ -1025,6 +1006,10 @@ mod gui_tests {
             .unwrap()
             .click();
         harness.run();
+
+        // Disable breakpoint
+        harness.get_by_label("HL' written").click();
+        harness.run();
         drop(harness);
 
         // Breakpoint should be added
@@ -1041,7 +1026,7 @@ mod gui_tests {
                             value: None,
                             ..
                         })
-                    )
+                    ) && !bp.enabled()
                 })
         );
     }
