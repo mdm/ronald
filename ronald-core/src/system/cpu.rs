@@ -1198,12 +1198,13 @@ where
                     carry = true;
                 }
 
+                // TODO: verify overflow behavior and add tests
                 if self.check_flag(Flag::AddSubtract) {
                     half_carry = half_carry && (value & 0xf) < 0x6;
-                    value -= correction;
+                    value = value.wrapping_sub(correction);
                 } else {
                     half_carry = (value & 0xf) > 0x9;
-                    value += correction;
+                    value = value.wrapping_add(correction);
                 }
 
                 self.registers.write_byte(&Register8::A, value);
@@ -2242,7 +2243,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        debug::{event::DebugEvent, DebugSource, EventSubscription},
+        debug::{event::DebugEvent, record_debug_events, DebugSource, EventSubscription},
         system::{
             bus::Bus,
             clock::MasterClock,
@@ -2278,6 +2279,7 @@ mod tests {
         }
 
         pub fn emulate(&mut self) -> usize {
+            record_debug_events(false);
             let mut output = String::new();
 
             let start = std::time::Instant::now();
@@ -2331,9 +2333,10 @@ mod tests {
 
             let elapsed_seconds = start.elapsed().as_secs_f64();
             println!(
-                "Executed {total_cycles} in {elapsed_seconds} seconds ({} MHz).",
+                "Executed {total_cycles} cycles in {elapsed_seconds} seconds ({} MHz).",
                 total_cycles as f64 / 1_000_000.0 / elapsed_seconds
             );
+            record_debug_events(true);
 
             output.matches("OK").count()
         }
