@@ -153,20 +153,20 @@ where
                             ui.close_menu();
                         }
                         if ui
-                            .add(egui::Button::new("CRTC").selected(self.crtc_debug_window.open))
+                            .add(egui::Button::new("CRTC").selected(self.crtc_debug_window.show))
                             .clicked()
                         {
-                            self.crtc_debug_window.open = !self.crtc_debug_window.open;
+                            self.crtc_debug_window.show = !self.crtc_debug_window.show;
                             ui.close_menu();
                         }
                         if ui
                             .add(
                                 egui::Button::new("Gate Array")
-                                    .selected(self.gate_array_debug_window.open),
+                                    .selected(self.gate_array_debug_window.show),
                             )
                             .clicked()
                         {
-                            self.gate_array_debug_window.open = !self.gate_array_debug_window.open;
+                            self.gate_array_debug_window.show = !self.gate_array_debug_window.show;
                             ui.close_menu();
                         }
                         ui.separator();

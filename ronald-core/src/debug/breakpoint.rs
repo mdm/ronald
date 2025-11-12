@@ -961,15 +961,15 @@ impl fmt::Display for CrtcCountersBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Counters = ")?;
         match self.character_row {
-            Some(character_row) => write!(f, "{:#04x}/", character_row)?,
+            Some(character_row) => write!(f, "{:#04X}/", character_row)?,
             None => write!(f, "Any/")?,
         }
         match self.scan_line {
-            Some(scan_line) => write!(f, "{:#04x}/", scan_line)?,
+            Some(scan_line) => write!(f, "{:#04X}/", scan_line)?,
             None => write!(f, "Any/")?,
         }
         match self.horizontal_counter {
-            Some(horiontal_counter) => write!(f, "{:#04x}", horiontal_counter),
+            Some(horiontal_counter) => write!(f, "{:#04X}", horiontal_counter),
             None => write!(f, "Any"),
         }
     }
@@ -1036,7 +1036,7 @@ impl Breakpoint for CrtcAddressBreakpoint {
 impl fmt::Display for CrtcAddressBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.value {
-            Some(value) => write!(f, "Address = {:#06x}", value),
+            Some(value) => write!(f, "Address = {:#06X}", value),
             None => write!(f, "Any address change"),
         }
     }

@@ -76,7 +76,7 @@ where
             _ if port & 0x0800 == 0 => self.ppi.read_byte(&self.crtc, &self.psg, &self.tape, port),
             0xfb7e | 0xfb7f => self.fdc.read_byte(port),
             _ => {
-                log::error!("Unhandled read from port {port:#06x}");
+                log::error!("Unhandled read from port {port:#06X}");
                 unimplemented!();
             }
         }
@@ -101,7 +101,7 @@ where
             0xfa7e | 0xfb7f => self.fdc.write_byte(port, value),
             0xf8ff => (), // peripheral soft reset (ignored)
             _ => {
-                log::error!("Unhandled write to port {port:#06x}: {value:#010b}");
+                log::error!("Unhandled write to port {port:#06X}: {value:#010b}");
                 unimplemented!();
             }
         }
