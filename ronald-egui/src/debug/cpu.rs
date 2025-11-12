@@ -300,7 +300,7 @@ impl CpuDebugWindow {
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
                 // 8-bit register breakpoints
-                let label = ui.label("8-bit register:");
+                ui.label("8-bit register:");
 
                 ui.horizontal(|ui| {
                     egui::ComboBox::from_id_salt("reg8")
@@ -329,9 +329,7 @@ impl CpuDebugWindow {
                                     format!("{:?}", reg),
                                 );
                             }
-                        })
-                        .response
-                        .labelled_by(label.id);
+                        });
 
                     let label = ui.label("Value:");
                     ui.add_enabled(
@@ -371,12 +369,13 @@ impl CpuDebugWindow {
                             }
                         });
 
-                    ui.label("Value:");
+                    let label = ui.label("Value:");
                     ui.add_enabled(
                         !self.register16_any_value,
                         egui::TextEdit::singleline(&mut self.register16_value_input)
                             .desired_width(60.0),
                     )
+                    .labelled_by(label.id)
                     .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
 
                     if ui.checkbox(&mut self.register16_any_value, "Any").changed()
@@ -448,7 +447,6 @@ impl CpuDebugWindow {
     }
 
     fn add_register8_breakpoint(&mut self, debugger: &mut impl Debugger) {
-        dbg!(&self.selected_register8, &self.register8_value_input);
         let value = if self.register8_any_value {
             None
         } else {
@@ -494,7 +492,9 @@ mod gui_tests {
     use egui::accesskit;
     use egui_kittest::{Harness, kittest::Queryable};
 
-    use ronald_core::debug::breakpoint::CpuRegister8Breakpoint;
+    use ronald_core::debug::breakpoint::{
+        CpuRegister8Breakpoint, CpuRegister16Breakpoint, CpuShadowRegister16Breakpoint,
+    };
 
     use crate::debug::mock::TestDebugger;
 
@@ -551,7 +551,7 @@ mod gui_tests {
         harness.get_by_label("B").click();
         harness.run();
 
-        // Enter value 0x42
+        // Enter value "0x42"
         harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
@@ -568,6 +568,7 @@ mod gui_tests {
         harness.run();
         drop(harness);
 
+        // Breakpoint should be added
         assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
         assert!(
             debugger
@@ -579,6 +580,465 @@ mod gui_tests {
                         AnyBreakpoint::CpuRegister8(CpuRegister8Breakpoint {
                             register: Register8::B,
                             value: Some(0x42),
+                            ..
+                        })
+                    )
+                })
+        );
+    }
+
+    #[test]
+    fn test_cpu_debug_window_8bit_register_breakpoint_invalid_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select register B
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("B").click();
+        harness.run();
+
+        // Enter value "invalid"
+        harness
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
+            .type_text("invalid");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        // Breakpoint should not be added
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
+    }
+
+    #[test]
+    fn test_cpu_debug_window_8bit_register_breakpoint_any_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select register B
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("B").click();
+        harness.run();
+
+        // Check "Any" checkbox
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        // Breakpoint should be added
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::CpuRegister8(CpuRegister8Breakpoint {
+                            register: Register8::B,
+                            value: None,
+                            ..
+                        })
+                    )
+                })
+        );
+    }
+
+    #[test]
+    fn test_cpu_debug_window_16bit_register_breakpoint_with_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 1;
+
+        // Select register SP
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("SP").click();
+        harness.run();
+
+        // Enter value "0xbeef"
+        harness
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
+            .type_text("0xbeef");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        // Breakpoint should be added
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::CpuRegister16(CpuRegister16Breakpoint {
+                            register: PrimaryRegister16::SP,
+                            value: Some(0xbeef),
+                            ..
+                        })
+                    )
+                })
+        );
+    }
+
+    #[test]
+    fn test_cpu_debug_window_16bit_register_breakpoint_invalid_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 1;
+
+        // Select register SP
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("SP").click();
+        harness.run();
+
+        // Enter value "invalid"
+        harness
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
+            .type_text("invalid");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        // Breakpoint should not be added
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
+    }
+
+    #[test]
+    fn test_cpu_debug_window_16bit_register_breakpoint_any_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 1;
+
+        // Select register SP
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("SP").click();
+        harness.run();
+
+        // Check "Any" checkbox
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        // Breakpoint should be added
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::CpuRegister16(CpuRegister16Breakpoint {
+                            register: PrimaryRegister16::SP,
+                            value: None,
+                            ..
+                        })
+                    )
+                })
+        );
+    }
+
+    #[test]
+    fn test_cpu_debug_window_16bit_shadow_register_breakpoint_with_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 1;
+
+        // Select shadow register HL'
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("HL'").click();
+        harness.run();
+
+        // Enter value "0xbeef"
+        harness
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
+            .type_text("0xbeef");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        // Breakpoint should be added
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::CpuShadowRegister16(CpuShadowRegister16Breakpoint {
+                            register: PrimaryRegister16::HL,
+                            value: Some(0xbeef),
+                            ..
+                        })
+                    )
+                })
+        );
+    }
+
+    #[test]
+    fn test_cpu_debug_window_16bit_shadow_register_breakpoint_invalid_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 1;
+
+        // Select shadow register HL'
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("HL'").click();
+        harness.run();
+
+        // Enter value "invalid"
+        harness
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
+            .type_text("invalid");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        // Breakpoint should not be added
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
+    }
+
+    #[test]
+    fn test_cpu_debug_window_16bit_shadow_register_breakpoint_any_value() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CpuDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 1;
+
+        // Select shadow register HL'
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("HL'").click();
+        harness.run();
+
+        // Check "Any" checkbox
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        // Breakpoint should be added
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::CpuShadowRegister16(CpuShadowRegister16Breakpoint {
+                            register: PrimaryRegister16::HL,
+                            value: None,
                             ..
                         })
                     )
