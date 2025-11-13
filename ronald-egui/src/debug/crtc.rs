@@ -545,7 +545,7 @@ mod gui_tests {
     use crate::debug::mock::TestDebugger;
 
     #[test]
-    fn test_cpu_debug_window_opens_and_closes() {
+    fn test_crtc_debug_window_opens_and_closes() {
         let mut debugger = TestDebugger::default();
         let mut window = CrtcDebugWindow {
             show: true,
