@@ -418,3 +418,203 @@ impl GateArrayDebugWindow {
         debugger.breakpoint_manager().add_breakpoint(breakpoint);
     }
 }
+
+#[cfg(test)]
+mod gui_tests {
+    use super::*;
+
+    use egui::accesskit;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    use ronald_core::debug::breakpoint::GateArrayScreenModeBreakpoint;
+
+    use crate::debug::mock::TestDebugger;
+
+    #[test]
+    fn test_gate_array_debug_window_opens_and_closes() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Check that the window title is rendered
+        harness.get_by_label("Gate Array Internals");
+
+        // Click close button
+        harness.get_by_label("Close window").click();
+        harness.run();
+
+        // Window should no longer be visible
+        assert!(harness.query_by_label("Gate Array Internals").is_none());
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_screen_mode_requested_breakpoint() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select "Mode 1"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Mode 1").click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(
+            harness
+                .query_by_label("Screen mode requested = 1")
+                .is_some()
+        );
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(
+            harness
+                .query_by_label("Screen mode requested = 1")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_screen_mode_requested_breakpoint_any() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Check any
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Disable breakpoint
+        harness.get_by_label("Screen mode requested").click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::GateArrayScreenMode(GateArrayScreenModeBreakpoint {
+                            mode: None,
+                            applied: false,
+                            ..
+                        })
+                    ) && !bp.enabled()
+                })
+        );
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_screen_mode_applied_breakpoint() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select "Mode 1"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Mode 1").click();
+        harness.run();
+
+        // Check applied
+        harness
+            .get_by_role_and_label(accesskit::Role::CheckBox, "Applied")
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Screen mode applied = 1").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Screen mode applied = 1").is_none());
+    }
+}
