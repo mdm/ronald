@@ -87,7 +87,7 @@ impl CrtcDebugWindow {
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
                 for (i, value) in crtc.registers.iter().enumerate() {
-                    let register: CrtcRegister = i.into();
+                    let register = CrtcRegister::try_from(i).unwrap();
                     let is_selected = register == crtc.selected_register;
 
                     let label = format!("{}:", register);
@@ -105,6 +105,32 @@ impl CrtcDebugWindow {
                         ui.separator();
                     }
                 }
+
+                let register = CrtcRegister::Unused;
+                let is_selected = register == crtc.selected_register;
+
+                let label = format!("{}:", register);
+                if is_selected {
+                    ui.colored_label(colors::DARK_YELLOW_GOLD, label);
+                } else {
+                    ui.label(label);
+                }
+
+                ui.monospace("-");
+                ui.separator();
+
+                let register = CrtcRegister::Dummy;
+                let is_selected = register == crtc.selected_register;
+
+                let label = format!("{}:", register);
+                if is_selected {
+                    ui.colored_label(colors::DARK_YELLOW_GOLD, label);
+                } else {
+                    ui.label(label);
+                }
+
+                ui.monospace("-");
+                ui.end_row();
             });
 
         ui.add_space(8.0);
@@ -196,13 +222,25 @@ impl CrtcDebugWindow {
                             })
                             .show_ui(ui, |ui| {
                                 for i in 0..18 {
-                                    let reg: CrtcRegister = i.into();
+                                    let reg = CrtcRegister::try_from(i).unwrap();
                                     ui.selectable_value(
                                         &mut self.register_write_register,
                                         Some(reg),
                                         format!("{}", reg),
                                     );
                                 }
+                                let reg = CrtcRegister::Unused;
+                                ui.selectable_value(
+                                    &mut self.register_write_register,
+                                    Some(reg),
+                                    format!("{}", reg),
+                                );
+                                let reg = CrtcRegister::Dummy;
+                                ui.selectable_value(
+                                    &mut self.register_write_register,
+                                    Some(reg),
+                                    format!("{}", reg),
+                                );
                             });
                     });
 
