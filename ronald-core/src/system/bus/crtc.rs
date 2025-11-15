@@ -1,5 +1,6 @@
 use std::fmt;
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
 use crate::debug::event::CrtcDebugEvent;
@@ -17,7 +18,8 @@ pub trait CrtController: Default {
     fn read_vertical_sync(&self) -> bool;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(usize)]
 pub enum Register {
     HorizontalTotal,
     HorizontalDisplayed,
@@ -37,55 +39,52 @@ pub enum Register {
     CursorAddressLow,
     LightPenAddressHigh,
     LightPenAddressLow,
-}
-
-impl From<usize> for Register {
-    fn from(value: usize) -> Self {
-        match value {
-            0 => Register::HorizontalTotal,
-            1 => Register::HorizontalDisplayed,
-            2 => Register::HorizontalSyncPosition,
-            3 => Register::HorizontalAndVerticalSyncWidths,
-            4 => Register::VerticalTotal,
-            5 => Register::VerticalTotalAdjust,
-            6 => Register::VerticalDisplayed,
-            7 => Register::VerticalSyncPosition,
-            8 => Register::InterlaceAndSkew,
-            9 => Register::MaximumRasterAddress,
-            10 => Register::CursorStartRaster,
-            11 => Register::CursorEndRaster,
-            12 => Register::DisplayStartAddressHigh,
-            13 => Register::DisplayStartAddressLow,
-            14 => Register::CursorAddressHigh,
-            15 => Register::CursorAddressLow,
-            16 => Register::LightPenAddressHigh,
-            17 => Register::LightPenAddressLow,
-            _ => panic!("Invalid CRTC register: {}", value),
-        }
-    }
+    #[num_enum(alternatives = [19..31])]
+    Unused,
+    Dummy = 31,
 }
 
 impl fmt::Display for Register {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Register::HorizontalTotal => write!(f, "R0 (Horizontal Total)"),
-            Register::HorizontalDisplayed => write!(f, "R1 (Horizontal Displayed)"),
-            Register::HorizontalSyncPosition => write!(f, "R2 (H. Sync Position)"),
-            Register::HorizontalAndVerticalSyncWidths => write!(f, "R3 (H/V Sync Widths)"),
-            Register::VerticalTotal => write!(f, "R4 (Vertical Total)"),
-            Register::VerticalTotalAdjust => write!(f, "R5 (V. Total Adjust)"),
-            Register::VerticalDisplayed => write!(f, "R6 (Vertical Displayed)"),
-            Register::VerticalSyncPosition => write!(f, "R7 (V. Sync Position)"),
-            Register::InterlaceAndSkew => write!(f, "R8 (Interlace/Skew)"),
-            Register::MaximumRasterAddress => write!(f, "R9 (Max Raster Address)"),
-            Register::CursorStartRaster => write!(f, "R10 (Cursor Start)"),
-            Register::CursorEndRaster => write!(f, "R11 (Cursor End)"),
-            Register::DisplayStartAddressHigh => write!(f, "R12 (Display Start High)"),
-            Register::DisplayStartAddressLow => write!(f, "R13 (Display Start Low)"),
-            Register::CursorAddressHigh => write!(f, "R14 (Cursor Address High)"),
-            Register::CursorAddressLow => write!(f, "R15 (Cursor Address Low)"),
-            Register::LightPenAddressHigh => write!(f, "R16 (Light Pen High)"),
-            Register::LightPenAddressLow => write!(f, "R17 (Light Pen Low)"),
+            Register::HorizontalTotal => write!(f, "R{} (Horizontal Total)", usize::from(*self)),
+            Register::HorizontalDisplayed => {
+                write!(f, "R{} (Horizontal Displayed)", usize::from(*self))
+            }
+            Register::HorizontalSyncPosition => {
+                write!(f, "R{} (H. Sync Position)", usize::from(*self))
+            }
+            Register::HorizontalAndVerticalSyncWidths => {
+                write!(f, "R{} (H/V Sync Widths)", usize::from(*self))
+            }
+            Register::VerticalTotal => write!(f, "R{} (Vertical Total)", usize::from(*self)),
+            Register::VerticalTotalAdjust => write!(f, "R{} (V. Total Adjust)", usize::from(*self)),
+            Register::VerticalDisplayed => {
+                write!(f, "R{} (Vertical Displayed)", usize::from(*self))
+            }
+            Register::VerticalSyncPosition => {
+                write!(f, "R{} (V. Sync Position)", usize::from(*self))
+            }
+            Register::InterlaceAndSkew => write!(f, "R{} (Interlace/Skew)", usize::from(*self)),
+            Register::MaximumRasterAddress => {
+                write!(f, "R{} (Max Raster Address)", usize::from(*self))
+            }
+            Register::CursorStartRaster => write!(f, "R{} (Cursor Start)", usize::from(*self)),
+            Register::CursorEndRaster => write!(f, "R{} (Cursor End)", usize::from(*self)),
+            Register::DisplayStartAddressHigh => {
+                write!(f, "R{} (Display Start High)", usize::from(*self))
+            }
+            Register::DisplayStartAddressLow => {
+                write!(f, "R{} (Display Start Low)", usize::from(*self))
+            }
+            Register::CursorAddressHigh => {
+                write!(f, "R{} (Cursor Address High)", usize::from(*self))
+            }
+            Register::CursorAddressLow => write!(f, "R{} (Cursor Address Low)", usize::from(*self)),
+            Register::LightPenAddressHigh => write!(f, "R{} (Light Pen High)", usize::from(*self)),
+            Register::LightPenAddressLow => write!(f, "R{} (Light Pen Low)", usize::from(*self)),
+            Register::Unused => write!(f, "R18-R30 (Unused)"),
+            Register::Dummy => write!(f, "R{} (Dummy)", usize::from(*self)),
         }
     }
 }
@@ -112,7 +111,7 @@ impl HitachiHd6845s {
         self.selected_register = register;
         self.emit_debug_event(
             CrtcDebugEvent::RegisterSelected {
-                register: register.into(),
+                register: Register::try_from(register).expect("Invalid CRTC register selected"),
             },
             self.master_clock,
         );
@@ -124,7 +123,7 @@ impl HitachiHd6845s {
 
         self.emit_debug_event(
             CrtcDebugEvent::RegisterWritten {
-                register: self.selected_register.into(),
+                register: Register::try_from(self.selected_register).unwrap(),
                 is: value,
                 was,
             },
@@ -143,7 +142,7 @@ impl Snapshottable for HitachiHd6845s {
     fn debug_view(&self) -> Self::View {
         CrtcDebugView {
             registers: self.registers,
-            selected_register: self.selected_register.into(),
+            selected_register: Register::try_from(self.selected_register).unwrap(),
             horizontal_counter: self.horizontal_counter,
             character_row_counter: self.character_row_counter,
             scan_line_counter: self.scan_line_counter,
