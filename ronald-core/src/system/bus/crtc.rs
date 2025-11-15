@@ -118,8 +118,9 @@ impl HitachiHd6845s {
     }
 
     fn write_register(&mut self, value: u8) {
+        // TODO: restrict to writable registers
         let was = self.registers[self.selected_register];
-        self.registers[self.selected_register] = value; // TODO: restrict to registers 0-15, TODO: restrict bit-width
+        self.registers[self.selected_register] = value;
 
         self.emit_debug_event(
             CrtcDebugEvent::RegisterWritten {
@@ -132,7 +133,9 @@ impl HitachiHd6845s {
     }
 
     fn read_register(&self) -> u8 {
-        self.registers[self.selected_register] // TODO: restrict to registers 14-17
+        // TODO: restrict to readable registers
+        // TODO: handle type 4 reads (see https://www.cpcwiki.eu/index.php/Extra_CPC_Plus_Hardware_Information#CRTC)
+        self.registers[self.selected_register]
     }
 }
 
@@ -162,9 +165,13 @@ impl Debuggable for HitachiHd6845s {
 
 impl CrtController for HitachiHd6845s {
     fn read_byte(&mut self, port: u16) -> u8 {
-        // TODO: get rid of port parameter?
-        log::error!("Unexpected read from CRT controller");
-        unimplemented!()
+        let function = (port >> 8) & 0x03;
+
+        match function {
+            2 => todo!("handle read depending on CRTC type"),
+            3 => self.read_register(),
+            _ => 0xff, // TODO: properly emulate floating bus
+        }
     }
 
     fn write_byte(&mut self, port: u16, value: u8) {
