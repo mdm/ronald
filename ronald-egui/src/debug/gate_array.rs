@@ -617,4 +617,212 @@ mod gui_tests {
 
         assert!(harness.query_by_label("Screen mode applied = 1").is_none());
     }
+
+    #[test]
+    fn test_gate_array_debug_window_pen_breakpoint_with_pen_and_color() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select "Pen 8"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Pen 8")
+            .click();
+        harness.run();
+
+        // Select "Blue (0x04)"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(2)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Blue (0x04)").click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Pen 8 = 0x04").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Pen 8 = 0x04").is_none());
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_pen_breakpoint_with_border_and_any_color() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select "Border"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Border")
+            .click();
+        harness.run();
+
+        // Check any color
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(2)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Border changed").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Border changed").is_none());
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_pen_breakpoint_with_any_pen_and_any_color() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Check any pen
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Check any color
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(2)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Disable breakpoint
+        harness.get_by_label("Any pen changed").click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::GateArrayPenColor(
+                            ronald_core::debug::breakpoint::GateArrayPenColorBreakpoint {
+                                pen: None,
+                                color: None,
+                                ..
+                            }
+                        )
+                    ) && !bp.enabled()
+                })
+        );
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_interrupt_breakpoint() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Add breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Add Interrupt Breakpoint")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Interrupt generated").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Interrupt generated").is_none());
+    }
 }
