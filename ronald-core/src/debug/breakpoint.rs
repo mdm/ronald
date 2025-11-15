@@ -530,6 +530,8 @@ impl Breakpoint for GateArrayPenColorBreakpoint {
 impl fmt::Display for GateArrayPenColorBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match (self.pen, self.color) {
+            (Some(16), Some(color)) => write!(f, "Border = 0x{:02X}", color),
+            (Some(16), None) => write!(f, "Border changed"),
             (Some(pen), Some(color)) => write!(f, "Pen {} = 0x{:02X}", pen, color),
             (Some(pen), None) => write!(f, "Pen {} changed", pen),
             (None, Some(color)) => write!(f, "Any pen = 0x{:02X}", color),
