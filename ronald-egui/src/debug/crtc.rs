@@ -502,6 +502,10 @@ impl CrtcDebugWindow {
     }
 
     fn add_horizontal_sync_breakpoint(&mut self, debugger: &mut impl Debugger) {
+        if !self.hsync_on_start && !self.hsync_on_end {
+            return;
+        }
+
         let breakpoint =
             AnyBreakpoint::crtc_horizontal_sync_breakpoint(self.hsync_on_start, self.hsync_on_end);
         debugger.breakpoint_manager().add_breakpoint(breakpoint);
@@ -511,6 +515,10 @@ impl CrtcDebugWindow {
     }
 
     fn add_vertical_sync_breakpoint(&mut self, debugger: &mut impl Debugger) {
+        if !self.vsync_on_start && !self.vsync_on_end {
+            return;
+        }
+
         let breakpoint =
             AnyBreakpoint::crtc_vertical_sync_breakpoint(self.vsync_on_start, self.vsync_on_end);
         debugger.breakpoint_manager().add_breakpoint(breakpoint);
@@ -520,6 +528,10 @@ impl CrtcDebugWindow {
     }
 
     fn add_display_enable_breakpoint(&mut self, debugger: &mut impl Debugger) {
+        if !self.display_enable_on_start && !self.display_enable_on_end {
+            return;
+        }
+
         let breakpoint = AnyBreakpoint::crtc_dispaly_enable_breakpoint(
             self.display_enable_on_start,
             self.display_enable_on_end,
@@ -1215,6 +1227,33 @@ mod gui_tests {
     }
 
     #[test]
+    fn test_crtc_debug_window_hsync_breakpoint_invalid() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CrtcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(3)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
+    }
+
+    #[test]
     fn test_crtc_debug_window_vsync_breakpoint() {
         let mut debugger = TestDebugger::default();
         let mut window = CrtcDebugWindow {
@@ -1262,6 +1301,33 @@ mod gui_tests {
         harness.run();
 
         assert!(harness.query_by_label("VSYNC start or end").is_none());
+    }
+
+    #[test]
+    fn test_crtc_debug_window_vsync_breakpoint_invalid() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CrtcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(4)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
     }
 
     #[test]
@@ -1320,5 +1386,32 @@ mod gui_tests {
                 .query_by_label("DISP. ENABLE start or end")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn test_crtc_debug_window_display_enable_breakpoint_invalid() {
+        let mut debugger = TestDebugger::default();
+        let mut window = CrtcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(5)
+            .unwrap()
+            .click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
     }
 }
