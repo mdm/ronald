@@ -2,11 +2,18 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::event::CpuDebugEvent;
+use crate::debug::view::CpuDebugView;
+use crate::debug::{DebugSource, Debuggable, Snapshottable};
 use crate::system::bus::Bus;
-use crate::system::instruction::{Decoder, Instruction, InterruptMode, JumpTest, Operand};
+use crate::system::instruction::{
+    DecodedInstruction, Decoder, Instruction, InterruptMode, JumpTest, Operand,
+};
 use crate::system::memory::{MemManage, MemRead, MemWrite};
+use crate::system::MasterClockTick;
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Register8 {
     A,
     F,
@@ -24,6 +31,7 @@ pub enum Register8 {
     IYL,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Register16 {
     AF,
     BC,
@@ -36,17 +44,25 @@ pub enum Register16 {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct RegisterFile {
+struct RegisterFile {
     #[serde(rename = "registers")]
     data: Vec<u16>,
+    master_clock: MasterClockTick,
 }
 
 impl RegisterFile {
     fn new() -> RegisterFile {
-        RegisterFile { data: vec![0; 14] }
+        RegisterFile {
+            data: vec![0; 14],
+            master_clock: MasterClockTick::default(),
+        }
     }
 
-    pub fn read_byte(&self, register: &Register8) -> u8 {
+    fn step(&mut self, master_clock: MasterClockTick) {
+        self.master_clock = master_clock;
+    }
+
+    fn read_byte(&self, register: &Register8) -> u8 {
         let value = match register {
             Register8::A => self.data[0] >> 8,
             Register8::F => self.data[0] & 0xff,
@@ -73,51 +89,273 @@ impl RegisterFile {
 
         match register {
             Register8::A => {
+                let was = self.data[0];
                 self.data[0] = (value << 8) + (self.data[0] & 0xff);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::A,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::AF,
+                        is: self.data[0],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::F => {
+                let was = self.data[0];
                 self.data[0] = (self.data[0] & 0xff00) + value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::F,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::AF,
+                        is: self.data[0],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::B => {
+                let was = self.data[1];
                 self.data[1] = (value << 8) + (self.data[1] & 0xff);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::B,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::BC,
+                        is: self.data[1],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::C => {
+                let was = self.data[1];
                 self.data[1] = (self.data[1] & 0xff00) + value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::C,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::BC,
+                        is: self.data[1],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::D => {
+                let was = self.data[2];
                 self.data[2] = (value << 8) + (self.data[2] & 0xff);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::D,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::DE,
+                        is: self.data[2],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::E => {
+                let was = self.data[2];
                 self.data[2] = (self.data[2] & 0xff00) + value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::E,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::DE,
+                        is: self.data[2],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::H => {
+                let was = self.data[3];
                 self.data[3] = (value << 8) + (self.data[3] & 0xff);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::H,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::HL,
+                        is: self.data[3],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::L => {
+                let was = self.data[3];
                 self.data[3] = (self.data[3] & 0xff00) + value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::L,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::HL,
+                        is: self.data[3],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::I => {
+                let was = self.data[8];
                 self.data[8] = (self.data[8] & 0xff00) + value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::I,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::R => {
+                let was = self.data[9];
                 self.data[9] = (self.data[9] & 0xff00) + value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::R,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::IXH => {
+                let was = self.data[10];
                 self.data[10] = (value << 8) + (self.data[10] & 0xff);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::IXH,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IX,
+                        is: self.data[10],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::IXL => {
+                let was = self.data[10];
                 self.data[10] = (self.data[10] & 0xff00) + value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::IXL,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IX,
+                        is: self.data[10],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::IYH => {
+                let was = self.data[11];
                 self.data[11] = (value << 8) + (self.data[11] & 0xff);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::IYH,
+                        is: value as u8,
+                        was: (was >> 8) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IY,
+                        is: self.data[11],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register8::IYL => {
+                let was = self.data[11];
                 self.data[11] = (self.data[11] & 0xff00) + value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register8Written {
+                        register: Register8::IYL,
+                        is: value as u8,
+                        was: (was & 0xff) as u8,
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IY,
+                        is: self.data[11],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
         }
     }
 
-    pub fn read_word(&self, register: &Register16) -> u16 {
+    fn read_word(&self, register: &Register16) -> u16 {
         match register {
             Register16::AF => self.data[0],
             Register16::BC => self.data[1],
@@ -133,38 +371,182 @@ impl RegisterFile {
     fn write_word(&mut self, register: &Register16, value: u16) {
         match register {
             Register16::AF => {
+                let was = self.data[0];
                 self.data[0] = value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::AF,
+                        is: self.data[0],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::BC => {
+                let was = self.data[1];
                 self.data[1] = value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::BC,
+                        is: self.data[1],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::DE => {
+                let was = self.data[2];
                 self.data[2] = value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::DE,
+                        is: self.data[2],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::HL => {
+                let was = self.data[3];
                 self.data[3] = value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::HL,
+                        is: self.data[3],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::IX => {
+                let was = self.data[10];
                 self.data[10] = value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IX,
+                        is: self.data[10],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::IY => {
+                let was = self.data[11];
                 self.data[11] = value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::IY,
+                        is: self.data[11],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::SP => {
+                let was = self.data[12];
                 self.data[12] = value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::SP,
+                        is: self.data[12],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
             Register16::PC => {
+                let was = self.data[13];
                 self.data[13] = value;
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::PC,
+                        is: self.data[13],
+                        was,
+                    },
+                    self.master_clock,
+                );
             }
         }
     }
 
     fn swap_word(&mut self, register: &Register16) {
         match register {
-            Register16::AF => self.data.swap(0, 4),
-            Register16::BC => self.data.swap(1, 5),
-            Register16::DE => self.data.swap(2, 6),
-            Register16::HL => self.data.swap(3, 7),
+            Register16::AF => {
+                self.data.swap(0, 4);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::AF,
+                        is: self.data[0],
+                        was: self.data[4],
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::ShadowRegister16Written {
+                        register: Register16::AF,
+                        is: self.data[4],
+                        was: self.data[0],
+                    },
+                    self.master_clock,
+                );
+            }
+            Register16::BC => {
+                self.data.swap(1, 5);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::BC,
+                        is: self.data[1],
+                        was: self.data[5],
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::ShadowRegister16Written {
+                        register: Register16::BC,
+                        is: self.data[5],
+                        was: self.data[1],
+                    },
+                    self.master_clock,
+                );
+            }
+            Register16::DE => {
+                self.data.swap(2, 6);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::DE,
+                        is: self.data[2],
+                        was: self.data[6],
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::ShadowRegister16Written {
+                        register: Register16::DE,
+                        is: self.data[6],
+                        was: self.data[2],
+                    },
+                    self.master_clock,
+                );
+            }
+            Register16::HL => {
+                self.data.swap(3, 7);
+                self.emit_debug_event(
+                    CpuDebugEvent::Register16Written {
+                        register: Register16::HL,
+                        is: self.data[3],
+                        was: self.data[7],
+                    },
+                    self.master_clock,
+                );
+                self.emit_debug_event(
+                    CpuDebugEvent::ShadowRegister16Written {
+                        register: Register16::HL,
+                        is: self.data[7],
+                        was: self.data[3],
+                    },
+                    self.master_clock,
+                );
+            }
             _ => unreachable!(),
         }
     }
@@ -172,21 +554,116 @@ impl RegisterFile {
 
 impl fmt::Display for RegisterFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "AF: {:#06x}    ", self.data[0])?;
-        writeln!(f, "AF': {:#06x}", self.data[4])?;
-        write!(f, "BC: {:#06x}    ", self.data[1])?;
-        writeln!(f, "BC': {:#06x}", self.data[5])?;
-        write!(f, "DE: {:#06x}    ", self.data[2])?;
-        writeln!(f, "DE': {:#06x}", self.data[6])?;
-        write!(f, "HL: {:#06x}    ", self.data[3])?;
-        writeln!(f, "HL': {:#06x}", self.data[7])?;
-        writeln!(f, " I: {:#04x}", self.data[8] & 0xff)?;
-        writeln!(f, " R: {:#04x}", self.data[9] & 0xff)?;
-        writeln!(f, "IX: {:#06x}", self.data[10])?;
-        writeln!(f, "IY: {:#06x}", self.data[11])?;
-        writeln!(f, "SP: {:#06x}", self.data[12])?;
-        writeln!(f, "PC: {:#06x}", self.data[13])
+        write!(f, "AF: {:#06X}    ", self.data[0])?;
+        writeln!(f, "AF': {:#06X}", self.data[4])?;
+        write!(f, "BC: {:#06X}    ", self.data[1])?;
+        writeln!(f, "BC': {:#06X}", self.data[5])?;
+        write!(f, "DE: {:#06X}    ", self.data[2])?;
+        writeln!(f, "DE': {:#06X}", self.data[6])?;
+        write!(f, "HL: {:#06X}    ", self.data[3])?;
+        writeln!(f, "HL': {:#06X}", self.data[7])?;
+        writeln!(f, " I: {:#04X}", self.data[8] & 0xff)?;
+        writeln!(f, " R: {:#04X}", self.data[9] & 0xff)?;
+        writeln!(f, "IX: {:#06X}", self.data[10])?;
+        writeln!(f, "IY: {:#06X}", self.data[11])?;
+        writeln!(f, "SP: {:#06X}", self.data[12])?;
+        writeln!(f, "PC: {:#06X}", self.data[13])
     }
+}
+
+struct RegisterFileDebugView {
+    pub register_a: u8,
+    pub register_f: u8,
+    pub register_b: u8,
+    pub register_c: u8,
+    pub register_d: u8,
+    pub register_e: u8,
+    pub register_h: u8,
+    pub register_l: u8,
+    pub shadow_register_a: u8,
+    pub shadow_register_f: u8,
+    pub shadow_register_b: u8,
+    pub shadow_register_c: u8,
+    pub shadow_register_d: u8,
+    pub shadow_register_e: u8,
+    pub shadow_register_h: u8,
+    pub shadow_register_l: u8,
+    pub register_i: u8,
+    pub register_r: u8,
+    pub register_ixh: u8,
+    pub register_ixl: u8,
+    pub register_iyh: u8,
+    pub register_iyl: u8,
+    pub register_sp: u16,
+    pub register_pc: u16,
+}
+
+impl Snapshottable for RegisterFile {
+    type View = RegisterFileDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        let mut registers = self.clone();
+        let register_a = registers.read_byte(&Register8::A);
+        let register_f = registers.read_byte(&Register8::F);
+        let register_b = registers.read_byte(&Register8::B);
+        let register_c = registers.read_byte(&Register8::C);
+        let register_d = registers.read_byte(&Register8::D);
+        let register_e = registers.read_byte(&Register8::E);
+        let register_h = registers.read_byte(&Register8::H);
+        let register_l = registers.read_byte(&Register8::L);
+        registers.swap_word(&Register16::AF);
+        registers.swap_word(&Register16::BC);
+        registers.swap_word(&Register16::DE);
+        registers.swap_word(&Register16::HL);
+        let shadow_register_a = registers.read_byte(&Register8::A);
+        let shadow_register_f = registers.read_byte(&Register8::F);
+        let shadow_register_b = registers.read_byte(&Register8::B);
+        let shadow_register_c = registers.read_byte(&Register8::C);
+        let shadow_register_d = registers.read_byte(&Register8::D);
+        let shadow_register_e = registers.read_byte(&Register8::E);
+        let shadow_register_h = registers.read_byte(&Register8::H);
+        let shadow_register_l = registers.read_byte(&Register8::L);
+        let register_i = registers.read_byte(&Register8::I);
+        let register_r = registers.read_byte(&Register8::R);
+        let register_ixh = registers.read_byte(&Register8::IXH);
+        let register_ixl = registers.read_byte(&Register8::IXL);
+        let register_iyh = registers.read_byte(&Register8::IYH);
+        let register_iyl = registers.read_byte(&Register8::IYL);
+        let register_sp = registers.read_word(&Register16::SP);
+        let register_pc = registers.read_word(&Register16::PC);
+
+        Self::View {
+            register_a,
+            register_f,
+            register_b,
+            register_c,
+            register_d,
+            register_e,
+            register_h,
+            register_l,
+            shadow_register_a,
+            shadow_register_f,
+            shadow_register_b,
+            shadow_register_c,
+            shadow_register_d,
+            shadow_register_e,
+            shadow_register_h,
+            shadow_register_l,
+            register_i,
+            register_r,
+            register_ixh,
+            register_ixl,
+            register_iyh,
+            register_iyl,
+            register_sp,
+            register_pc,
+        }
+    }
+}
+
+impl Debuggable for RegisterFile {
+    const SOURCE: DebugSource = DebugSource::Cpu;
+    type Event = CpuDebugEvent;
 }
 
 enum Flag {
@@ -216,13 +693,9 @@ pub trait Cpu: Default {
         &mut self,
         memory: &mut (impl MemRead + MemWrite + MemManage),
         bus: &mut impl Bus,
-    ) -> (u8, bool);
+        master_clock: MasterClockTick,
+    ) -> (u8, bool, Option<DecodedInstruction>);
     fn request_interrupt(&mut self);
-    fn disassemble(
-        &mut self,
-        memory: &mut (impl MemRead + MemWrite + MemManage),
-        count: usize,
-    ) -> Vec<(u16, String)>;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -232,14 +705,15 @@ where
     D: Decoder,
 {
     #[serde(flatten)]
-    pub registers: RegisterFile, // TODO: make this private
-    pub decoder: D, // TODO: make this private
+    registers: RegisterFile,
+    decoder: D, // TODO: make this private
     iff1: bool,
     iff2: bool,
     halted: bool,
     interrupt_mode: InterruptMode,
     enable_interrupt: bool,
     irq_received: bool,
+    master_clock: MasterClockTick,
 }
 
 impl<D> Default for ZilogZ80<D>
@@ -268,6 +742,7 @@ where
             interrupt_mode: InterruptMode::default(),
             enable_interrupt: false,
             irq_received: false,
+            master_clock: MasterClockTick::default(),
         };
 
         cpu.reset();
@@ -390,6 +865,10 @@ where
             match self.interrupt_mode {
                 InterruptMode::Mode1 => {
                     log::trace!("Handling interrupt");
+                    self.emit_debug_event(
+                        CpuDebugEvent::CallFetched { interrupt: true },
+                        self.master_clock,
+                    );
                     let old_pc = self.registers.read_word(&Register16::PC); // PC has already been set to next instruction
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
@@ -417,13 +896,17 @@ where
         &mut self,
         memory: &mut (impl MemRead + MemWrite + MemManage),
         bus: &mut impl Bus,
-    ) -> (u8, bool) {
+        master_clock: MasterClockTick,
+    ) -> (u8, bool, Option<DecodedInstruction>) {
+        self.master_clock = master_clock;
+        self.registers.step(self.master_clock);
+
         if self.halted {
             if self.handle_interrupt(memory) {
-                return (4, true);
+                return (4, true, None);
             }
 
-            return (1, false);
+            return (1, false, None);
         }
 
         if self.enable_interrupt {
@@ -438,7 +921,7 @@ where
 
         let (instruction, next_address) = self.decoder.decode(memory, pc as usize);
 
-        log::trace!("{:#06x}: {}", pc, &instruction);
+        log::trace!("{:#06X}: {}", pc, &instruction);
 
         let mut timing_in_nops = instruction.timing();
 
@@ -559,6 +1042,10 @@ where
                 unreachable!();
             }
             Instruction::Call(jump_test, Operand::Immediate16(address)) => {
+                self.emit_debug_event(
+                    CpuDebugEvent::CallFetched { interrupt: false },
+                    self.master_clock,
+                );
                 if self.check_jump(jump_test) {
                     let new_sp = self.registers.read_word(&Register16::SP) - 2;
                     self.registers.write_word(&Register16::SP, new_sp);
@@ -711,12 +1198,13 @@ where
                     carry = true;
                 }
 
+                // TODO: verify overflow behavior and add tests
                 if self.check_flag(Flag::AddSubtract) {
                     half_carry = half_carry && (value & 0xf) < 0x6;
-                    value -= correction;
+                    value = value.wrapping_sub(correction);
                 } else {
                     half_carry = (value & 0xf) > 0x9;
-                    value += correction;
+                    value = value.wrapping_add(correction);
                 }
 
                 self.registers.write_byte(&Register8::A, value);
@@ -1295,6 +1783,10 @@ where
                 unreachable!();
             }
             Instruction::Ret(jump_test) => {
+                self.emit_debug_event(
+                    CpuDebugEvent::ReturnFetched { interrupt: false },
+                    self.master_clock,
+                );
                 if self.check_jump(jump_test) {
                     let old_sp = self.registers.read_word(&Register16::SP);
                     self.registers.write_word(&Register16::SP, old_sp + 2);
@@ -1306,12 +1798,20 @@ where
                 }
             }
             Instruction::Reti => {
+                self.emit_debug_event(
+                    CpuDebugEvent::ReturnFetched { interrupt: true },
+                    self.master_clock,
+                );
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
                 self.registers
                     .write_word(&Register16::PC, memory.read_word(old_sp as usize));
             }
             Instruction::Retn => {
+                self.emit_debug_event(
+                    CpuDebugEvent::ReturnFetched { interrupt: true },
+                    self.master_clock,
+                );
                 self.iff1 = self.iff2;
                 let old_sp = self.registers.read_word(&Register16::SP);
                 self.registers.write_word(&Register16::SP, old_sp + 2);
@@ -1662,33 +2162,80 @@ where
             }
         }
 
+        let decoded_instruction = DecodedInstruction {
+            address: pc,
+            instruction,
+            length: next_address - pc as usize,
+        };
+
         if !prevent_interrupt && self.handle_interrupt(memory) {
-            return (timing_in_nops + 4, true);
+            return (timing_in_nops + 4, true, Some(decoded_instruction));
         }
 
-        (timing_in_nops, false)
+        (timing_in_nops, false, Some(decoded_instruction))
     }
 
     fn request_interrupt(&mut self) {
         self.irq_received = true;
     }
+}
 
-    fn disassemble(
-        &mut self,
-        memory: &mut (impl MemRead + MemWrite + MemManage),
-        count: usize,
-    ) -> Vec<(u16, String)> {
-        let mut address = self.registers.read_word(&Register16::PC);
+impl<D> Snapshottable for ZilogZ80<D>
+where
+    D: Decoder,
+{
+    type View = CpuDebugView;
 
-        let mut assembly = Vec::with_capacity(count);
-        for _ in 0..count {
-            let (instruction, next_address) = self.decoder.decode(memory, address as usize);
-            assembly.push((address, format!("{instruction}")));
-            address = next_address as u16;
+    fn debug_view(&self) -> Self::View {
+        let registers = self.registers.debug_view();
+        let iff1 = self.iff1;
+        let iff2 = self.iff2;
+        let halted = self.halted;
+        let interrupt_mode = self.interrupt_mode;
+        let enable_interrupt = self.enable_interrupt;
+        let irq_received = self.irq_received;
+
+        Self::View {
+            register_a: registers.register_a,
+            register_f: registers.register_f,
+            register_b: registers.register_b,
+            register_c: registers.register_c,
+            register_d: registers.register_d,
+            register_e: registers.register_e,
+            register_h: registers.register_h,
+            register_l: registers.register_l,
+            shadow_register_a: registers.shadow_register_a,
+            shadow_register_f: registers.shadow_register_f,
+            shadow_register_b: registers.shadow_register_b,
+            shadow_register_c: registers.shadow_register_c,
+            shadow_register_d: registers.shadow_register_d,
+            shadow_register_e: registers.shadow_register_e,
+            shadow_register_h: registers.shadow_register_h,
+            shadow_register_l: registers.shadow_register_l,
+            register_i: registers.register_i,
+            register_r: registers.register_r,
+            register_ixh: registers.register_ixh,
+            register_ixl: registers.register_ixl,
+            register_iyh: registers.register_iyh,
+            register_iyl: registers.register_iyl,
+            register_sp: registers.register_sp,
+            register_pc: registers.register_pc,
+            iff1,
+            iff2,
+            halted,
+            interrupt_mode,
+            enable_interrupt,
+            irq_received,
         }
-
-        assembly
     }
+}
+
+impl<D> Debuggable for ZilogZ80<D>
+where
+    D: Decoder,
+{
+    const SOURCE: DebugSource = DebugSource::Cpu;
+    type Event = CpuDebugEvent;
 }
 
 #[cfg(test)]
@@ -1696,20 +2243,25 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
+        debug::{event::DebugEvent, record_debug_events, DebugSource, EventSubscription},
         system::{
             bus::Bus,
-            instruction::AlgorithmicDecoder,
-            memory::{MemManage, Ram},
+            clock::MasterClock,
+            instruction::{AlgorithmicDecoder, Instruction, JumpTest, Operand, TestDecoder},
+            memory::{MemManage, Ram, TestMemory},
         },
         AudioSink, VideoSink,
     };
 
     use super::*;
 
+    // helper structs
+
     struct ZexHarness {
         cpu: ZilogZ80<AlgorithmicDecoder>,
         memory: Ram,
         bus: BlackHole,
+        master_clock: MasterClock,
     }
 
     impl ZexHarness {
@@ -1722,10 +2274,12 @@ mod tests {
                 cpu: ZilogZ80::new(0x100),
                 memory,
                 bus: BlackHole::new(),
+                master_clock: MasterClock::default(),
             }
         }
 
         pub fn emulate(&mut self) -> usize {
+            record_debug_events(false);
             let mut output = String::new();
 
             let start = std::time::Instant::now();
@@ -1756,14 +2310,22 @@ mod tests {
                             }
                             _ => unreachable!(),
                         }
-                        let (cycles, _) =
-                            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                        let (cycles, _, _) = self.cpu.fetch_and_execute(
+                            &mut self.memory,
+                            &mut self.bus,
+                            self.master_clock.current(),
+                        );
                         total_cycles += cycles as usize;
+                        self.master_clock.step(cycles as u64);
                     }
                     _ => {
-                        let (cycles, _) =
-                            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+                        let (cycles, _, _) = self.cpu.fetch_and_execute(
+                            &mut self.memory,
+                            &mut self.bus,
+                            self.master_clock.current(),
+                        );
                         total_cycles += cycles as usize;
+                        self.master_clock.step(cycles as u64);
                     }
                 }
             }
@@ -1771,9 +2333,10 @@ mod tests {
 
             let elapsed_seconds = start.elapsed().as_secs_f64();
             println!(
-                "Executed {total_cycles} in {elapsed_seconds} seconds ({} MHz).",
+                "Executed {total_cycles} cycles in {elapsed_seconds} seconds ({} MHz).",
                 total_cycles as f64 / 1_000_000.0 / elapsed_seconds
             );
+            record_debug_events(true);
 
             output.matches("OK").count()
         }
@@ -1802,6 +2365,7 @@ mod tests {
             _memory: &mut impl MemManage,
             _video: &mut impl VideoSink,
             _audio: &mut impl AudioSink,
+            _master_clock: MasterClockTick,
         ) -> bool {
             unimplemented!();
         }
@@ -1823,11 +2387,723 @@ mod tests {
         }
     }
 
+    // tests start here
+
     #[test]
     #[ignore = "this is an extremely slow test"]
     fn test_zexdoc_slow() {
         let rom = include_bytes!("../../rom/zexdoc.rom");
         let mut harness = ZexHarness::new(rom);
         assert_eq!(harness.emulate(), 67);
+    }
+
+    #[test]
+    fn test_register_file_write_byte_all_registers() {
+        let test_cases = [
+            // (register, test_value, expected_16bit_reg, expected_16bit_value)
+            (Register8::A, 0x42, Register16::AF, 0x4200),
+            (Register8::F, 0x80, Register16::AF, 0x0080),
+            (Register8::B, 0x12, Register16::BC, 0x1200),
+            (Register8::C, 0x34, Register16::BC, 0x0034),
+            (Register8::D, 0x56, Register16::DE, 0x5600),
+            (Register8::E, 0x78, Register16::DE, 0x0078),
+            (Register8::H, 0x9A, Register16::HL, 0x9A00),
+            (Register8::L, 0xBC, Register16::HL, 0x00BC),
+            (Register8::I, 0xDE, Register16::AF, 0x0000), // I doesn't affect 16-bit pairs
+            (Register8::R, 0xF0, Register16::AF, 0x0000), // R doesn't affect 16-bit pairs
+            (Register8::IXH, 0x11, Register16::IX, 0x1100),
+            (Register8::IXL, 0x22, Register16::IX, 0x0022),
+            (Register8::IYH, 0x33, Register16::IY, 0x3300),
+            (Register8::IYL, 0x44, Register16::IY, 0x0044),
+        ];
+
+        for (register, test_value, expected_16bit_reg, expected_16bit_value) in test_cases {
+            let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+            let mut register_file = RegisterFile::new();
+            register_file.write_byte(&register, test_value);
+
+            let event_count = subscription.pending_count();
+            let mut has_8bit_event = false;
+            let mut has_16bit_event = false;
+            subscription.with_events(|record| {
+                if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register8Written {
+                    register: r,
+                    is: v,
+                    was: 0x00,
+                })) if *r == register && *v == test_value) {
+                    has_8bit_event = true;
+                }
+
+                if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: r,
+                    is: v,
+                    was: 0x0000,
+                })) if *r == expected_16bit_reg && *v == expected_16bit_value) {
+                    has_16bit_event = true;
+                }
+            });
+
+            // Check for 8-bit register change event
+            assert!(
+                has_8bit_event,
+                "Should emit 8-bit register change event for {:?}",
+                register
+            );
+
+            // For I and R registers, no 16-bit event should be emitted
+            if matches!(register, Register8::I | Register8::R) {
+                assert_eq!(
+                    event_count, 1,
+                    "I and R registers should only emit 8-bit events"
+                );
+            } else {
+                // Should emit both 8-bit and 16-bit events
+                assert_eq!(
+                    event_count, 2,
+                    "Should emit both 8-bit and 16-bit events for {:?}",
+                    register
+                );
+
+                // Check for 16-bit register change event
+                assert!(
+                    has_16bit_event,
+                    "Should emit 16-bit register change event for {:?} -> {:?}",
+                    register, expected_16bit_reg
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_register_file_write_word_all_registers() {
+        let test_cases = [
+            (Register16::AF, 0x1234),
+            (Register16::BC, 0x5678),
+            (Register16::DE, 0x9ABC),
+            (Register16::HL, 0xDEF0),
+            (Register16::IX, 0x1122),
+            (Register16::IY, 0x3344),
+            (Register16::SP, 0x5566),
+            (Register16::PC, 0x7788),
+        ];
+
+        for (register, test_value) in test_cases {
+            let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+            let mut register_file = RegisterFile::new();
+            register_file.write_word(&register, test_value);
+
+            assert_eq!(
+                subscription.pending_count(),
+                1,
+                "Should emit only 16-bit register event for {:?}",
+                register
+            );
+
+            // Check for 16-bit register change event
+            let mut has_16bit_event = false;
+            subscription.with_events(|record| {
+                    if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                        register: r,
+                        is: v,
+                        was: 0x0000,
+                    })) if *r == register && *v == test_value) {
+                        has_16bit_event = true;
+                    }
+                });
+            assert!(
+                has_16bit_event,
+                "Should emit correct 16-bit register change event for {:?}",
+                register
+            );
+        }
+    }
+
+    #[test]
+    fn test_register_file_swap_word_all_registers() {
+        let test_cases = [
+            (Register16::AF, 0x1234, 0x5678),
+            (Register16::BC, 0x9ABC, 0xDEF0),
+            (Register16::DE, 0x1122, 0x3344),
+            (Register16::HL, 0x5566, 0x7788),
+        ];
+
+        for (register, main_value, shadow_value) in test_cases {
+            let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+            let mut register_file = RegisterFile::new();
+
+            // Set up initial values - write to main register and shadow register
+            register_file.write_word(&register, main_value);
+
+            // Set shadow register value by direct data manipulation for testing
+            let shadow_index = match register {
+                Register16::AF => 4,
+                Register16::BC => 5,
+                Register16::DE => 6,
+                Register16::HL => 7,
+                _ => unreachable!(),
+            };
+            register_file.data[shadow_index] = shadow_value;
+
+            // Clear events from setup
+            subscription.with_events(|_| {});
+            assert!(!subscription.has_pending());
+
+            // Perform the swap
+            register_file.swap_word(&register);
+
+            assert_eq!(
+                subscription.pending_count(),
+                2,
+                "Should emit both Register16Written and ShadowRegister16Written events for {:?}",
+                register
+            );
+
+            // Check for Register16Written event (main register gets shadow value)
+            // Check for ShadowRegister16Written event (shadow register gets main value)
+            let mut has_main_event = false;
+            let mut has_shadow_event = false;
+            subscription.with_events(|record| {
+                if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: r,
+                    is: v,
+                    was: old_v,
+                })) if *r == register && *v == shadow_value && *old_v == main_value) {
+                    has_main_event = true;
+                }
+
+                if matches!((record.source, &record.event), (DebugSource::Cpu, DebugEvent::Cpu(CpuDebugEvent::ShadowRegister16Written {
+                    register: r,
+                    is: v,
+                    was: old_v,
+                })) if *r == register && *v == main_value && *old_v == shadow_value) {
+                    has_shadow_event = true;
+                }
+            });
+            assert!(
+                has_main_event,
+                "Should emit Register16Written event for {:?}",
+                register
+            );
+            assert!(
+                has_shadow_event,
+                "Should emit ShadowRegister16Written event for {:?}",
+                register
+            );
+        }
+    }
+
+    #[test]
+    fn test_call_instruction_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        // Create CPU with TestDecoder that returns CALL instruction
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x1000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Call(
+            JumpTest::Unconditional,
+            Operand::Immediate16(0x2000),
+        )]);
+
+        // Set up stack pointer to avoid underflow
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Execute the CALL instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that CallFetched event comes before PC change event
+        let call_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x2000,
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            call_event_pos.is_some(),
+            "CallFetched event should be emitted"
+        );
+        assert!(pc_change_pos.is_some(), "PC change event should be emitted");
+        assert!(
+            call_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "CallFetched event should come before PC change event"
+        );
+    }
+
+    #[test]
+    fn test_conditional_call_instruction_debug_event_ordering_taken() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x1000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Call(
+            JumpTest::Zero,
+            Operand::Immediate16(0x2000),
+        )]);
+
+        // Set up stack pointer to avoid underflow
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Set zero flag to make conditional call taken
+        cpu.set_flag(Flag::Zero, true);
+
+        // Execute the CALL instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that CallFetched event comes before PC change event
+        let call_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x2000,
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            call_event_pos.is_some(),
+            "CallFetched event should be emitted for taken conditional call"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for taken conditional call"
+        );
+        assert!(
+            call_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "CallFetched event should come before PC change event for taken conditional call"
+        );
+    }
+
+    #[test]
+    fn test_conditional_call_instruction_debug_event_ordering_not_taken() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x1000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Call(
+            JumpTest::Zero,
+            Operand::Immediate16(0x2000),
+        )]);
+
+        // Set up stack pointer to avoid underflow
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Clear zero flag to make conditional call not taken
+        cpu.set_flag(Flag::Zero, false);
+
+        // Execute the CALL instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that CallFetched event comes before PC change event
+        let call_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1001, // Should advance to next instruction
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            call_event_pos.is_some(),
+            "CallFetched event should be emitted even for not taken conditional call"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for not taken conditional call"
+        );
+        assert!(
+            call_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "CallFetched event should come before PC change event for not taken conditional call"
+        );
+    }
+
+    #[test]
+    fn test_return_instruction_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Ret(JumpTest::Unconditional)]);
+
+        // Set up memory to return 0x1500 when stack is read
+        let mut memory = TestMemory::new(vec![0x00, 0x15]); // Little endian 0x1500
+        let mut bus = BlackHole::new();
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RET instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1500, // Return address from stack
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted"
+        );
+        assert!(pc_change_pos.is_some(), "PC change event should be emitted");
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event"
+        );
+    }
+
+    #[test]
+    fn test_conditional_return_instruction_debug_event_ordering_taken() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Ret(JumpTest::Zero)]);
+
+        let mut memory = TestMemory::new(vec![0x00, 0x15]); // Little endian 0x1500
+        let mut bus = BlackHole::new();
+
+        // Set zero flag to make conditional return taken
+        cpu.set_flag(Flag::Zero, true);
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RET instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1500, // Return address from stack
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted for taken conditional return"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for taken conditional return"
+        );
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event for taken conditional return"
+        );
+    }
+
+    #[test]
+    fn test_conditional_return_instruction_debug_event_ordering_not_taken() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Ret(JumpTest::Zero)]);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Clear zero flag to make conditional return not taken
+        cpu.set_flag(Flag::Zero, false);
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RET instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x2001, // Should advance to next instruction
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted even for not taken conditional return"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for not taken conditional return"
+        );
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event for not taken conditional return"
+        );
+    }
+
+    #[test]
+    fn test_reti_instruction_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Reti]);
+
+        let mut memory = TestMemory::new(vec![0x00, 0x15]); // Little endian 0x1500
+        let mut bus = BlackHole::new();
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RETI instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: true })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1500, // Return address from stack
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted for RETI"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for RETI"
+        );
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event for RETI"
+        );
+    }
+
+    #[test]
+    fn test_retn_instruction_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x2000);
+        cpu.decoder = TestDecoder::new(vec![Instruction::Retn]);
+
+        let mut memory = TestMemory::new(vec![0x00, 0x15]); // Little endian 0x1500
+        let mut bus = BlackHole::new();
+
+        // Set up stack with return address
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        // Execute the RETN instruction
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that ReturnFetched event comes before PC change event
+        let return_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: true })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x1500, // Return address from stack
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            return_event_pos.is_some(),
+            "ReturnFetched event should be emitted for RETN"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for RETN"
+        );
+        assert!(
+            return_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "ReturnFetched event should come before PC change event for RETN"
+        );
+    }
+
+    #[test]
+    fn test_interrupt_handling_debug_event_ordering() {
+        let mut subscription = EventSubscription::new(DebugSource::Cpu);
+
+        let mut cpu: ZilogZ80<TestDecoder> = ZilogZ80::new(0x1000);
+        cpu.decoder = TestDecoder::new(vec![
+            Instruction::Nop, // Simple instruction at current PC
+        ]);
+
+        // Set up stack pointer to avoid underflow
+        cpu.registers.write_word(&Register16::SP, 0x8000);
+
+        let mut memory = TestMemory::new(vec![]);
+        let mut bus = BlackHole::new();
+
+        // Enable interrupts and set interrupt mode 1
+        cpu.iff1 = true;
+        cpu.interrupt_mode = InterruptMode::Mode1;
+
+        // Request an interrupt
+        cpu.request_interrupt();
+
+        // Execute instruction - this should handle the interrupt
+        cpu.fetch_and_execute(&mut memory, &mut bus, MasterClockTick::default());
+
+        let mut events = Vec::new();
+        subscription.with_events(|record| {
+            events.push(record.event.clone());
+        });
+
+        // Verify that CallFetched interrupt event comes before PC change event
+        let call_event_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: true })
+            )
+        });
+
+        let pc_change_pos = events.iter().position(|event| {
+            matches!(
+                event,
+                DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+                    register: Register16::PC,
+                    is: 0x0038, // Interrupt vector for mode 1
+                    ..
+                })
+            )
+        });
+
+        assert!(
+            call_event_pos.is_some(),
+            "CallFetched interrupt event should be emitted"
+        );
+        assert!(
+            pc_change_pos.is_some(),
+            "PC change event should be emitted for interrupt"
+        );
+        assert!(
+            call_event_pos.unwrap() < pc_change_pos.unwrap(),
+            "CallFetched interrupt event should come before PC change event"
+        );
     }
 }

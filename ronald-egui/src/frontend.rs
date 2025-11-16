@@ -1,6 +1,7 @@
 use std::{path::PathBuf, thread::spawn};
 
 use eframe::{egui, egui_wgpu};
+use egui::Vec2;
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
@@ -10,12 +11,19 @@ use web_sys;
 use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
-    system::SystemConfig,
+    debug::{
+        breakpoint::{AnyBreakpoint, Breakpoint, BreakpointManager},
+        view::SystemDebugView,
+    },
+    system::{SystemConfig, instruction::DecodedInstruction},
 };
 
-use crate::frontend::{audio::CpalAudio, video::EguiWgpuVideo};
 use crate::key_mapper::{KeyEvent, KeyMapStore, KeyMapper};
 use crate::utils::sync::{Shared, SharedExt, shared};
+use crate::{
+    debug::Debugger,
+    frontend::{audio::CpalAudio, video::EguiWgpuVideo},
+};
 
 mod audio;
 mod video;
@@ -27,14 +35,15 @@ struct File {
 }
 
 pub struct Frontend {
+    initialized: bool,
     driver: Driver,
     audio: CpalAudio,
     video: EguiWgpuVideo,
     frame_start: Instant,
     time_available: usize,
-    input_test: String,
     can_interact: bool,
     paused: bool,
+    hovered: Option<Instant>,
     picked_file_disk_a: Shared<Option<File>>,
     picked_file_disk_b: Shared<Option<File>>,
     picked_file_tape: Shared<Option<File>>,
@@ -42,11 +51,6 @@ pub struct Frontend {
 }
 
 impl Frontend {
-    pub fn new(render_state: &egui_wgpu::RenderState) -> Self {
-        let driver = Driver::new();
-        Self::with_driver_and_render_state(driver, render_state)
-    }
-
     pub fn with_config(render_state: &egui_wgpu::RenderState, config: &SystemConfig) -> Self {
         let driver = Driver::with_config(config);
         Self::with_driver_and_render_state(driver, render_state)
@@ -62,14 +66,15 @@ impl Frontend {
         let video = EguiWgpuVideo::new(render_state);
 
         Self {
+            initialized: false,
             driver,
             audio,
             video,
             frame_start: Instant::now(),
             time_available: 0,
-            input_test: String::new(),
             can_interact: true,
             paused: false,
+            hovered: None,
             picked_file_disk_a: shared(None),
             picked_file_disk_b: shared(None),
             picked_file_tape: shared(None),
@@ -92,19 +97,21 @@ impl Frontend {
                 self.run_frame(ctx, ui, size, false, can_interact, key_mapper);
             }
             None => {
-                egui::Window::new("Input Test").show(ctx, |ui| {
-                    ui.text_edit_singleline(&mut self.input_test);
-                });
-
                 let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
 
-                egui::Window::new("Screen")
+                if let Some(window) = egui::Window::new("Screen")
                     .collapsible(false)
                     .resizable(false)
                     .default_size(size)
                     .show(ctx, |ui| {
                         self.run_frame(ctx, ui, size, true, can_interact, key_mapper);
-                    });
+                    })
+                    && !self.initialized
+                {
+                    let layer_id = window.response.layer_id;
+                    ctx.move_to_top(layer_id);
+                    self.initialized = true;
+                }
             }
         }
     }
@@ -223,20 +230,16 @@ impl Frontend {
         self.handle_picked_files();
 
         #[cfg(target_arch = "wasm32")]
-        if self.has_window_focus() && self.can_interact {
-            self.resume();
-        } else {
+        if !self.has_window_focus() || !self.can_interact {
             self.pause();
         }
         #[cfg(not(target_arch = "wasm32"))]
-        if self.can_interact {
-            self.resume();
-        } else {
+        if !self.can_interact {
             self.pause();
         }
 
         self.step_emulation();
-        self.draw_framebuffer(ctx, ui, size)
+        self.draw_framebuffer(ctx, ui, size, workbench)
     }
     fn handle_input<K>(&mut self, input: &egui::InputState, key_mapper: &mut KeyMapper<K>)
     where
@@ -351,15 +354,26 @@ impl Frontend {
         // TODO: Allow running at 60Hz??? Does CPC really support that?
         while self.time_available >= 20_000 {
             log::trace!("Stepping emulator for 20_000 microseconds");
-            self.driver.step(20_000, &mut self.video, &mut self.audio);
+            let breakpoint_hit = self.driver.step(20_000, &mut self.video, &mut self.audio);
             self.time_available -= 20_000; // TODO:: take into account actually executed cycles
+
+            if breakpoint_hit {
+                self.pause();
+                return;
+            }
         }
 
         if self.time_available > 0 {
             log::trace!("Stepping emulator for {} microseconds", self.time_available);
-            self.driver
-                .step(self.time_available, &mut self.video, &mut self.audio);
+            let breakpoint_hit =
+                self.driver
+                    .step(self.time_available, &mut self.video, &mut self.audio);
             self.time_available = 0; // TODO:: take into account actually executed cycles
+
+            if breakpoint_hit {
+                self.pause();
+                return;
+            }
         }
 
         log::trace!(
@@ -370,12 +384,35 @@ impl Frontend {
 
     fn draw_framebuffer(
         &mut self,
-        _ctx: &egui::Context,
+        ctx: &egui::Context,
         ui: &mut egui::Ui,
         size: egui::Vec2,
+        workbench: bool,
     ) -> egui::Response {
         let texture = egui::load::SizedTexture::new(self.video.framebuffer(), size);
-        ui.image(texture)
+        let response = ui.image(texture).interact(egui::Sense::click());
+
+        let hovered = response
+            .rect
+            .contains(ctx.input(|i| i.pointer.hover_pos()).unwrap_or_default());
+
+        let moved = ctx.input(|i| i.pointer.delta() != Vec2::new(0.0, 0.0)) || response.clicked();
+
+        if hovered && moved {
+            self.hovered = Some(Instant::now());
+        } else if let Some(hovered) = self.hovered
+            && Instant::now().duration_since(hovered).as_secs_f32() > 2.0
+        {
+            self.hovered = None;
+        } else if !hovered {
+            self.hovered = None;
+        }
+
+        if self.paused || self.hovered.is_some() {
+            self.draw_pause_overlay(ui, &response, workbench);
+        }
+
+        response
     }
 
     fn pause(&mut self) {
@@ -420,5 +457,102 @@ impl Frontend {
                 central_panel_size.y,
             )
         }
+    }
+
+    fn draw_pause_overlay(
+        &mut self,
+        ui: &mut egui::Ui,
+        screen_response: &egui::Response,
+        workbench: bool,
+    ) {
+        let rect = screen_response.rect;
+        let overlay_height = 40.0;
+        let overlay_rect = egui::Rect::from_min_size(
+            egui::Pos2::new(rect.min.x, rect.min.y),
+            egui::Vec2::new(rect.width(), overlay_height),
+        );
+
+        // Draw semi-transparent background
+        ui.painter().rect_filled(
+            overlay_rect,
+            egui::CornerRadius::default(),
+            egui::Color32::from_black_alpha(128),
+        );
+
+        // Draw the overlay content in a child UI
+        let mut child_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(overlay_rect)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+
+        child_ui.spacing_mut().item_spacing.x = 8.0;
+        child_ui.add_space(8.0);
+
+        let status_text = if self.paused { "Paused" } else { "Running" };
+
+        child_ui.colored_label(egui::Color32::WHITE, status_text);
+        child_ui.add_space(16.0);
+
+        if self.paused {
+            if child_ui.button("Run").clicked() {
+                self.resume();
+            }
+
+            if !workbench {
+                return;
+            }
+
+            child_ui.add_space(24.0);
+
+            if child_ui.button("Step Into").clicked() {
+                self.step_into();
+            }
+
+            if child_ui.button("Step Over").clicked() {
+                self.step_over();
+            }
+
+            if child_ui.button("Step Out").clicked() {
+                self.step_out();
+            }
+        } else if child_ui.button("Pause").clicked() {
+            self.pause();
+        }
+    }
+
+    fn step_into(&mut self) {
+        let breakpoint = AnyBreakpoint::step_into();
+        self.driver.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.resume();
+    }
+
+    fn step_over(&mut self) {
+        let breakpoint = AnyBreakpoint::step_over();
+        self.driver.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.resume();
+    }
+
+    fn step_out(&mut self) {
+        let breakpoint = AnyBreakpoint::step_out();
+        self.driver.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.resume();
+    }
+}
+
+impl Debugger for Frontend {
+    fn debug_view(&mut self) -> &SystemDebugView {
+        self.driver.debug_view()
+    }
+
+    fn breakpoint_manager(&mut self) -> &mut BreakpointManager {
+        self.driver.breakpoint_manager()
+    }
+
+    fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
+        self.driver.disassemble(start_address, count)
     }
 }

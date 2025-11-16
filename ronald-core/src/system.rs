@@ -1,4 +1,5 @@
 pub mod bus;
+pub mod clock;
 pub mod cpu;
 pub mod instruction;
 pub mod memory;
@@ -7,19 +8,19 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::view::{CpuDebugView, GateArrayDebugView, MemoryDebugView, SystemDebugView};
+use crate::debug::{record_debug_events, Snapshottable};
+use crate::system::bus::BusDebugView;
+use crate::system::clock::{MasterClock, MasterClockTick};
+use crate::system::instruction::{DecodedInstruction, Instruction};
 use crate::{AudioSink, VideoSink};
 
 use bus::crtc::AnyCrtController;
 use bus::gate_array::AnyGateArray;
 use bus::{Bus, StandardBus};
 use cpu::Cpu;
+use instruction::{AlgorithmicDecoder, Decoder};
 use memory::{AnyMemory, MemManage, MemRead, MemWrite, MemoryCpc6128, MemoryCpcX64};
-
-#[derive(Serialize, Deserialize)]
-pub struct DisassembledInstruction {
-    address: u16,
-    instruction: String,
-}
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(bound(
@@ -30,33 +31,42 @@ pub struct DisassembledInstruction {
 pub struct AmstradCpc<C, M, B>
 where
     C: Cpu,
-    M: MemRead + MemWrite + MemManage + Default,
+    M: MemRead + MemWrite + MemManage,
     B: Bus,
 {
     cpu: C,
     memory: M,
     #[serde(flatten)]
     bus: B,
-    master_clock: u64,
+    master_clock: MasterClock,
     disk_drives: DiskDrives,
+    last_instruction: Option<DecodedInstruction>,
 }
 
 impl<C, M, B> AmstradCpc<C, M, B>
 where
     C: Cpu,
-    M: MemRead + MemWrite + MemManage + Default,
+    M: MemRead + MemWrite + MemManage,
     B: Bus,
 {
     pub fn emulate(&mut self, video: &mut impl VideoSink, audio: &mut impl AudioSink) -> u8 {
-        let (cycles, interrupt_acknowledged) =
-            self.cpu.fetch_and_execute(&mut self.memory, &mut self.bus);
+        let (cycles, interrupt_acknowledged, executed_instruction) = self.cpu.fetch_and_execute(
+            &mut self.memory,
+            &mut self.bus,
+            self.master_clock.current(),
+        );
+        if executed_instruction.is_some() {
+            self.last_instruction = executed_instruction;
+        }
 
         // Master clock runs at 16MHz
         // CPU runs at 4MHz (master clock / 4)
         // cycles represents NOP time units, where 1 NOP = 4 CPU cycles = 16 master clock ticks
         for _ in 0..cycles {
-            self.master_clock += 16;
-            let interrupt = self.bus.step(&mut self.memory, video, audio);
+            self.master_clock.step(16);
+            let interrupt =
+                self.bus
+                    .step(&mut self.memory, video, audio, self.master_clock.current());
             if interrupt {
                 self.cpu.request_interrupt();
             }
@@ -83,16 +93,58 @@ where
         // TODO: allow loading tapes as well
         self.bus.load_disk(drive, rom, path);
     }
+}
 
-    pub fn disassemble(&mut self, count: usize) -> Vec<DisassembledInstruction> {
-        self.cpu
-            .disassemble(&mut self.memory, count)
-            .into_iter()
-            .map(|(address, instruction)| DisassembledInstruction {
+impl<C, M, B> AmstradCpc<C, M, B>
+where
+    C: Cpu,
+    M: MemRead + MemWrite + MemManage,
+    B: Bus,
+{
+    pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
+        record_debug_events(false);
+        let mut decoder = AlgorithmicDecoder::default();
+        let mut disassembly = Vec::with_capacity(count + 1);
+        let mut address = start_address;
+        if let Some(last_instruction) = &self.last_instruction {
+            disassembly.push(last_instruction.clone());
+        }
+        for _ in 0..count {
+            let (instruction, next_address) = decoder.decode(&self.memory, address as usize);
+            let length = next_address - address as usize;
+            disassembly.push(DecodedInstruction {
                 address,
                 instruction,
-            })
-            .collect()
+                length,
+            });
+            address = next_address as u16;
+        }
+        record_debug_events(true);
+        disassembly
+    }
+}
+
+impl<C, M, B> Snapshottable for AmstradCpc<C, M, B>
+where
+    C: Cpu + Snapshottable<View = CpuDebugView>,
+    M: MemRead + MemWrite + MemManage + Snapshottable<View = MemoryDebugView> + Default,
+    B: Bus + Snapshottable<View = BusDebugView>,
+{
+    type View = SystemDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        record_debug_events(false);
+        let bus_debug_view = self.bus.debug_view();
+        let debug_view = Self::View {
+            master_clock: self.master_clock.current(),
+            cpu: self.cpu.debug_view(),
+            memory: self.memory.debug_view(),
+            gate_array: bus_debug_view.gate_array,
+            crtc: bus_debug_view.crtc,
+        };
+        record_debug_events(true);
+
+        debug_view
     }
 }
 
@@ -191,8 +243,9 @@ where
             cpu,
             memory,
             bus,
-            master_clock: 0,
+            master_clock: MasterClock::default(),
             disk_drives: config.disk_drives,
+            last_instruction: None,
         }
     }
 }

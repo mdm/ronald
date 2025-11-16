@@ -1,0 +1,1914 @@
+use std::collections::HashMap;
+use std::fmt;
+
+use serde::de::value;
+
+use crate::debug::event::{CpuDebugEvent, CrtcDebugEvent, GateArrayDebugEvent, MemoryDebugEvent};
+use crate::debug::{DebugEvent, DebugSource, EventSubscription};
+use crate::system::bus::crtc::Register as CrtcRegister;
+use crate::system::clock::MasterClockTick;
+use crate::system::cpu::{Register16, Register8};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BreakpointId(usize);
+
+pub trait Breakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool;
+    fn enabled(&self) -> bool;
+    fn set_enabled(&mut self, enabled: bool);
+    fn one_shot(&self) -> bool;
+    fn set_one_shot(&mut self, one_shot: bool);
+    fn triggered(&self) -> Option<MasterClockTick>;
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>);
+}
+
+#[derive(Debug, Clone)]
+pub struct CpuRegister8Breakpoint {
+    pub register: Register8,
+    pub value: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CpuRegister8Breakpoint {
+    pub fn new(register: Register8, value: Option<u8>) -> Self {
+        Self {
+            register,
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CpuRegister8Breakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Cpu {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Cpu(CpuDebugEvent::Register8Written { register, is, .. }) => {
+                *register == self.register && self.value.is_none_or(|v| v == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CpuRegister8Breakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.value {
+            Some(val) => write!(f, "{:?} = 0x{:02X}", self.register, val),
+            None => write!(f, "{:?} written", self.register),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CpuRegister16Breakpoint {
+    pub register: Register16,
+    pub value: Option<u16>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CpuRegister16Breakpoint {
+    pub fn new(register: Register16, value: Option<u16>) -> Self {
+        Self {
+            register,
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+
+    pub fn pc_breakpoint(address: u16) -> Self {
+        Self::new(Register16::PC, Some(address))
+    }
+
+    pub fn step_into() -> Self {
+        let mut breakpoint = Self::new(Register16::PC, None);
+        breakpoint.set_one_shot(true);
+
+        breakpoint
+    }
+}
+
+impl Breakpoint for CpuRegister16Breakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Cpu {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Cpu(CpuDebugEvent::Register16Written { register, is, .. }) => {
+                *register == self.register && self.value.is_none_or(|v| v == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CpuRegister16Breakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.value {
+            Some(val) => write!(f, "{:?} = 0x{:04X}", self.register, val),
+            None => write!(f, "{:?} written", self.register),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryBreakpoint {
+    pub address: u16,
+    pub on_read: bool,
+    pub on_write: bool,
+    pub value: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl MemoryBreakpoint {
+    pub fn new(address: u16, on_read: bool, on_write: bool, value: Option<u8>) -> Self {
+        Self {
+            address,
+            on_read,
+            on_write,
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for MemoryBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Memory {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Memory(MemoryDebugEvent::MemoryRead { address, value, .. }) => {
+                self.on_read
+                    && *address == self.address as usize
+                    && self.value.is_none_or(|v| v == *value)
+            }
+            DebugEvent::Memory(MemoryDebugEvent::MemoryWritten { address, is, .. }) => {
+                self.on_write
+                    && *address == self.address as usize
+                    && self.value.is_none_or(|v| v == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for MemoryBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let access = match (self.on_read, self.on_write) {
+            (true, true) => "access",
+            (true, false) => "read",
+            (false, true) => "write",
+            (false, false) => "never",
+        };
+
+        match self.value {
+            Some(val) => write!(f, "0x{:04X} {} = 0x{:02X}", self.address, access, val),
+            None => write!(f, "0x{:04X} {}", self.address, access),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CallStackBreakpoint {
+    depth: usize,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CallStackBreakpoint {
+    pub fn new(depth: usize) -> Self {
+        Self {
+            depth,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CallStackBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Cpu {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: _ }) => self.depth += 1,
+            DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: _ }) => self.depth -= 1,
+            DebugEvent::Cpu(CpuDebugEvent::Register16Written { register, .. })
+                if *register == Register16::PC =>
+            {
+                return self.depth == 0;
+            }
+            _ => {}
+        }
+
+        false
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CallStackBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Step out")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CpuShadowRegister16Breakpoint {
+    pub register: Register16,
+    pub value: Option<u16>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CpuShadowRegister16Breakpoint {
+    pub fn new(register: Register16, value: Option<u16>) -> Self {
+        Self {
+            register,
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CpuShadowRegister16Breakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Cpu {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Cpu(CpuDebugEvent::ShadowRegister16Written { register, is, .. }) => {
+                *register == self.register && self.value.is_none_or(|v| v == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CpuShadowRegister16Breakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.value {
+            Some(val) => write!(f, "{:?}' = 0x{:04X}", self.register, val),
+            None => write!(f, "{:?}' written", self.register),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GateArrayScreenModeBreakpoint {
+    pub mode: Option<u8>,
+    pub applied: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl GateArrayScreenModeBreakpoint {
+    pub fn new(mode: Option<u8>, applied: bool) -> Self {
+        Self {
+            mode,
+            applied,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for GateArrayScreenModeBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::GateArray {
+            return false;
+        }
+
+        match event {
+            DebugEvent::GateArray(GateArrayDebugEvent::ScreenModeChanged {
+                is, applied, ..
+            }) => *applied == self.applied && self.mode.is_none_or(|m| m == *is),
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for GateArrayScreenModeBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let action = if self.applied { "applied" } else { "requested" };
+        match self.mode {
+            Some(mode) => write!(f, "Screen mode {} = {}", action, mode),
+            None => write!(f, "Screen mode {}", action),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GateArrayPenColorBreakpoint {
+    pub pen: Option<usize>,
+    pub color: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl GateArrayPenColorBreakpoint {
+    pub fn new(pen: Option<usize>, color: Option<u8>) -> Self {
+        Self {
+            pen,
+            color,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for GateArrayPenColorBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::GateArray {
+            return false;
+        }
+
+        match event {
+            DebugEvent::GateArray(GateArrayDebugEvent::PenColorChanged { pen, is, .. }) => {
+                self.pen.is_none_or(|p| p == *pen) && self.color.is_none_or(|c| c == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for GateArrayPenColorBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.pen, self.color) {
+            (Some(16), Some(color)) => write!(f, "Border = 0x{:02X}", color),
+            (Some(16), None) => write!(f, "Border changed"),
+            (Some(pen), Some(color)) => write!(f, "Pen {} = 0x{:02X}", pen, color),
+            (Some(pen), None) => write!(f, "Pen {} changed", pen),
+            (None, Some(color)) => write!(f, "Any pen = 0x{:02X}", color),
+            (None, None) => write!(f, "Any pen changed"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GateArrayInterruptBreakpoint {
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl GateArrayInterruptBreakpoint {
+    pub fn new() -> Self {
+        Self {
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for GateArrayInterruptBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::GateArray {
+            return false;
+        }
+
+        matches!(
+            event,
+            DebugEvent::GateArray(GateArrayDebugEvent::InterruptGenerated)
+        )
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for GateArrayInterruptBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Interrupt generated")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcRegisterWriteBreakpoint {
+    pub register: Option<CrtcRegister>,
+    pub value: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcRegisterWriteBreakpoint {
+    pub fn new(register: Option<CrtcRegister>, value: Option<u8>) -> Self {
+        Self {
+            register,
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcRegisterWriteBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::RegisterWritten { register, is, .. }) => {
+                self.register.is_none_or(|r| r == *register) && self.value.is_none_or(|v| v == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcRegisterWriteBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.register, self.value) {
+            (Some(reg), Some(val)) => write!(f, "{} = 0x{:02X}", reg, val),
+            (Some(reg), None) => write!(f, "{} written", reg),
+            (None, Some(val)) => write!(f, "Any register = 0x{:02X}", val),
+            (None, None) => write!(f, "Any register written"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcHorizontalSyncBreakpoint {
+    pub on_start: bool,
+    pub on_end: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcHorizontalSyncBreakpoint {
+    pub fn new(on_start: bool, on_end: bool) -> Self {
+        Self {
+            on_start,
+            on_end,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcHorizontalSyncBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::HorizontalSync { enabled }) => {
+                (*enabled && self.on_start) || (!*enabled && self.on_end)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcHorizontalSyncBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.on_start, self.on_end) {
+            (true, true) => write!(f, "HSYNC start or end"),
+            (true, false) => write!(f, "HSYNC start"),
+            (false, true) => write!(f, "HSYNC end"),
+            (false, false) => write!(f, "HSYNC (never)"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcVerticalSyncBreakpoint {
+    pub on_start: bool,
+    pub on_end: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcVerticalSyncBreakpoint {
+    pub fn new(on_start: bool, on_end: bool) -> Self {
+        Self {
+            on_start,
+            on_end,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcVerticalSyncBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::VerticalSync { enabled }) => {
+                (*enabled && self.on_start) || (!*enabled && self.on_end)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcVerticalSyncBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.on_start, self.on_end) {
+            (true, true) => write!(f, "VSYNC start or end"),
+            (true, false) => write!(f, "VSYNC start"),
+            (false, true) => write!(f, "VSYNC end"),
+            (false, false) => write!(f, "VSYNC (never)"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcDisplayEnableBreakpoint {
+    pub on_start: bool,
+    pub on_end: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcDisplayEnableBreakpoint {
+    pub fn new(on_start: bool, on_end: bool) -> Self {
+        Self {
+            on_start,
+            on_end,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcDisplayEnableBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::DisplayEnableChanged { enabled }) => {
+                (*enabled && self.on_start) || (!*enabled && self.on_end)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcDisplayEnableBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.on_start, self.on_end) {
+            (true, true) => write!(f, "DISP. ENABLE start or end"),
+            (true, false) => write!(f, "DISP. ENABLE start"),
+            (false, true) => write!(f, "DISP. ENABLE end"),
+            (false, false) => write!(f, "DISP. ENABLE (never)"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcCountersBreakpoint {
+    pub character_row: Option<u8>,
+    pub scan_line: Option<u8>,
+    pub horizontal_counter: Option<u8>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcCountersBreakpoint {
+    pub fn new(
+        character_row: Option<u8>,
+        scan_line: Option<u8>,
+        horizontal_counter: Option<u8>,
+    ) -> Self {
+        Self {
+            character_row,
+            scan_line,
+            horizontal_counter,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcCountersBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::CountersChanged {
+                character_row_is,
+                scan_line_is,
+                horizontal_counter_is,
+                ..
+            }) => {
+                self.character_row.is_none_or(|i| i == *character_row_is)
+                    && self.scan_line.is_none_or(|i| i == *scan_line_is)
+                    && self
+                        .horizontal_counter
+                        .is_none_or(|i| i == *horizontal_counter_is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcCountersBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Counters = ")?;
+        match self.character_row {
+            Some(character_row) => write!(f, "{:#04X}/", character_row)?,
+            None => write!(f, "Any/")?,
+        }
+        match self.scan_line {
+            Some(scan_line) => write!(f, "{:#04X}/", scan_line)?,
+            None => write!(f, "Any/")?,
+        }
+        match self.horizontal_counter {
+            Some(horiontal_counter) => write!(f, "{:#04X}", horiontal_counter),
+            None => write!(f, "Any"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CrtcAddressBreakpoint {
+    pub value: Option<usize>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl CrtcAddressBreakpoint {
+    pub fn new(value: Option<usize>) -> Self {
+        Self {
+            value,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
+}
+
+impl Breakpoint for CrtcAddressBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Crtc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Crtc(CrtcDebugEvent::AddressChanged { is, .. }) => {
+                self.value.is_none_or(|value| value == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for CrtcAddressBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.value {
+            Some(value) => write!(f, "Address = {:#06X}", value),
+            None => write!(f, "Any address change"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum AnyBreakpoint {
+    CpuRegister8(CpuRegister8Breakpoint),
+    CpuRegister16(CpuRegister16Breakpoint),
+    CpuShadowRegister16(CpuShadowRegister16Breakpoint),
+    Memory(MemoryBreakpoint),
+    CallStack(CallStackBreakpoint),
+    GateArrayScreenMode(GateArrayScreenModeBreakpoint),
+    GateArrayPenColor(GateArrayPenColorBreakpoint),
+    GateArrayInterrupt(GateArrayInterruptBreakpoint),
+    CrtcRegisterWrite(CrtcRegisterWriteBreakpoint),
+    CrtcCounters(CrtcCountersBreakpoint),
+    CrtcAddress(CrtcAddressBreakpoint),
+    CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint),
+    CrtcVerticalSync(CrtcVerticalSyncBreakpoint),
+    CrtcDisplayEnable(CrtcDisplayEnableBreakpoint),
+}
+
+impl AnyBreakpoint {
+    pub fn pc_breakpoint(address: u16) -> Self {
+        Self::CpuRegister16(CpuRegister16Breakpoint::pc_breakpoint(address))
+    }
+
+    pub fn step_into() -> Self {
+        Self::CpuRegister16(CpuRegister16Breakpoint::step_into())
+    }
+
+    pub fn step_out() -> Self {
+        let mut breakpoint = CallStackBreakpoint::new(1);
+        breakpoint.set_one_shot(true);
+
+        Self::CallStack(breakpoint)
+    }
+
+    pub fn step_over() -> Self {
+        let mut breakpoint = CallStackBreakpoint::new(0);
+        breakpoint.set_one_shot(true);
+
+        Self::CallStack(breakpoint)
+    }
+
+    pub fn cpu_register8_breakpoint(register: Register8, value: Option<u8>) -> Self {
+        Self::CpuRegister8(CpuRegister8Breakpoint::new(register, value))
+    }
+
+    pub fn cpu_register16_breakpoint(register: Register16, value: Option<u16>) -> Self {
+        Self::CpuRegister16(CpuRegister16Breakpoint::new(register, value))
+    }
+
+    pub fn cpu_shadow_register16_breakpoint(register: Register16, value: Option<u16>) -> Self {
+        Self::CpuShadowRegister16(CpuShadowRegister16Breakpoint::new(register, value))
+    }
+
+    pub fn memory_breakpoint(
+        address: u16,
+        on_read: bool,
+        on_write: bool,
+        value: Option<u8>,
+    ) -> Self {
+        Self::Memory(MemoryBreakpoint::new(address, on_read, on_write, value))
+    }
+
+    pub fn gate_array_screen_mode_breakpoint(mode: Option<u8>, applied: bool) -> Self {
+        Self::GateArrayScreenMode(GateArrayScreenModeBreakpoint::new(mode, applied))
+    }
+
+    pub fn gate_array_pen_color_breakpoint(pen: Option<usize>, color: Option<u8>) -> Self {
+        Self::GateArrayPenColor(GateArrayPenColorBreakpoint::new(pen, color))
+    }
+
+    pub fn gate_array_interrupt_breakpoint() -> Self {
+        Self::GateArrayInterrupt(GateArrayInterruptBreakpoint::new())
+    }
+
+    pub fn crtc_register_write_breakpoint(
+        register: Option<CrtcRegister>,
+        value: Option<u8>,
+    ) -> Self {
+        Self::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint::new(register, value))
+    }
+
+    pub fn crtc_counters_breakpoint(
+        character_row: Option<u8>,
+        scan_line: Option<u8>,
+        horizontal_counter: Option<u8>,
+    ) -> Self {
+        Self::CrtcCounters(CrtcCountersBreakpoint::new(
+            character_row,
+            scan_line,
+            horizontal_counter,
+        ))
+    }
+
+    pub fn crtc_address_breakpoint(value: Option<usize>) -> Self {
+        Self::CrtcAddress(CrtcAddressBreakpoint::new(value))
+    }
+
+    pub fn crtc_horizontal_sync_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint::new(on_start, on_end))
+    }
+
+    pub fn crtc_vertical_sync_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcVerticalSync(CrtcVerticalSyncBreakpoint::new(on_start, on_end))
+    }
+
+    pub fn crtc_dispaly_enable_breakpoint(on_start: bool, on_end: bool) -> Self {
+        Self::CrtcDisplayEnable(CrtcDisplayEnableBreakpoint::new(on_start, on_end))
+    }
+}
+
+impl Breakpoint for AnyBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        match self {
+            AnyBreakpoint::CpuRegister8(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CpuRegister16(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.should_break(source, event),
+            AnyBreakpoint::Memory(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CallStack(bp) => bp.should_break(source, event),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.should_break(source, event),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.should_break(source, event),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcCounters(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcAddress(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.should_break(source, event),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.should_break(source, event),
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        match self {
+            AnyBreakpoint::CpuRegister8(bp) => bp.enabled(),
+            AnyBreakpoint::CpuRegister16(bp) => bp.enabled(),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.enabled(),
+            AnyBreakpoint::Memory(bp) => bp.enabled(),
+            AnyBreakpoint::CallStack(bp) => bp.enabled(),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.enabled(),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.enabled(),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcAddress(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.enabled(),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.enabled(),
+        }
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        match self {
+            AnyBreakpoint::CpuRegister8(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CpuRegister16(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::Memory(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CallStack(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcAddress(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_enabled(enabled),
+        }
+    }
+
+    fn one_shot(&self) -> bool {
+        match self {
+            AnyBreakpoint::CpuRegister8(bp) => bp.one_shot(),
+            AnyBreakpoint::CpuRegister16(bp) => bp.one_shot(),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.one_shot(),
+            AnyBreakpoint::Memory(bp) => bp.one_shot(),
+            AnyBreakpoint::CallStack(bp) => bp.one_shot(),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.one_shot(),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.one_shot(),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcAddress(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.one_shot(),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.one_shot(),
+        }
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        match self {
+            AnyBreakpoint::CpuRegister8(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CpuRegister16(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::Memory(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CallStack(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcAddress(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_one_shot(one_shot),
+        }
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        match self {
+            AnyBreakpoint::CpuRegister8(bp) => bp.triggered(),
+            AnyBreakpoint::CpuRegister16(bp) => bp.triggered(),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.triggered(),
+            AnyBreakpoint::Memory(bp) => bp.triggered(),
+            AnyBreakpoint::CallStack(bp) => bp.triggered(),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.triggered(),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.triggered(),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcCounters(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcAddress(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.triggered(),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.triggered(),
+        }
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        match self {
+            AnyBreakpoint::CpuRegister8(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CpuRegister16(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::Memory(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CallStack(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcCounters(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcAddress(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_triggered(triggered),
+        }
+    }
+}
+
+impl fmt::Display for AnyBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AnyBreakpoint::CpuRegister8(bp) => bp.fmt(f),
+            AnyBreakpoint::CpuRegister16(bp) => bp.fmt(f),
+            AnyBreakpoint::CpuShadowRegister16(bp) => bp.fmt(f),
+            AnyBreakpoint::Memory(bp) => bp.fmt(f),
+            AnyBreakpoint::CallStack(bp) => bp.fmt(f),
+            AnyBreakpoint::GateArrayScreenMode(bp) => bp.fmt(f),
+            AnyBreakpoint::GateArrayPenColor(bp) => bp.fmt(f),
+            AnyBreakpoint::GateArrayInterrupt(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcRegisterWrite(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcCounters(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcAddress(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcHorizontalSync(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcVerticalSync(bp) => bp.fmt(f),
+            AnyBreakpoint::CrtcDisplayEnable(bp) => bp.fmt(f),
+        }
+    }
+}
+
+pub struct BreakpointManager {
+    breakpoints: HashMap<BreakpointId, AnyBreakpoint>,
+    next_id: usize,
+    subscription: EventSubscription,
+}
+
+impl BreakpointManager {
+    pub fn new() -> Self {
+        Self {
+            breakpoints: HashMap::new(),
+            next_id: 0,
+            subscription: EventSubscription::new(DebugSource::Any),
+        }
+    }
+
+    pub fn add_breakpoint(&mut self, breakpoint: AnyBreakpoint) -> BreakpointId {
+        let id = BreakpointId(self.next_id);
+        self.next_id += 1;
+        self.breakpoints.insert(id, breakpoint);
+        id
+    }
+
+    pub fn remove_breakpoint(&mut self, id: BreakpointId) -> bool {
+        self.breakpoints.remove(&id).is_some()
+    }
+
+    pub fn enable_breakpoint(&mut self, id: BreakpointId, enabled: bool) -> bool {
+        if let Some(breakpoint) = self.breakpoints.get_mut(&id) {
+            breakpoint.set_enabled(enabled);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn breakpoint(&self, id: BreakpointId) -> Option<&AnyBreakpoint> {
+        self.breakpoints.get(&id)
+    }
+
+    pub fn breakpoint_mut(&mut self, id: BreakpointId) -> Option<&mut AnyBreakpoint> {
+        self.breakpoints.get_mut(&id)
+    }
+
+    pub fn breakpoints_iter(&self) -> impl Iterator<Item = (&BreakpointId, &AnyBreakpoint)> {
+        self.breakpoints.iter()
+    }
+
+    pub fn breakpoints_iter_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (&BreakpointId, &mut AnyBreakpoint)> {
+        self.breakpoints.iter_mut()
+    }
+
+    pub fn clear_all(&mut self) {
+        self.breakpoints.clear();
+    }
+
+    pub fn any_triggered(&self) -> bool {
+        self.breakpoints.values().any(|bp| bp.triggered().is_some())
+    }
+
+    pub fn evaluate_breakpoints(&mut self) {
+        // Remove triggered one-shot breakpoints
+        self.breakpoints
+            .retain(|_id, bp| bp.triggered().is_none() || !bp.one_shot());
+
+        // Reset all triggered flags
+        for (_id, breakpoint) in self.breakpoints.iter_mut() {
+            breakpoint.set_triggered(None);
+        }
+
+        self.subscription.with_events(|record| {
+            for (_id, breakpoint) in self.breakpoints.iter_mut() {
+                if breakpoint.should_break(record.source, &record.event) {
+                    breakpoint.set_triggered(Some(record.master_clock));
+                }
+            }
+        });
+    }
+}
+
+impl Default for BreakpointManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{debug::emit_event, system::clock::MasterClockTick};
+
+    use super::*;
+
+    #[test]
+    fn test_pc_breakpoint_triggers_on_correct_address() {
+        let mut bp = AnyBreakpoint::pc_breakpoint(0x1000);
+
+        let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1000,
+            was: 0x0000,
+        });
+
+        assert!(bp.should_break(DebugSource::Cpu, &event));
+    }
+
+    #[test]
+    fn test_pc_breakpoint_ignores_wrong_address() {
+        let mut bp = AnyBreakpoint::pc_breakpoint(0x1000);
+
+        let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x2000,
+            was: 0x0000,
+        });
+
+        assert!(!bp.should_break(DebugSource::Cpu, &event));
+    }
+
+    #[test]
+    fn test_pc_breakpoint_ignores_wrong_register() {
+        let mut bp = AnyBreakpoint::pc_breakpoint(0x1000);
+
+        let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::SP,
+            is: 0x1000,
+            was: 0x0000,
+        });
+
+        assert!(!bp.should_break(DebugSource::Cpu, &event));
+    }
+
+    #[test]
+    fn test_step_into_triggers_on_any_pc_change() {
+        let mut bp = AnyBreakpoint::step_into();
+
+        let event1 = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1000,
+            was: 0x0000,
+        });
+
+        let event2 = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x2000,
+            was: 0x1000,
+        });
+
+        assert!(bp.should_break(DebugSource::Cpu, &event1));
+        assert!(bp.should_break(DebugSource::Cpu, &event2));
+        assert!(bp.one_shot());
+    }
+
+    #[test]
+    fn test_register8_breakpoint_with_specific_value() {
+        let mut bp = AnyBreakpoint::cpu_register8_breakpoint(Register8::A, Some(0x42));
+
+        let correct_event = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
+            register: Register8::A,
+            is: 0x42,
+            was: 0x00,
+        });
+
+        let wrong_value_event = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
+            register: Register8::A,
+            is: 0x43,
+            was: 0x00,
+        });
+
+        let wrong_register_event = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
+            register: Register8::B,
+            is: 0x42,
+            was: 0x00,
+        });
+
+        assert!(bp.should_break(DebugSource::Cpu, &correct_event));
+        assert!(!bp.should_break(DebugSource::Cpu, &wrong_value_event));
+        assert!(!bp.should_break(DebugSource::Cpu, &wrong_register_event));
+    }
+
+    #[test]
+    fn test_register8_breakpoint_any_value() {
+        let mut bp = AnyBreakpoint::cpu_register8_breakpoint(Register8::A, None);
+
+        let event1 = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
+            register: Register8::A,
+            is: 0x42,
+            was: 0x00,
+        });
+
+        let event2 = DebugEvent::Cpu(CpuDebugEvent::Register8Written {
+            register: Register8::A,
+            is: 0xFF,
+            was: 0x42,
+        });
+
+        assert!(bp.should_break(DebugSource::Cpu, &event1));
+        assert!(bp.should_break(DebugSource::Cpu, &event2));
+    }
+
+    #[test]
+    fn test_memory_breakpoint_write_only() {
+        let mut bp = AnyBreakpoint::memory_breakpoint(0x4000, false, true, None);
+
+        let write_event = DebugEvent::Memory(MemoryDebugEvent::MemoryWritten {
+            address: 0x4000,
+            is: 0x55,
+            was: 0x00,
+        });
+
+        let read_event = DebugEvent::Memory(MemoryDebugEvent::MemoryRead {
+            address: 0x4000,
+            value: 0x55,
+        });
+
+        assert!(bp.should_break(DebugSource::Memory, &write_event));
+        assert!(!bp.should_break(DebugSource::Memory, &read_event));
+    }
+
+    #[test]
+    fn test_memory_breakpoint_read_only() {
+        let mut bp = AnyBreakpoint::memory_breakpoint(0x4000, true, false, None);
+
+        let write_event = DebugEvent::Memory(MemoryDebugEvent::MemoryWritten {
+            address: 0x4000,
+            is: 0x55,
+            was: 0x00,
+        });
+
+        let read_event = DebugEvent::Memory(MemoryDebugEvent::MemoryRead {
+            address: 0x4000,
+            value: 0x55,
+        });
+
+        assert!(!bp.should_break(DebugSource::Memory, &write_event));
+        assert!(bp.should_break(DebugSource::Memory, &read_event));
+    }
+
+    #[test]
+    fn test_memory_breakpoint_with_value_filter() {
+        let mut bp = AnyBreakpoint::memory_breakpoint(0x4000, false, true, Some(0x42));
+
+        let correct_write = DebugEvent::Memory(MemoryDebugEvent::MemoryWritten {
+            address: 0x4000,
+            is: 0x42,
+            was: 0x00,
+        });
+
+        let wrong_value_write = DebugEvent::Memory(MemoryDebugEvent::MemoryWritten {
+            address: 0x4000,
+            is: 0x43,
+            was: 0x00,
+        });
+
+        assert!(bp.should_break(DebugSource::Memory, &correct_write));
+        assert!(!bp.should_break(DebugSource::Memory, &wrong_value_write));
+    }
+
+    #[test]
+    fn test_breakpoint_enabled_disabled() {
+        let mut bp = AnyBreakpoint::pc_breakpoint(0x1000);
+        assert!(bp.enabled());
+
+        bp.set_enabled(false);
+        assert!(!bp.enabled());
+
+        let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1000,
+            was: 0x0000,
+        });
+
+        assert!(!bp.should_break(DebugSource::Cpu, &event));
+
+        bp.set_enabled(true);
+        assert!(bp.should_break(DebugSource::Cpu, &event));
+    }
+
+    #[test]
+    fn test_breakpoint_one_shot_flag() {
+        let mut bp = AnyBreakpoint::pc_breakpoint(0x1000);
+        assert!(!bp.one_shot());
+
+        bp.set_one_shot(true);
+        assert!(bp.one_shot());
+
+        bp.set_one_shot(false);
+        assert!(!bp.one_shot());
+    }
+
+    #[test]
+    fn test_breakpoint_manager_add_remove() {
+        let mut manager = BreakpointManager::new();
+        assert_eq!(manager.breakpoints.len(), 0);
+
+        let id1 = manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(0x1000));
+        let id2 = manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(0x2000));
+        assert_eq!(manager.breakpoints.len(), 2);
+
+        assert!(manager.remove_breakpoint(id1));
+        assert_eq!(manager.breakpoints.len(), 1);
+
+        assert!(!manager.remove_breakpoint(id1)); // Already removed
+        assert_eq!(manager.breakpoints.len(), 1);
+
+        assert!(manager.remove_breakpoint(id2));
+        assert_eq!(manager.breakpoints.len(), 0);
+    }
+
+    #[test]
+    fn test_breakpoint_manager_enable_disable() {
+        let mut manager = BreakpointManager::new();
+        let id = manager.add_breakpoint(AnyBreakpoint::pc_breakpoint(0x1000));
+
+        assert!(manager.breakpoint(id).unwrap().enabled());
+
+        assert!(manager.enable_breakpoint(id, false));
+        assert!(!manager.breakpoint(id).unwrap().enabled());
+
+        assert!(manager.enable_breakpoint(id, true));
+        assert!(manager.breakpoint(id).unwrap().enabled());
+
+        let invalid_id = BreakpointId(999);
+        assert!(!manager.enable_breakpoint(invalid_id, false));
+    }
+
+    #[test]
+    fn test_breakpoint_display_formats() {
+        let pc_bp = AnyBreakpoint::pc_breakpoint(0x1000);
+        assert_eq!(pc_bp.to_string(), "PC = 0x1000");
+
+        let reg8_specific = AnyBreakpoint::cpu_register8_breakpoint(Register8::A, Some(0x42));
+        assert_eq!(reg8_specific.to_string(), "A = 0x42");
+
+        let reg8_any = AnyBreakpoint::cpu_register8_breakpoint(Register8::B, None);
+        assert_eq!(reg8_any.to_string(), "B written");
+
+        let mem_read = AnyBreakpoint::memory_breakpoint(0x4000, true, false, None);
+        assert_eq!(mem_read.to_string(), "0x4000 read");
+
+        let mem_write = AnyBreakpoint::memory_breakpoint(0x4000, false, true, None);
+        assert_eq!(mem_write.to_string(), "0x4000 write");
+
+        let mem_access = AnyBreakpoint::memory_breakpoint(0x4000, true, true, None);
+        assert_eq!(mem_access.to_string(), "0x4000 access");
+
+        let mem_write_value = AnyBreakpoint::memory_breakpoint(0x4000, false, true, Some(0xFF));
+        assert_eq!(mem_write_value.to_string(), "0x4000 write = 0xFF");
+    }
+
+    #[test]
+    fn test_breakpoint_ignores_wrong_debug_source() {
+        let mut cpu_bp = AnyBreakpoint::pc_breakpoint(0x1000);
+        let mem_event = DebugEvent::Memory(MemoryDebugEvent::MemoryRead {
+            address: 0x1000,
+            value: 0x42,
+        });
+        assert!(!cpu_bp.should_break(DebugSource::Memory, &mem_event));
+
+        let mut mem_bp = AnyBreakpoint::memory_breakpoint(0x1000, true, false, None);
+        let cpu_event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1000,
+            was: 0x0000,
+        });
+        assert!(!mem_bp.should_break(DebugSource::Cpu, &cpu_event));
+    }
+
+    #[test]
+    fn test_breakpoint_manager_one_shot_removal() {
+        let mut manager = BreakpointManager::new();
+
+        let id = manager.add_breakpoint(AnyBreakpoint::step_into());
+        assert_eq!(manager.breakpoints.len(), 1);
+        assert!(manager.breakpoint(id).unwrap().one_shot());
+
+        let event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1000,
+            was: 0x0000,
+        });
+
+        emit_event(DebugSource::Cpu, event.clone(), MasterClockTick::default());
+        manager.evaluate_breakpoints();
+        emit_event(DebugSource::Cpu, event, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // One-shot breakpoint should be removed after triggering
+        assert_eq!(manager.breakpoints.len(), 0);
+        assert!(manager.breakpoint(id).is_none());
+    }
+
+    #[test]
+    fn test_step_into_breakpoint_behavior() {
+        let mut manager = BreakpointManager::new();
+        let step_into_id = manager.add_breakpoint(AnyBreakpoint::step_into());
+
+        // Verify step_into is a one-shot breakpoint
+        assert!(manager.breakpoint(step_into_id).unwrap().one_shot());
+        assert!(manager.breakpoint(step_into_id).unwrap().enabled());
+
+        // Simulate PC change (any instruction execution)
+        let pc_event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1001,
+            was: 0x1000,
+        });
+
+        // Emit the event and evaluate breakpoints
+        emit_event(DebugSource::Cpu, pc_event, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // The breakpoint should have triggered
+        assert!(manager.any_triggered());
+        assert!(manager
+            .breakpoint(step_into_id)
+            .unwrap()
+            .triggered()
+            .is_some());
+
+        // After evaluation, the one-shot breakpoint should be removed
+        manager.evaluate_breakpoints();
+        assert_eq!(manager.breakpoints.len(), 0);
+        assert!(manager.breakpoint(step_into_id).is_none());
+    }
+
+    #[test]
+    fn test_step_over_breakpoint_behavior() {
+        let mut manager = BreakpointManager::new();
+        let step_over_id = manager.add_breakpoint(AnyBreakpoint::step_over());
+
+        // Verify step_over is a one-shot CallStackBreakpoint with depth 0
+        assert!(manager.breakpoint(step_over_id).unwrap().one_shot());
+        assert!(manager.breakpoint(step_over_id).unwrap().enabled());
+
+        // Simulate a call instruction (increases call stack depth)
+        let call_event = DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false });
+        emit_event(DebugSource::Cpu, call_event, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // Should not trigger while in call
+        assert!(!manager.any_triggered());
+
+        // Simulate PC change while inside call
+        let pc_in_call = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x2000,
+            was: 0x1000,
+        });
+        emit_event(DebugSource::Cpu, pc_in_call, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // Should still not trigger (we're in a deeper call level)
+        assert!(!manager.any_triggered());
+
+        // Simulate return instruction (decreases call stack depth back to 0)
+        let return_event = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false });
+        emit_event(DebugSource::Cpu, return_event, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // Should still not trigger yet (return just adjusts depth)
+        assert!(!manager.any_triggered());
+
+        // Simulate PC change after return (back at original call level)
+        let pc_after_return = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1001,
+            was: 0x1000,
+        });
+        emit_event(
+            DebugSource::Cpu,
+            pc_after_return,
+            MasterClockTick::default(),
+        );
+        manager.evaluate_breakpoints();
+
+        // Now it should trigger (we're back at depth 0)
+        assert!(manager.any_triggered());
+        assert!(manager
+            .breakpoint(step_over_id)
+            .unwrap()
+            .triggered()
+            .is_some());
+
+        // After evaluation, the one-shot breakpoint should be removed
+        manager.evaluate_breakpoints();
+        assert_eq!(manager.breakpoints.len(), 0);
+    }
+
+    #[test]
+    fn test_step_over_breakpoint_no_calls() {
+        let mut manager = BreakpointManager::new();
+        let step_over_id = manager.add_breakpoint(AnyBreakpoint::step_over());
+
+        // Verify step_over is a one-shot CallStackBreakpoint with depth 0
+        assert!(manager.breakpoint(step_over_id).unwrap().one_shot());
+        assert!(manager.breakpoint(step_over_id).unwrap().enabled());
+
+        // Simulate simple PC change without any calls (normal instruction execution)
+        let pc_event = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1001,
+            was: 0x1000,
+        });
+        emit_event(DebugSource::Cpu, pc_event, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // Should trigger immediately since we're already at depth 0
+        assert!(manager.any_triggered());
+        assert!(manager
+            .breakpoint(step_over_id)
+            .unwrap()
+            .triggered()
+            .is_some());
+
+        // After evaluation, the one-shot breakpoint should be removed
+        manager.evaluate_breakpoints();
+        assert_eq!(manager.breakpoints.len(), 0);
+    }
+
+    #[test]
+    fn test_step_out_from_inside_function() {
+        let mut manager = BreakpointManager::new();
+
+        // Simulate that we're already inside a function by creating the breakpoint
+        // after a call has been made (this is the typical debugging scenario)
+        let call_event = DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false });
+        emit_event(DebugSource::Cpu, call_event, MasterClockTick::default());
+
+        // Now create step_out breakpoint (starts with depth 1)
+        let step_out_id = manager.add_breakpoint(AnyBreakpoint::step_out());
+
+        // Evaluate breakpoints so the CallStackBreakpoint can process the call event
+        // This will increment its internal depth from 1 to 2
+        manager.evaluate_breakpoints();
+
+        assert!(manager.breakpoint(step_out_id).unwrap().one_shot());
+        assert!(manager.breakpoint(step_out_id).unwrap().enabled());
+        assert!(!manager.any_triggered()); // Should not trigger yet
+
+        // Simulate PC changes while inside function
+        let pc_in_function = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x2000,
+            was: 0x1000,
+        });
+        emit_event(DebugSource::Cpu, pc_in_function, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // Should not trigger (we're at depth 2, not 0)
+        assert!(!manager.any_triggered());
+
+        // Simulate return from function
+        let return_event = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false });
+        emit_event(DebugSource::Cpu, return_event, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // Should still not trigger yet (return just decrements depth to 1)
+        assert!(!manager.any_triggered());
+
+        // Simulate PC change after return (now at depth 1, but we need depth 0)
+        let pc_after_return = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1001,
+            was: 0x1000,
+        });
+        emit_event(
+            DebugSource::Cpu,
+            pc_after_return,
+            MasterClockTick::default(),
+        );
+        manager.evaluate_breakpoints();
+
+        // Still should not trigger (depth is 1, not 0)
+        assert!(!manager.any_triggered());
+
+        // Need another return to get to depth 0
+        let final_return = DebugEvent::Cpu(CpuDebugEvent::ReturnFetched { interrupt: false });
+        emit_event(DebugSource::Cpu, final_return, MasterClockTick::default());
+
+        // Now PC change should trigger step_out
+        let final_pc = DebugEvent::Cpu(CpuDebugEvent::Register16Written {
+            register: Register16::PC,
+            is: 0x1002,
+            was: 0x1001,
+        });
+        emit_event(DebugSource::Cpu, final_pc, MasterClockTick::default());
+        manager.evaluate_breakpoints();
+
+        // Now it should trigger (we've stepped out to depth 0)
+        assert!(manager.any_triggered());
+        assert!(manager
+            .breakpoint(step_out_id)
+            .unwrap()
+            .triggered()
+            .is_some());
+
+        // After evaluation, the one-shot breakpoint should be removed
+        manager.evaluate_breakpoints();
+        assert_eq!(manager.breakpoints.len(), 0);
+    }
+}

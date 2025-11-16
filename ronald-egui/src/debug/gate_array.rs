@@ -1,0 +1,828 @@
+use eframe::egui;
+use serde::{Deserialize, Serialize};
+
+use ronald_core::constants::{FIRMWARE_COLORS, HARDWARE_TO_FIRMWARE_COLORS};
+use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
+
+use crate::colors;
+use crate::debug::Debugger;
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GateArrayDebugWindow {
+    pub show: bool,
+
+    // Screen mode breakpoint
+    #[serde(skip, default)]
+    screen_mode_value: Option<u8>,
+    #[serde(skip, default)]
+    screen_mode_any_change: bool,
+    #[serde(skip, default)]
+    screen_mode_applied: bool,
+
+    // Pen color breakpoint
+    #[serde(skip, default)]
+    pen_number: Option<usize>,
+    #[serde(skip, default)]
+    pen_color: Option<usize>,
+    #[serde(skip, default)]
+    pen_any_number: bool,
+    #[serde(skip, default)]
+    pen_any_color: bool,
+}
+
+impl GateArrayDebugWindow {
+    fn get_all_hardware_colors() -> Vec<(usize, egui::Color32, String)> {
+        let mut colors = Vec::new();
+
+        for (hardware_index, firmware_color_index) in HARDWARE_TO_FIRMWARE_COLORS.iter().enumerate()
+        {
+            let rgba = FIRMWARE_COLORS[*firmware_color_index];
+            let egui_color =
+                egui::Color32::from_rgba_premultiplied(rgba[0], rgba[1], rgba[2], rgba[3]);
+
+            let color_name = match firmware_color_index {
+                0 => "Black",
+                1 => "Blue",
+                2 => "Bright Blue",
+                3 => "Red",
+                4 => "Magenta",
+                5 => "Mauve",
+                6 => "Bright Red",
+                7 => "Purple",
+                8 => "Bright Magenta",
+                9 => "Green",
+                10 => "Cyan",
+                11 => "Sky Blue",
+                12 => "Yellow",
+                13 => "White", // Actually grey in some contexts
+                14 => "Pastel Blue",
+                15 => "Orange",
+                16 => "Pink",
+                17 => "Pastel Magenta",
+                18 => "Bright Green",
+                19 => "Sea Green",
+                20 => "Bright Cyan",
+                21 => "Lime",
+                22 => "Pastel Green",
+                23 => "Pastel Cyan",
+                24 => "Bright Yellow",
+                25 => "Pastel Yellow",
+                26 => "Bright White",
+                _ => "Unknown",
+            };
+
+            let display_name = format!("{} (0x{:02X})", color_name, hardware_index);
+            colors.push((hardware_index, egui_color, display_name));
+        }
+
+        colors
+    }
+
+    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
+        let mut open = self.show;
+        egui::Window::new("Gate Array Internals")
+            .resizable(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                self.render_gate_array_state(ui, debugger);
+                ui.separator();
+                self.render_breakpoints_section(ui, debugger);
+            });
+        self.show = open;
+    }
+
+    fn render_gate_array_state(&self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        let debug_view = debugger.debug_view();
+        let ga = &debug_view.gate_array;
+
+        // Screen Mode Section
+        ui.heading("Screen Mode");
+        ui.horizontal(|ui| {
+            ui.label("Current:");
+            ui.label(format!("{}", ga.current_screen_mode));
+            ui.separator();
+            ui.label("Requested:");
+            let requested_text = match ga.requested_screen_mode {
+                Some(mode) => format!("{}", mode),
+                None => "-".to_string(),
+            };
+            ui.label(requested_text);
+        });
+        ui.add_space(8.0);
+
+        // Sync Status Section
+        ui.heading("Sync Status");
+        ui.horizontal(|ui| {
+            let hsync_color = if ga.hsync_active {
+                colors::FORREST_GREEN
+            } else {
+                colors::MEDIUM_GRAY
+            };
+            ui.colored_label(hsync_color, "HSYNC");
+
+            ui.separator();
+
+            let vsync_color = if ga.vsync_active {
+                colors::FORREST_GREEN
+            } else {
+                colors::MEDIUM_GRAY
+            };
+            ui.colored_label(vsync_color, "VSYNC");
+
+            ui.separator();
+
+            ui.label("HSYNCs since VSYNC:");
+            ui.label(format!("{}", ga.hsyncs_since_last_vsync));
+        });
+        ui.add_space(8.0);
+
+        // Interrupt System Section
+        ui.heading("Interrupt System");
+        ui.horizontal(|ui| {
+            ui.label("Counter:");
+            ui.label(format!("{}", ga.interrupt_counter));
+            ui.separator();
+            ui.label("Hold:");
+            let hold_text = if ga.hold_interrupt { "Yes" } else { "No" };
+            ui.label(hold_text);
+        });
+        ui.add_space(8.0);
+
+        // Palette Section
+        ui.heading("Palette");
+        ui.label("Selected Pen:");
+        ui.label(format!("{}", ga.selected_pen));
+        ui.add_space(4.0);
+
+        // Display pens 0-15 in a 4x4 grid
+        egui::Grid::new("pen_colors_grid")
+            .num_columns(4)
+            .spacing([8.0, 8.0])
+            .show(ui, |ui| {
+                for pen in 0..16 {
+                    ui.vertical(|ui| {
+                        let color_index = ga.pen_colors[pen] as usize;
+                        let firmware_color_index = HARDWARE_TO_FIRMWARE_COLORS[color_index];
+                        let rgba = FIRMWARE_COLORS[firmware_color_index];
+                        let egui_color = egui::Color32::from_rgba_premultiplied(
+                            rgba[0], rgba[1], rgba[2], rgba[3],
+                        );
+
+                        ui.label(format!("Pen {}", pen));
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(40.0, 30.0), egui::Sense::hover());
+                        ui.painter().rect_filled(rect, 2.0, egui_color);
+
+                        // Show hardware color value
+                        ui.label(format!("{:#04X}", ga.pen_colors[pen]));
+                    });
+
+                    if (pen + 1) % 4 == 0 {
+                        ui.end_row();
+                    }
+                }
+            });
+
+        ui.add_space(8.0);
+
+        // Border Color
+        ui.label("Border:");
+        ui.horizontal(|ui| {
+            let color_index = ga.pen_colors[0x10] as usize;
+            let firmware_color_index = HARDWARE_TO_FIRMWARE_COLORS[color_index];
+            let rgba = FIRMWARE_COLORS[firmware_color_index];
+            let egui_color =
+                egui::Color32::from_rgba_premultiplied(rgba[0], rgba[1], rgba[2], rgba[3]);
+
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(40.0, 30.0), egui::Sense::hover());
+            ui.painter().rect_filled(rect, 2.0, egui_color);
+
+            ui.label(format!("{:#04x}", ga.pen_colors[0x10]));
+        });
+    }
+
+    fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        ui.heading("Gate Array Breakpoints");
+
+        egui::Grid::new("ga_breakpoint_grid")
+            .num_columns(2)
+            .spacing([10.0, 4.0])
+            .show(ui, |ui| {
+                // Screen mode breakpoint
+                ui.label("Screen mode:");
+
+                ui.horizontal(|ui| {
+                    ui.add_enabled_ui(!self.screen_mode_any_change, |ui| {
+                        egui::ComboBox::from_id_salt("screen_mode_selector")
+                            .width(60.0)
+                            .selected_text(match self.screen_mode_value {
+                                Some(mode) => format!("Mode {}", mode),
+                                None => "Select...".to_string(),
+                            })
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.screen_mode_value, Some(0), "Mode 0");
+                                ui.selectable_value(&mut self.screen_mode_value, Some(1), "Mode 1");
+                                ui.selectable_value(&mut self.screen_mode_value, Some(2), "Mode 2");
+                                ui.selectable_value(&mut self.screen_mode_value, Some(3), "Mode 3");
+                            });
+                    });
+
+                    if ui
+                        .checkbox(&mut self.screen_mode_any_change, "Any")
+                        .changed()
+                        && self.screen_mode_any_change
+                    {
+                        self.screen_mode_value = None;
+                    }
+
+                    ui.checkbox(&mut self.screen_mode_applied, "Applied")
+                        .on_hover_text("Break when mode is applied (at next HSYNC) vs when requested (written to register)");
+
+                    if ui.button("Add").clicked() {
+                        self.add_screen_mode_breakpoint(debugger);
+                    }
+                });
+                ui.end_row();
+
+                // Pen color breakpoint
+                ui.label("Pen:");
+
+                ui.horizontal(|ui| {
+                    ui.add_enabled_ui(!self.pen_any_number, |ui| {
+                        egui::ComboBox::from_id_salt("pen_number_selector")
+                            .width(80.0)
+                            .selected_text(match self.pen_number {
+                                Some(16) => "Border".to_string(),
+                                Some(pen) => format!("Pen {}", pen),
+                                None => "Select...".to_string(),
+                            })
+                            .show_ui(ui, |ui| {
+                                for pen in 0..16 {
+                                    ui.selectable_value(&mut self.pen_number, Some(pen), format!("Pen {}", pen));
+                                }
+                                ui.selectable_value(&mut self.pen_number, Some(16), "Border");
+                            });
+                    });
+
+                    if ui.checkbox(&mut self.pen_any_number, "Any").changed() && self.pen_any_number {
+                        self.pen_number = None;
+                    }
+
+                    ui.label("Color:");
+
+                    let colors = Self::get_all_hardware_colors();
+                    let (selected_color, selected_text) = match self.pen_color {
+                        Some(selected) =>  {
+                            let (_, color, name) = &colors[selected];
+                            (*color, name.as_str())
+                        }
+                        None => (colors::BLACK, "Select..."),
+                    };
+
+
+                    ui.add_enabled_ui(!self.pen_any_color, |ui| {
+                        ui.horizontal(|ui| {
+                            // Show swatch for currently selected color
+                            let (swatch_rect, _) = ui.allocate_exact_size(egui::vec2(20.0, 15.0), egui::Sense::hover());
+                            ui.painter().rect_filled(swatch_rect, 2.0, selected_color);
+
+                            // ComboBox with text only, disabled when pen_any_color is true
+                            egui::ComboBox::from_id_salt("pen_color_selector")
+                                .width(150.0)
+                                .selected_text(selected_text)
+                                .show_ui(ui, |ui| {
+                                    for (hardware_index, color, name) in colors.iter() {
+                                        ui.horizontal(|ui| {
+                                            // Color swatch
+                                            let (swatch_rect, _) = ui.allocate_exact_size(egui::vec2(20.0, 15.0), egui::Sense::hover());
+                                            ui.painter().rect_filled(swatch_rect, 2.0, *color);
+
+                                            // Color name with hardware value
+                                            ui.selectable_value(&mut self.pen_color, Some(*hardware_index), name);
+                                        });
+                                    }
+                                })
+                        })
+                    });
+
+                    if ui.checkbox(&mut self.pen_any_color, "Any").changed() && self.pen_any_color {
+                        self.pen_color = None
+                    }
+
+                    if ui.button("Add").clicked() {
+                        self.add_pen_color_breakpoint(debugger);
+                    }
+                });
+                ui.end_row();
+
+                // Interrupt breakpoint
+                ui.label("Interrupt:");
+
+                ui.horizontal(|ui| {
+                    if ui.button("Add Interrupt Breakpoint").clicked() {
+                        self.add_interrupt_breakpoint(debugger);
+                    }
+                });
+                ui.end_row();
+            });
+
+        // List active Gate Array breakpoints
+        ui.separator();
+        ui.label("Active Gate Array Breakpoints:");
+
+        let mut breakpoint_found = false;
+        let mut to_remove = None;
+        let mut to_toggle = None;
+
+        let breakpoint_manager = debugger.breakpoint_manager();
+        for (id, breakpoint) in breakpoint_manager.breakpoints_iter() {
+            if breakpoint.one_shot()
+                || !matches!(
+                    breakpoint,
+                    AnyBreakpoint::GateArrayScreenMode(_)
+                        | AnyBreakpoint::GateArrayPenColor(_)
+                        | AnyBreakpoint::GateArrayInterrupt(_)
+                )
+            {
+                continue;
+            }
+
+            breakpoint_found = true;
+
+            ui.horizontal(|ui| {
+                let mut enabled = breakpoint.enabled();
+                if ui.checkbox(&mut enabled, breakpoint.to_string()).changed() {
+                    to_toggle = Some((*id, enabled));
+                }
+
+                if ui.button("Remove").clicked() {
+                    to_remove = Some(*id);
+                }
+
+                if let Some(master_clock) = breakpoint.triggered() {
+                    ui.colored_label(
+                        colors::DARK_RED,
+                        format!("(triggered at {})", master_clock.value()),
+                    );
+                }
+            });
+        }
+
+        if !breakpoint_found {
+            ui.label("No Gate Array breakpoints set");
+        }
+
+        // Apply changes
+        if let Some((id, enabled)) = to_toggle {
+            breakpoint_manager.enable_breakpoint(id, enabled);
+        }
+        if let Some(id) = to_remove {
+            breakpoint_manager.remove_breakpoint(id);
+        }
+    }
+
+    fn add_screen_mode_breakpoint(&mut self, debugger: &mut impl Debugger) {
+        let mode = if self.screen_mode_any_change {
+            None
+        } else {
+            self.screen_mode_value
+        };
+
+        let breakpoint =
+            AnyBreakpoint::gate_array_screen_mode_breakpoint(mode, self.screen_mode_applied);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
+        self.screen_mode_value = None;
+        self.screen_mode_any_change = false;
+        self.screen_mode_applied = false;
+    }
+
+    fn add_pen_color_breakpoint(&mut self, debugger: &mut impl Debugger) {
+        let pen = if self.pen_any_number {
+            None
+        } else {
+            self.pen_number
+        };
+        let color = self.pen_color.map(|c| c as u8);
+
+        let breakpoint = AnyBreakpoint::gate_array_pen_color_breakpoint(pen, color);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
+        self.pen_number = None;
+        self.pen_color = None;
+        self.pen_any_number = false;
+        self.pen_any_color = false;
+    }
+
+    fn add_interrupt_breakpoint(&mut self, debugger: &mut impl Debugger) {
+        let breakpoint = AnyBreakpoint::gate_array_interrupt_breakpoint();
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
+    }
+}
+
+#[cfg(test)]
+mod gui_tests {
+    use super::*;
+
+    use egui::accesskit;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    use ronald_core::debug::breakpoint::GateArrayScreenModeBreakpoint;
+
+    use crate::debug::mock::TestDebugger;
+
+    #[test]
+    fn test_gate_array_debug_window_opens_and_closes() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Check that the window title is rendered
+        harness.get_by_label("Gate Array Internals");
+
+        // Click close button
+        harness.get_by_label("Close window").click();
+        harness.run();
+
+        // Window should no longer be visible
+        assert!(harness.query_by_label("Gate Array Internals").is_none());
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_screen_mode_requested_breakpoint() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select "Mode 1"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Mode 1").click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(
+            harness
+                .query_by_label("Screen mode requested = 1")
+                .is_some()
+        );
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(
+            harness
+                .query_by_label("Screen mode requested = 1")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_screen_mode_requested_breakpoint_any() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Check any
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Disable breakpoint
+        harness.get_by_label("Screen mode requested").click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::GateArrayScreenMode(GateArrayScreenModeBreakpoint {
+                            mode: None,
+                            applied: false,
+                            ..
+                        })
+                    ) && !bp.enabled()
+                })
+        );
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_screen_mode_applied_breakpoint() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Select "Mode 1"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Mode 1").click();
+        harness.run();
+
+        // Check applied
+        harness
+            .get_by_role_and_label(accesskit::Role::CheckBox, "Applied")
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Screen mode applied = 1").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Screen mode applied = 1").is_none());
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_pen_breakpoint_with_pen_and_color() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select "Pen 8"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Pen 8")
+            .click();
+        harness.run();
+
+        // Select "Blue (0x04)"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(2)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Blue (0x04)").click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Pen 8 = 0x04").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Pen 8 = 0x04").is_none());
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_pen_breakpoint_with_border_and_any_color() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select "Border"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Border")
+            .click();
+        harness.run();
+
+        // Check any color
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(2)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Border changed").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Border changed").is_none());
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_pen_breakpoint_with_any_pen_and_any_color() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Check any pen
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Check any color
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(2)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(1)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Disable breakpoint
+        harness.get_by_label("Any pen changed").click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::GateArrayPenColor(
+                            ronald_core::debug::breakpoint::GateArrayPenColorBreakpoint {
+                                pen: None,
+                                color: None,
+                                ..
+                            }
+                        )
+                    ) && !bp.enabled()
+                })
+        );
+    }
+
+    #[test]
+    fn test_gate_array_debug_window_interrupt_breakpoint() {
+        let mut debugger = TestDebugger::default();
+        let mut window = GateArrayDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 0;
+
+        // Add breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Add Interrupt Breakpoint")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Interrupt generated").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Interrupt generated").is_none());
+    }
+}
