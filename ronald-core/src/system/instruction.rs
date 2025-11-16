@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::system::cpu;
 use crate::system::memory::MemRead;
 
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Operand {
     Immediate8(u8),
     Immediate16(u16),
@@ -20,8 +21,8 @@ pub enum Operand {
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Operand::Immediate8(value) => write!(f, "{value:#04x}"),
-            Operand::Immediate16(value) => write!(f, "{value:#06x}"),
+            Operand::Immediate8(value) => write!(f, "{value:#04X}"),
+            Operand::Immediate16(value) => write!(f, "{value:#06X}"),
             Operand::Register8(register) => match register {
                 cpu::Register8::A => write!(f, "a"),
                 cpu::Register8::F => write!(f, "f"),
@@ -59,8 +60,8 @@ impl fmt::Display for Operand {
                 cpu::Register16::SP => write!(f, "(sp)"),
                 cpu::Register16::PC => write!(f, "(pc)"),
             },
-            Operand::Direct8(address) => write!(f, "({address:#04x})"),
-            Operand::Direct16(address) => write!(f, "({address:#06x})"),
+            Operand::Direct8(address) => write!(f, "({address:#04X})"),
+            Operand::Direct16(address) => write!(f, "({address:#06X})"),
             Operand::Indexed(register, displacement) => match register {
                 cpu::Register16::IX => write!(f, "(ix{displacement:+})"),
                 cpu::Register16::IY => write!(f, "(iy{displacement:+})"),
@@ -82,6 +83,17 @@ pub enum InterruptMode {
     Mode2,
 }
 
+impl fmt::Display for InterruptMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InterruptMode::Mode0 => write!(f, "IM 0"),
+            InterruptMode::Mode1 => write!(f, "IM 1"),
+            InterruptMode::Mode2 => write!(f, "IM 2"),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub enum JumpTest {
     Unconditional,
     NonZero,
@@ -127,6 +139,7 @@ impl fmt::Display for JumpTest {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Instruction {
     Adc(Operand, Operand),
     Add(Operand, Operand),
@@ -1610,6 +1623,45 @@ impl AlgorithmicDecoder {
                 }
             }
             _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct DecodedInstruction {
+    pub address: u16,
+    pub instruction: Instruction,
+    pub length: usize,
+}
+
+#[cfg(test)]
+/// A test decoder that can return specific instructions without decoding
+#[derive(Default)]
+pub struct TestDecoder {
+    instructions: Vec<Instruction>,
+    current_index: usize,
+}
+
+#[cfg(test)]
+impl TestDecoder {
+    pub fn new(instructions: Vec<Instruction>) -> Self {
+        Self {
+            instructions,
+            current_index: 0,
+        }
+    }
+}
+
+#[cfg(test)]
+impl Decoder for TestDecoder {
+    fn decode(&mut self, _memory: &impl MemRead, address: usize) -> (Instruction, usize) {
+        if self.current_index < self.instructions.len() {
+            let instruction = self.instructions[self.current_index].clone();
+            self.current_index += 1;
+            (instruction, address + 1) // Simple increment for next address
+        } else {
+            // Return NOP if we run out of instructions
+            (Instruction::Nop, address + 1)
         }
     }
 }

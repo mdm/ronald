@@ -2,6 +2,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debug::view::{CrtcDebugView, GateArrayDebugView};
+use crate::debug::Snapshottable;
+use crate::system::clock::MasterClockTick;
 use crate::system::memory::{AnyMemory, MemManage, MemRead};
 use crate::{AudioSink, VideoSink};
 
@@ -23,6 +26,11 @@ use psg::SoundGenerator;
 use screen::Screen;
 use tape::TapeController;
 
+pub struct BusDebugView {
+    pub gate_array: GateArrayDebugView,
+    pub crtc: CrtcDebugView,
+}
+
 pub trait Bus: Default {
     // TODO: replace by BusDevice
     fn read_byte(&mut self, port: u16) -> u8;
@@ -32,6 +40,7 @@ pub trait Bus: Default {
         memory: &mut (impl MemRead + MemManage),
         video: &mut impl VideoSink,
         audio: &mut impl AudioSink,
+        master_clock: MasterClockTick,
     ) -> bool;
     fn acknowledge_interrupt(&mut self);
     fn set_key(&mut self, line: usize, bit: u8);
@@ -67,7 +76,7 @@ where
             _ if port & 0x0800 == 0 => self.ppi.read_byte(&self.crtc, &self.psg, &self.tape, port),
             0xfb7e | 0xfb7f => self.fdc.read_byte(port),
             _ => {
-                log::error!("Unhandled read from port {port:#06x}");
+                log::error!("Unhandled read from port {port:#06X}");
                 unimplemented!();
             }
         }
@@ -92,7 +101,7 @@ where
             0xfa7e | 0xfb7f => self.fdc.write_byte(port, value),
             0xf8ff => (), // peripheral soft reset (ignored)
             _ => {
-                log::error!("Unhandled write to port {port:#06x}: {value:#010b}");
+                log::error!("Unhandled write to port {port:#06X}: {value:#010b}");
                 unimplemented!();
             }
         }
@@ -103,11 +112,12 @@ where
         memory: &mut (impl MemRead + MemManage),
         video: &mut impl VideoSink,
         audio: &mut impl AudioSink,
+        master_clock: MasterClockTick,
     ) -> bool {
         self.psg.step(audio);
-        self.crtc.step();
+        self.crtc.step(master_clock);
         self.gate_array
-            .step(&self.crtc, memory, &mut self.screen, video)
+            .step(&self.crtc, memory, &mut self.screen, video, master_clock)
     }
 
     fn acknowledge_interrupt(&mut self) {
@@ -124,5 +134,20 @@ where
 
     fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
         self.fdc.load_disk(drive, rom, path);
+    }
+}
+
+impl<C, G> Snapshottable for StandardBus<C, G>
+where
+    C: CrtController + Snapshottable<View = CrtcDebugView>,
+    G: GateArray + Snapshottable<View = GateArrayDebugView>,
+{
+    type View = BusDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        BusDebugView {
+            gate_array: self.gate_array.debug_view(),
+            crtc: self.crtc.debug_view(),
+        }
     }
 }

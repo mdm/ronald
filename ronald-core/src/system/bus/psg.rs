@@ -27,7 +27,7 @@ impl SoundGenerator {
             },
             2 => {
                 log::trace!(
-                    "Writing to PSG register {:#04x}: {:#04x}",
+                    "Writing to PSG register {:#04X}: {:#04X}",
                     self.selected_register,
                     self.buffer
                 );

@@ -2,3 +2,6 @@
 resolver = "2"
 members = ["ronald-core", "ronald-egui"]
 default-members = ["ronald-egui"]
+
+[profile.dev]
+opt-level = 3

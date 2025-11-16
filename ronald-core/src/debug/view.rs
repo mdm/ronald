@@ -1,0 +1,83 @@
+use std::collections::HashMap;
+
+use crate::system::{
+    bus::crtc::Register as CrtcRegister, clock::MasterClockTick, instruction::InterruptMode,
+};
+
+pub struct SystemDebugView {
+    pub master_clock: MasterClockTick,
+    pub cpu: CpuDebugView,
+    pub memory: MemoryDebugView,
+    pub gate_array: GateArrayDebugView,
+    pub crtc: CrtcDebugView,
+}
+
+pub struct CpuDebugView {
+    pub register_a: u8,
+    pub register_f: u8,
+    pub register_b: u8,
+    pub register_c: u8,
+    pub register_d: u8,
+    pub register_e: u8,
+    pub register_h: u8,
+    pub register_l: u8,
+    pub shadow_register_a: u8,
+    pub shadow_register_f: u8,
+    pub shadow_register_b: u8,
+    pub shadow_register_c: u8,
+    pub shadow_register_d: u8,
+    pub shadow_register_e: u8,
+    pub shadow_register_h: u8,
+    pub shadow_register_l: u8,
+    pub register_i: u8,
+    pub register_r: u8,
+    pub register_ixh: u8,
+    pub register_ixl: u8,
+    pub register_iyh: u8,
+    pub register_iyl: u8,
+    pub register_sp: u16,
+    pub register_pc: u16,
+    pub iff1: bool,
+    pub iff2: bool,
+    pub halted: bool,
+    pub interrupt_mode: InterruptMode,
+    pub enable_interrupt: bool,
+    pub irq_received: bool,
+}
+
+pub struct MemoryDebugView {
+    pub ram: Vec<u8>,
+    pub ram_extension: Vec<u8>,
+    pub lower_rom: Vec<u8>,
+    pub lower_rom_enabled: bool,
+    pub upper_roms: HashMap<u8, Vec<u8>>,
+    pub selected_upper_rom: u8,
+    pub upper_rom_enabled: bool,
+    pub composite_rom_ram: Vec<u8>,
+    pub composite_ram: Vec<u8>,
+}
+
+pub struct GateArrayDebugView {
+    pub current_screen_mode: u8,
+    pub requested_screen_mode: Option<u8>,
+    pub hsync_active: bool,
+    pub vsync_active: bool,
+    pub hsyncs_since_last_vsync: u16,
+    pub interrupt_counter: u8,
+    pub hold_interrupt: bool,
+    pub selected_pen: usize,
+    pub pen_colors: Vec<u8>, // Hardware color values (0-31)
+}
+
+pub struct CrtcDebugView {
+    pub registers: [u8; 18],
+    pub selected_register: CrtcRegister,
+    pub horizontal_counter: u8,
+    pub character_row_counter: u8,
+    pub scan_line_counter: u8,
+    pub display_start_address: u16,
+    pub hsync_active: bool,
+    pub vsync_active: bool,
+    pub display_enabled: bool,
+    pub current_address: usize,
+}

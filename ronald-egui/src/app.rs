@@ -1,8 +1,8 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
+use web_time::Instant;
 
-use ronald_core::system::AmstradCpc;
-
+use crate::debug::{CpuDebugWindow, CrtcDebugWindow, GateArrayDebugWindow, MemoryDebugWindow};
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
@@ -10,7 +10,7 @@ use crate::system_config::SystemConfigModal;
 
 pub use ronald_core::system::SystemConfig;
 
-pub use crate::key_mapper::{KeyMap, KeyMapStore};
+pub use crate::key_mapper::KeyMapStore;
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 
 #[derive(Deserialize, Serialize)]
@@ -30,6 +30,10 @@ where
     key_mapper: KeyMapper<S>,
     #[serde(skip)]
     system_config_modal: SystemConfigModal,
+    cpu_debug_window: CpuDebugWindow,
+    crtc_debug_window: CrtcDebugWindow,
+    gate_array_debug_window: GateArrayDebugWindow,
+    memory_debug_window: MemoryDebugWindow,
 }
 
 impl<S> Default for RonaldApp<S>
@@ -45,6 +49,10 @@ where
             key_map_editor: KeyMapEditor::default(),
             key_mapper: KeyMapper::default(),
             system_config_modal: SystemConfigModal::default(),
+            cpu_debug_window: CpuDebugWindow::default(),
+            crtc_debug_window: CrtcDebugWindow::default(),
+            gate_array_debug_window: GateArrayDebugWindow::default(),
+            memory_debug_window: MemoryDebugWindow::default(),
         }
     }
 }
@@ -60,7 +68,6 @@ where
             Default::default()
         };
 
-        // Apply the saved theme preference
         cc.egui_ctx
             .set_theme(egui::Theme::from_dark_mode(app.dark_mode));
 
@@ -72,6 +79,7 @@ where
     S: KeyMapStore,
 {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        let start = Instant::now();
         egui_extras::install_image_loaders(ctx);
 
         self.render_menu_bar(ctx);
@@ -80,15 +88,23 @@ where
         self.render_workbench_mode(ctx);
         self.key_map_editor.ui(ctx, &mut self.key_mapper);
         let config_changed = self.system_config_modal.ui(ctx, &mut self.system_config);
-        if config_changed {
-            // Recreate frontend with new config
-            if let Some(render_state) = frame.wgpu_render_state() {
-                let new_frontend = Frontend::with_config(render_state, &self.system_config);
-                self.frontend = Some(new_frontend);
-            }
+        if config_changed && let Some(render_state) = frame.wgpu_render_state() {
+            let new_frontend = Frontend::with_config(render_state, &self.system_config);
+            self.frontend = Some(new_frontend);
+        }
+
+        if self.workbench
+            && let Some(frontend) = &mut self.frontend
+        {
+            self.cpu_debug_window.ui(ctx, frontend);
+            self.crtc_debug_window.ui(ctx, frontend);
+            self.gate_array_debug_window.ui(ctx, frontend);
+            self.memory_debug_window.ui(ctx, frontend);
         }
 
         ctx.request_repaint();
+        let elapsed = Instant::now() - start;
+        log::debug!("Frame time: {} us", elapsed.as_micros());
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
@@ -119,6 +135,40 @@ where
                         ui.close_menu();
                     }
                     if self.workbench {
+                        ui.separator();
+                        if ui
+                            .add(egui::Button::new("CPU").selected(self.cpu_debug_window.show))
+                            .clicked()
+                        {
+                            self.cpu_debug_window.show = !self.cpu_debug_window.show;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new("Memory").selected(self.memory_debug_window.show),
+                            )
+                            .clicked()
+                        {
+                            self.memory_debug_window.show = !self.memory_debug_window.show;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .add(egui::Button::new("CRTC").selected(self.crtc_debug_window.show))
+                            .clicked()
+                        {
+                            self.crtc_debug_window.show = !self.crtc_debug_window.show;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .add(
+                                egui::Button::new("Gate Array")
+                                    .selected(self.gate_array_debug_window.show),
+                            )
+                            .clicked()
+                        {
+                            self.gate_array_debug_window.show = !self.gate_array_debug_window.show;
+                            ui.close_menu();
+                        }
                         ui.separator();
                         if ui.button("Organize Windows").clicked() {
                             ui.ctx().memory_mut(|mem| mem.reset_areas());
@@ -219,7 +269,7 @@ where
                             ctx,
                             Some(ui),
                             &mut self.key_mapper,
-                            !self.key_map_editor.show,
+                            !self.key_map_editor.show && !self.system_config_modal.show,
                         );
                     },
                 );
@@ -231,7 +281,12 @@ where
         if let Some(frontend) = &mut self.frontend
             && self.workbench
         {
-            frontend.ui(ctx, None, &mut self.key_mapper, !self.key_map_editor.show);
+            frontend.ui(
+                ctx,
+                None,
+                &mut self.key_mapper,
+                !self.key_map_editor.show && !self.system_config_modal.show,
+            );
         }
     }
 }

@@ -12,5 +12,8 @@ keymap.backup.json
 
 /ronald-egui/assets/keys/examples
 /ronald-egui/dist
+/ronald-egui/tests/snapshots/*.old.png
+/ronald-egui/tests/snapshots/*.new.png
+/ronald-egui/tests/snapshots/*.diff.png
 
 CLAUDE.md
