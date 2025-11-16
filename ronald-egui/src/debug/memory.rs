@@ -185,23 +185,27 @@ impl MemoryDebugWindow {
     fn render_color_configuration(&mut self, ui: &mut egui::Ui) {
         ui.collapsing("Address Color Coding", |ui| {
             ui.horizontal(|ui| {
-                ui.label("Lower ROM:");
-                ui.color_edit_button_srgba(&mut self.memory_colors.lower_rom);
+                let label = ui.label("Lower ROM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.lower_rom)
+                    .labelled_by(label.id);
 
                 ui.separator();
 
-                ui.label("Upper ROM:");
-                ui.color_edit_button_srgba(&mut self.memory_colors.upper_rom);
+                let label = ui.label("Upper ROM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.upper_rom)
+                    .labelled_by(label.id);
 
                 ui.separator();
 
-                ui.label("RAM:");
-                ui.color_edit_button_srgba(&mut self.memory_colors.ram);
+                let label = ui.label("RAM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.ram)
+                    .labelled_by(label.id);
 
                 ui.separator();
 
-                ui.label("Extension RAM:");
-                ui.color_edit_button_srgba(&mut self.memory_colors.extension_ram);
+                let label = ui.label("Extension RAM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.extension_ram)
+                    .labelled_by(label.id);
             });
 
             if ui.button("Restore Defaults").clicked() {
@@ -245,8 +249,10 @@ impl MemoryDebugWindow {
         };
 
         ui.horizontal(|ui| {
-            ui.label("Jump to address:");
-            let text_edit = ui.text_edit_singleline(&mut self.address_input);
+            let label = ui.label("Jump to address:");
+            let text_edit = ui
+                .text_edit_singleline(&mut self.address_input)
+                .labelled_by(label.id);
             let enter_pressed =
                 text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let go_clicked = ui.button("Go").clicked();
@@ -614,8 +620,9 @@ impl MemoryDebugWindow {
 
         // PC breakpoint input
         ui.horizontal(|ui| {
-            ui.label("PC:");
-            ui.text_edit_singleline(&mut self.pc_breakpoint_input);
+            let label = ui.label("PC:");
+            ui.text_edit_singleline(&mut self.pc_breakpoint_input)
+                .labelled_by(label.id);
 
             if ui.button("Add").clicked()
                 && let Ok(addr) =
@@ -678,5 +685,407 @@ impl MemoryDebugWindow {
         if let Some(id) = to_remove {
             breakpoint_manager.remove_breakpoint(id);
         }
+    }
+}
+
+#[cfg(test)]
+mod gui_tests {
+    use super::*;
+
+    use egui::accesskit;
+    use egui_kittest::{
+        Harness,
+        kittest::{self, Queryable},
+    };
+
+    use ronald_core::debug::breakpoint::{CpuRegister16Breakpoint, GateArrayScreenModeBreakpoint};
+
+    use crate::debug::mock::TestDebugger;
+
+    #[test]
+    fn test_memory_debug_window_opens_and_closes() {
+        let mut debugger = TestDebugger::default();
+        let mut window = MemoryDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Check that the window title is rendered
+        harness.get_by_label("Memory Internals");
+
+        // Click close button
+        harness.get_by_label("Close window").click();
+        harness.run();
+
+        // Window should no longer be visible
+        assert!(harness.query_by_label("Memory Internals").is_none());
+    }
+
+    #[test]
+    fn test_memory_debug_window_pc_breakpoint_add_via_input_and_remove() {
+        let mut debugger = TestDebugger::default();
+        let mut window = MemoryDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select "Disassembly" view mode
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .next()
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Disassembly").click();
+        harness.run();
+
+        // Type in PC address
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
+            .type_text("0x0000");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Add")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("PC = 0x0000").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("PC = 0x0000").is_none());
+    }
+
+    #[test]
+    fn test_memory_debug_window_pc_breakpoint_add_via_input_and_toggle() {
+        let mut debugger = TestDebugger::default();
+        let mut window = MemoryDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select "Disassembly" view mode
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .next()
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Disassembly").click();
+        harness.run();
+
+        // Type in PC address
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
+            .type_text("0x0000");
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Add")
+            .click();
+        harness.run();
+
+        // Disable breakpoint
+        harness.get_by_label("PC = 0x0000").click();
+        harness.run();
+        drop(harness);
+
+        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 1);
+        assert!(
+            debugger
+                .breakpoint_manager()
+                .breakpoints_iter()
+                .any(|(_, bp)| {
+                    matches!(
+                        bp,
+                        AnyBreakpoint::CpuRegister16(CpuRegister16Breakpoint {
+                            register: Register16::PC,
+                            value: Some(0x0000),
+                            ..
+                        })
+                    ) && !bp.enabled()
+                })
+        );
+    }
+
+    #[test]
+    fn test_memory_debug_window_pc_breakpoint_via_disassembly() {
+        let mut debugger = TestDebugger::default();
+        let mut window = MemoryDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select "Disassembly" view mode
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .next()
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Disassembly").click();
+        harness.run();
+
+        // Click on address
+        harness.get_by_label("  0000:").click();
+        harness.run();
+
+        assert!(harness.query_by_label("PC = 0x0000").is_some());
+
+        // Click on address
+        harness.get_by_label("● 0000:").click();
+        harness.run();
+
+        assert!(harness.query_by_label("PC = 0x0000").is_none());
+    }
+
+    #[test]
+    fn test_memory_debug_window_jump_to_address_works_disassembly() {
+        let mut debugger = TestDebugger::default();
+        let mut window = MemoryDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select "Disassembly" view mode
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .next()
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Disassembly").click();
+        harness.run();
+
+        // Type 0xc000
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .type_text("0xc000");
+        harness.run();
+
+        // Jump to address
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Go")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("  C000:").is_some());
+        assert!(harness.query_by_label("  0000:").is_none());
+
+        // Track current PC
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Track Current PC")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("  0000:").is_some());
+        assert!(harness.query_by_label("  C000:").is_none());
+    }
+
+    fn jump_to_address_works(view: &str) {
+        let mut debugger = TestDebugger::default();
+        let mut window = MemoryDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Select view mode
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .next()
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label(view).click();
+        harness.run();
+
+        // Type 0x2000
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .type_text("0x2000");
+        harness.run();
+
+        let scroll_area = harness
+            .get_by_label("2000:")
+            .parent()
+            .unwrap()
+            .bounding_box()
+            .unwrap();
+
+        let address_label = harness.get_by_label("2000:").bounding_box().unwrap();
+        assert!(!scroll_area.contains(address_label.origin()));
+
+        // Jump to address
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Go")
+            .click();
+        harness.run();
+
+        let address_label = harness.get_by_label("2000:").bounding_box().unwrap();
+        assert!(scroll_area.contains(address_label.origin()));
+    }
+
+    #[test]
+    fn test_memory_debug_window_jump_to_address_works_composite_rom_ram() {
+        jump_to_address_works("Composite ROM/RAM");
+    }
+
+    #[test]
+    fn test_memory_debug_window_jump_to_address_works_composite_ram() {
+        jump_to_address_works("Composite RAM");
+    }
+
+    #[test]
+    fn test_memory_debug_window_jump_to_address_works_lower_rom() {
+        jump_to_address_works("Lower ROM only");
+    }
+
+    #[test]
+    fn test_memory_debug_window_jump_to_address_works_upper_rom() {
+        jump_to_address_works("Upper ROM #00 only");
+    }
+
+    #[test]
+    fn test_memory_debug_window_jump_to_address_works_ram() {
+        jump_to_address_works("RAM only");
+    }
+
+    #[test]
+    #[ignore = "extension ram not implemented"]
+    fn test_memory_debug_window_jump_to_address_works_extension_ram() {
+        jump_to_address_works("Extension RAM only");
+    }
+
+    fn pick_color_works(label: &str, snaphot: &str) {
+        let mut debugger = TestDebugger::default();
+        let mut window = MemoryDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        // Show color configuration
+        harness.get_by_label("Address Color Coding").click();
+        harness.run();
+
+        harness.snapshot("default_memory_colors");
+
+        // Open color picker
+        harness
+            .get_by_role_and_label(accesskit::Role::ColorWell, label)
+            .click();
+        harness.run();
+
+        // Edit red
+        let value = harness
+            .get_all_by_role(accesskit::Role::SpinButton)
+            .next()
+            .unwrap();
+        value.click();
+        value.type_text("255");
+        harness.run();
+
+        // Edit green
+        let value = harness
+            .get_all_by_role(accesskit::Role::SpinButton)
+            .nth(1)
+            .unwrap();
+        value.click();
+        value.type_text("255");
+        harness.run();
+
+        // Edit blue
+        let value = harness
+            .get_all_by_role(accesskit::Role::SpinButton)
+            .nth(2)
+            .unwrap();
+        value.click();
+        value.type_text("255");
+        value.key_press(kittest::Key::Escape); // close color picker
+        harness.run();
+
+        harness.snapshot(snaphot);
+
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Restore Defaults")
+            .click();
+        harness.run();
+
+        harness.snapshot("memory_colors_defaults");
+    }
+
+    #[test]
+    fn test_memory_debug_window_pick_color_lower_rom() {
+        pick_color_works("Lower ROM:", "memory_colors_lower_rom_changed");
+    }
+
+    #[test]
+    fn test_memory_debug_window_pick_color_upper_rom() {
+        pick_color_works("Upper ROM:", "memory_colors_upper_rom_changed");
+    }
+
+    #[test]
+    fn test_memory_debug_window_pick_color_ram() {
+        pick_color_works("RAM:", "memory_colors_ram_changed");
+    }
+
+    #[test]
+    fn test_memory_debug_window_pick_color_extension_ram() {
+        pick_color_works("Extension RAM:", "memory_colors_extension_ram_changed");
     }
 }
