@@ -693,10 +693,7 @@ mod gui_tests {
     use super::*;
 
     use egui::accesskit;
-    use egui_kittest::{
-        Harness,
-        kittest::{self, Queryable},
-    };
+    use egui_kittest::{Harness, kittest::Queryable};
 
     use ronald_core::debug::breakpoint::{CpuRegister16Breakpoint, GateArrayScreenModeBreakpoint};
 
@@ -1004,6 +1001,16 @@ mod gui_tests {
     fn test_memory_debug_window_jump_to_address_works_extension_ram() {
         jump_to_address_works("Extension RAM only");
     }
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    use egui::accesskit;
+    use egui_kittest::{Harness, kittest, kittest::Queryable};
+
+    use crate::debug::mock::TestDebugger;
 
     fn pick_color_works(label: &str, snaphot: &str) {
         let mut debugger = TestDebugger::default();
@@ -1023,7 +1030,7 @@ mod gui_tests {
         harness.get_by_label("Address Color Coding").click();
         harness.run();
 
-        harness.snapshot("default_memory_colors");
+        harness.snapshot("memory_colors_defaults");
 
         // Open color picker
         harness
@@ -1070,21 +1077,25 @@ mod gui_tests {
     }
 
     #[test]
+    #[ignore = "snapshot test"]
     fn test_memory_debug_window_pick_color_lower_rom() {
         pick_color_works("Lower ROM:", "memory_colors_lower_rom_changed");
     }
 
     #[test]
+    #[ignore = "snapshot test"]
     fn test_memory_debug_window_pick_color_upper_rom() {
         pick_color_works("Upper ROM:", "memory_colors_upper_rom_changed");
     }
 
     #[test]
+    #[ignore = "snapshot test"]
     fn test_memory_debug_window_pick_color_ram() {
         pick_color_works("RAM:", "memory_colors_ram_changed");
     }
 
     #[test]
+    #[ignore = "snapshot test"]
     fn test_memory_debug_window_pick_color_extension_ram() {
         pick_color_works("Extension RAM:", "memory_colors_extension_ram_changed");
     }
