@@ -7,7 +7,7 @@ use crate::debug::event::{CpuDebugEvent, CrtcDebugEvent, GateArrayDebugEvent, Me
 use crate::debug::{DebugEvent, DebugSource, EventSubscription};
 use crate::system::bus::crtc::Register as CrtcRegister;
 use crate::system::clock::MasterClockTick;
-use crate::system::cpu::{Register16, Register8};
+use crate::system::cpu::{Register8, Register16};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BreakpointId(usize);
@@ -1724,11 +1724,13 @@ mod tests {
 
         // The breakpoint should have triggered
         assert!(manager.any_triggered());
-        assert!(manager
-            .breakpoint(step_into_id)
-            .unwrap()
-            .triggered()
-            .is_some());
+        assert!(
+            manager
+                .breakpoint(step_into_id)
+                .unwrap()
+                .triggered()
+                .is_some()
+        );
 
         // After evaluation, the one-shot breakpoint should be removed
         manager.evaluate_breakpoints();
@@ -1788,11 +1790,13 @@ mod tests {
 
         // Now it should trigger (we're back at depth 0)
         assert!(manager.any_triggered());
-        assert!(manager
-            .breakpoint(step_over_id)
-            .unwrap()
-            .triggered()
-            .is_some());
+        assert!(
+            manager
+                .breakpoint(step_over_id)
+                .unwrap()
+                .triggered()
+                .is_some()
+        );
 
         // After evaluation, the one-shot breakpoint should be removed
         manager.evaluate_breakpoints();
@@ -1819,11 +1823,13 @@ mod tests {
 
         // Should trigger immediately since we're already at depth 0
         assert!(manager.any_triggered());
-        assert!(manager
-            .breakpoint(step_over_id)
-            .unwrap()
-            .triggered()
-            .is_some());
+        assert!(
+            manager
+                .breakpoint(step_over_id)
+                .unwrap()
+                .triggered()
+                .is_some()
+        );
 
         // After evaluation, the one-shot breakpoint should be removed
         manager.evaluate_breakpoints();
@@ -1901,11 +1907,13 @@ mod tests {
 
         // Now it should trigger (we've stepped out to depth 0)
         assert!(manager.any_triggered());
-        assert!(manager
-            .breakpoint(step_out_id)
-            .unwrap()
-            .triggered()
-            .is_some());
+        assert!(
+            manager
+                .breakpoint(step_out_id)
+                .unwrap()
+                .triggered()
+                .is_some()
+        );
 
         // After evaluation, the one-shot breakpoint should be removed
         manager.evaluate_breakpoints();

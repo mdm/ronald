@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::debug::view::{CpuDebugView, GateArrayDebugView, MemoryDebugView, SystemDebugView};
-use crate::debug::{record_debug_events, Snapshottable};
+use crate::debug::{Snapshottable, record_debug_events};
 use crate::system::bus::BusDebugView;
 use crate::system::clock::{MasterClock, MasterClockTick};
 use crate::system::instruction::{DecodedInstruction, Instruction};

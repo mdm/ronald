@@ -1,8 +1,8 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
-use debug::{breakpoint::BreakpointManager, view::SystemDebugView, Snapshottable};
-use system::bus::{crtc::AnyCrtController, gate_array::AnyGateArray, StandardBus};
+use debug::{Snapshottable, breakpoint::BreakpointManager, view::SystemDebugView};
+use system::bus::{StandardBus, crtc::AnyCrtController, gate_array::AnyGateArray};
 use system::cpu::ZilogZ80;
 use system::instruction::AlgorithmicDecoder;
 use system::memory::AnyMemory;

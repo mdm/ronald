@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::view::{CrtcDebugView, GateArrayDebugView};
 use crate::debug::Snapshottable;
+use crate::debug::view::{CrtcDebugView, GateArrayDebugView};
 use crate::system::clock::MasterClockTick;
 use crate::system::memory::{AnyMemory, MemManage, MemRead};
 use crate::{AudioSink, VideoSink};

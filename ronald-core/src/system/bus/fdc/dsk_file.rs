@@ -118,7 +118,7 @@ impl Disk {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             "Could not find the expected track header.",
-                        ))
+                        ));
                     }
                 }
             }

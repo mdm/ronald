@@ -1,5 +1,5 @@
 use crate::system::bus::crtc::Register as CrtcRegister;
-use crate::system::cpu::{Register16, Register8};
+use crate::system::cpu::{Register8, Register16};
 
 /// A DebugEvent is any internal state change and any input or output
 #[derive(Debug, Clone)]
