@@ -1,5 +1,5 @@
 use ronald_core::{
-    debug::{emit_event, event::CpuDebugEvent, DebugSource, EventSubscription},
+    debug::{DebugSource, EventSubscription, emit_event, event::CpuDebugEvent},
     system::{clock::MasterClockTick, cpu::Register16},
 };
 

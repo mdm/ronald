@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::system::bus::keyboard::Keyboard;
 use crate::AudioSink;
+use crate::system::bus::keyboard::Keyboard;
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
