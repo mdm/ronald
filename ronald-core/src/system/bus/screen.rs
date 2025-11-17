@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+use crate::VideoSink;
 use crate::constants::{
     FIRMWARE_COLORS, HARDWARE_TO_FIRMWARE_COLORS, SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH,
 };
-use crate::VideoSink;
 
 const VIRTUAL_BUFFER_WIDTH: usize = 64 * 16;
 const VIRTUAL_BUFFER_HEIGHT: usize = 39 * 16;

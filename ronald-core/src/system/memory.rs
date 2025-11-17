@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::event::MemoryDebugEvent;
-use crate::debug::view::MemoryDebugView;
 use crate::debug::DebugSource;
 use crate::debug::Debuggable;
 use crate::debug::Snapshottable;
+use crate::debug::event::MemoryDebugEvent;
+use crate::debug::view::MemoryDebugView;
 use crate::system::clock::MasterClockTick;
 
 pub trait MemRead {

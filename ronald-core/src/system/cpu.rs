@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use crate::debug::event::CpuDebugEvent;
 use crate::debug::view::CpuDebugView;
 use crate::debug::{DebugSource, Debuggable, Snapshottable};
+use crate::system::MasterClockTick;
 use crate::system::bus::Bus;
 use crate::system::instruction::{
     DecodedInstruction, Decoder, Instruction, InterruptMode, JumpTest, Operand,
 };
 use crate::system::memory::{MemManage, MemRead, MemWrite};
-use crate::system::MasterClockTick;
 
 #[allow(clippy::upper_case_acronyms)] // Registers are names as in the CPU manual
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -2243,14 +2243,14 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        debug::{event::DebugEvent, record_debug_events, DebugSource, EventSubscription},
+        AudioSink, VideoSink,
+        debug::{DebugSource, EventSubscription, event::DebugEvent, record_debug_events},
         system::{
             bus::Bus,
             clock::MasterClock,
             instruction::{AlgorithmicDecoder, Instruction, JumpTest, Operand, TestDecoder},
             memory::{MemManage, Ram, TestMemory},
         },
-        AudioSink, VideoSink,
     };
 
     use super::*;
