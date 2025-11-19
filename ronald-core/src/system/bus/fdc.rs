@@ -34,10 +34,120 @@ enum LegacyCommand {
     ScanHighOrEqual,
 }
 
+impl LegacyCommand {
+    fn from_byte(byte: u8) -> LegacyCommand {
+        match byte & 0x1f {
+            0x02 => LegacyCommand::ReadTrack,
+            0x03 => LegacyCommand::Specify,
+            0x04 => LegacyCommand::SenseDriveState,
+            0x05 => LegacyCommand::WriteSector,
+            0x06 => LegacyCommand::ReadSector,
+            0x07 => LegacyCommand::Recalibrate,
+            0x08 => LegacyCommand::SenseInterruptState,
+            0x09 => LegacyCommand::WriteDeletedSector,
+            0x0a => LegacyCommand::ReadSectorId,
+            0x0c => LegacyCommand::ReadDeletedSector,
+            0x0d => LegacyCommand::FormatTrack,
+            0x0f => LegacyCommand::Seek,
+            0x11 => LegacyCommand::ScanEqual,
+            0x19 => LegacyCommand::ScanLowOrEqual,
+            0x1d => LegacyCommand::ScanHighOrEqual,
+            _ => unreachable!(),
+        }
+    }
+
+    fn expected_parameter_bytes(&self) -> usize {
+        match self {
+            LegacyCommand::ReadTrack => 8,
+            LegacyCommand::Specify => 2,
+            LegacyCommand::SenseDriveState => 1,
+            LegacyCommand::WriteSector => 8,
+            LegacyCommand::ReadSector => 8,
+            LegacyCommand::Recalibrate => 1,
+            LegacyCommand::SenseInterruptState => 0,
+            LegacyCommand::WriteDeletedSector => 8,
+            LegacyCommand::ReadSectorId => 1,
+            LegacyCommand::ReadDeletedSector => 8,
+            LegacyCommand::FormatTrack => 5,
+            LegacyCommand::Seek => 2,
+            LegacyCommand::ScanEqual => 8,
+            LegacyCommand::ScanLowOrEqual => 8,
+            LegacyCommand::ScanHighOrEqual => 8,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 enum Mode {
     FrequencyModulation,
     ModifiedFrequencyModulation,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum CommandType {
+    ReadData,
+    ReadDeletedData,
+    WriteData,
+    WriteDeletedData,
+    ReadTrack,
+    ReadId,
+    FormatTrack,
+    ScanEqual,
+    ScanLowOrEqual,
+    ScanHighOrEqual,
+    Recalibrate,
+    SenseInterruptStatus,
+    Specify,
+    SenseDriveStatus,
+    Seek,
+    Invalid,
+}
+
+impl CommandType {
+    fn expected_len(&self) -> usize {
+        match self {
+            Self::ReadData => 9,
+            Self::ReadDeletedData => 9,
+            Self::WriteData => 9,
+            Self::WriteDeletedData => 9,
+            Self::ReadTrack => 9,
+            Self::ReadId => 2,
+            Self::FormatTrack => 6,
+            Self::ScanEqual => 9,
+            Self::ScanLowOrEqual => 9,
+            Self::ScanHighOrEqual => 9,
+            Self::Recalibrate => 2,
+            Self::SenseInterruptStatus => 1,
+            Self::Specify => 3,
+            Self::SenseDriveStatus => 2,
+            Self::Seek => 3,
+            Self::Invalid => 1,
+        }
+    }
+}
+
+impl From<u8> for CommandType {
+    fn from(code: u8) -> Self {
+        #[allow(clippy::identity_op)]
+        match code {
+            code if code & 0b0001_1111 == 0b0000_0110 => Self::ReadData,
+            code if code & 0b0001_1111 == 0b0000_1100 => Self::ReadDeletedData,
+            code if code & 0b0011_1111 == 0b0000_0101 => Self::WriteData,
+            code if code & 0b0011_1111 == 0b0000_1001 => Self::WriteDeletedData,
+            code if code & 0b1001_1111 == 0b0000_0010 => Self::ReadTrack,
+            code if code & 0b1011_1111 == 0b0000_1010 => Self::ReadId,
+            code if code & 0b1011_1111 == 0b0000_1101 => Self::FormatTrack,
+            code if code & 0b0001_1111 == 0b0001_0001 => Self::ScanEqual,
+            code if code & 0b0001_1111 == 0b0001_1001 => Self::ScanLowOrEqual,
+            code if code & 0b0001_1111 == 0b0001_1101 => Self::ScanHighOrEqual,
+            code if code & 0b1111_1111 == 0b0000_0111 => Self::Recalibrate,
+            code if code & 0b1111_1111 == 0b0000_1000 => Self::SenseInterruptStatus,
+            code if code & 0b1111_1111 == 0b0000_0011 => Self::Specify,
+            code if code & 0b1111_1111 == 0b0000_0100 => Self::SenseDriveStatus,
+            code if code & 0b1111_1111 == 0b0000_1111 => Self::Seek,
+            _ => Self::Invalid,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -193,62 +303,17 @@ const BITMASK_SKIP: u8 = 0b0010_0000;
 const BITMASK_HEAD: u8 = 0b0000_0100;
 const BITMASK_UNIT_SELECT: u8 = 0b0000_0011;
 
-const BITMASK_READ_DATA: u8 = 0b0001_1111;
-const COMMAND_READ_DATA: u8 = 0b0000_0110;
-
-const BITMASK_READ_DELETED_DATA: u8 = 0b0001_1111;
-const COMMAND_READ_DELETED_DATA: u8 = 0b0000_1100;
-
-const BITMASK_WRITE_DATA: u8 = 0b0011_1111;
-const COMMAND_WRITE_DATA: u8 = 0b0000_0101;
-
-const BITMASK_WRITE_DELETED_DATA: u8 = 0b0011_1111;
-const COMMAND_WRITE_DELETED_DATA: u8 = 0b0000_1001;
-
-const BITMASK_READ_TRACK: u8 = 0b1001_1111;
-const COMMAND_READ_TRACK: u8 = 0b0000_0010;
-
-const BITMASK_READ_ID: u8 = 0b1011_1111;
-const COMMAND_READ_ID: u8 = 0b0000_1010;
-
-const BITMASK_FORMAT_TRACK: u8 = 0b1011_1111;
-const COMMAND_FORMAT_TRACK: u8 = 0b0000_1101;
-
-const BITMASK_SCAN_EQUAL: u8 = 0b0001_1111;
-const COMMAND_SCAN_EQUAL: u8 = 0b0001_0001;
-
-const BITMASK_SCAN_LOW_OR_EQUAL: u8 = 0b0001_1111;
-const COMMAND_SCAN_LOW_OR_EQUAL: u8 = 0b0001_1001;
-
-const BITMASK_SCAN_HIGH_OR_EQUAL: u8 = 0b0001_1111;
-const COMMAND_SCAN_HIGH_OR_EQUAL: u8 = 0b0001_1101;
-
-const BITMASK_RECALIBRATE: u8 = 0b1111_1111;
-const COMMAND_RECALIBRATE: u8 = 0b0000_0111;
-
-const BITMASK_SENSE_INTERRUPT_STATUS: u8 = 0b1111_1111;
-const COMMAND_SENSE_INTERRUPT_STATUS: u8 = 0b0000_1000;
-
-const BITMASK_SPECIFY: u8 = 0b1111_1111;
-const COMMAND_SPECIFY: u8 = 0b0000_0011;
-
-const BITMASK_SENSE_DRIVE_STATUS: u8 = 0b1111_1111;
-const COMMAND_SENSE_DRIVE_STATUS: u8 = 0b0000_0100;
-
-const BITMASK_SEEK: u8 = 0b1111_1111;
-const COMMAND_SEEK: u8 = 0b0000_1111;
-
 impl From<&[u8]> for Command {
     fn from(bytes: &[u8]) -> Self {
-        match bytes[0] {
-            code if code & BITMASK_READ_DATA == COMMAND_READ_DATA => Command::ReadData {
-                multi_track: (code & BITMASK_MULTI_TRACK) != 0,
-                mode: if (code & BITMASK_MODE) != 0 {
+        match bytes[0].into() {
+            CommandType::ReadData => Command::ReadData {
+                multi_track: (bytes[0] & BITMASK_MULTI_TRACK) != 0,
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
                     Mode::ModifiedFrequencyModulation
                 } else {
                     Mode::FrequencyModulation
                 },
-                skip: (code & BITMASK_SKIP) != 0,
+                skip: (bytes[0] & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
                 cylinder_number: bytes[2],
@@ -259,29 +324,27 @@ impl From<&[u8]> for Command {
                 gap_length: bytes[7],
                 data_length: bytes[8],
             },
-            code if code & BITMASK_READ_DELETED_DATA == COMMAND_READ_DELETED_DATA => {
-                Command::ReadDeletedData {
-                    multi_track: (code & BITMASK_MULTI_TRACK) != 0,
-                    mode: if (code & BITMASK_MODE) != 0 {
-                        Mode::ModifiedFrequencyModulation
-                    } else {
-                        Mode::FrequencyModulation
-                    },
-                    skip: (code & BITMASK_SKIP) != 0,
-                    head: (bytes[1] & BITMASK_HEAD) >> 2,
-                    unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                    cylinder_number: bytes[2],
-                    head_address: bytes[3],
-                    record: bytes[4],
-                    number: bytes[5],
-                    end_of_track: bytes[6],
-                    gap_length: bytes[7],
-                    data_length: bytes[8],
-                }
-            }
-            code if code & BITMASK_WRITE_DATA == COMMAND_WRITE_DATA => Command::WriteData {
-                multi_track: (code & BITMASK_MULTI_TRACK) != 0,
-                mode: if (code & BITMASK_MODE) != 0 {
+            CommandType::ReadDeletedData => Command::ReadDeletedData {
+                multi_track: (bytes[0] & BITMASK_MULTI_TRACK) != 0,
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
+                    Mode::ModifiedFrequencyModulation
+                } else {
+                    Mode::FrequencyModulation
+                },
+                skip: (bytes[0] & BITMASK_SKIP) != 0,
+                head: (bytes[1] & BITMASK_HEAD) >> 2,
+                unit_select: bytes[1] & BITMASK_UNIT_SELECT,
+                cylinder_number: bytes[2],
+                head_address: bytes[3],
+                record: bytes[4],
+                number: bytes[5],
+                end_of_track: bytes[6],
+                gap_length: bytes[7],
+                data_length: bytes[8],
+            },
+            CommandType::WriteData => Command::WriteData {
+                multi_track: (bytes[0] & BITMASK_MULTI_TRACK) != 0,
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
                     Mode::ModifiedFrequencyModulation
                 } else {
                     Mode::FrequencyModulation
@@ -296,32 +359,13 @@ impl From<&[u8]> for Command {
                 gap_length: bytes[7],
                 data_length: bytes[8],
             },
-            code if code & BITMASK_WRITE_DELETED_DATA == COMMAND_WRITE_DELETED_DATA => {
-                Command::WriteDeletedData {
-                    multi_track: (code & BITMASK_MULTI_TRACK) != 0,
-                    mode: if (code & BITMASK_MODE) != 0 {
-                        Mode::ModifiedFrequencyModulation
-                    } else {
-                        Mode::FrequencyModulation
-                    },
-                    head: (bytes[1] & BITMASK_HEAD) >> 2,
-                    unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                    cylinder_number: bytes[2],
-                    head_address: bytes[3],
-                    record: bytes[4],
-                    number: bytes[5],
-                    end_of_track: bytes[6],
-                    gap_length: bytes[7],
-                    data_length: bytes[8],
-                }
-            }
-            code if code & BITMASK_READ_TRACK == COMMAND_READ_TRACK => Command::ReadTrack {
-                mode: if (code & BITMASK_MODE) != 0 {
+            CommandType::WriteDeletedData => Command::WriteDeletedData {
+                multi_track: (bytes[0] & BITMASK_MULTI_TRACK) != 0,
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
                     Mode::ModifiedFrequencyModulation
                 } else {
                     Mode::FrequencyModulation
                 },
-                skip: (code & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
                 cylinder_number: bytes[2],
@@ -332,8 +376,25 @@ impl From<&[u8]> for Command {
                 gap_length: bytes[7],
                 data_length: bytes[8],
             },
-            code if code & BITMASK_READ_ID == COMMAND_READ_ID => Command::ReadId {
-                mode: if (code & BITMASK_MODE) != 0 {
+            CommandType::ReadTrack => Command::ReadTrack {
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
+                    Mode::ModifiedFrequencyModulation
+                } else {
+                    Mode::FrequencyModulation
+                },
+                skip: (bytes[0] & BITMASK_SKIP) != 0,
+                head: (bytes[1] & BITMASK_HEAD) >> 2,
+                unit_select: bytes[1] & BITMASK_UNIT_SELECT,
+                cylinder_number: bytes[2],
+                head_address: bytes[3],
+                record: bytes[4],
+                number: bytes[5],
+                end_of_track: bytes[6],
+                gap_length: bytes[7],
+                data_length: bytes[8],
+            },
+            CommandType::ReadId => Command::ReadId {
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
                     Mode::ModifiedFrequencyModulation
                 } else {
                     Mode::FrequencyModulation
@@ -341,8 +402,8 @@ impl From<&[u8]> for Command {
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
             },
-            code if code & BITMASK_FORMAT_TRACK == COMMAND_FORMAT_TRACK => Command::FormatTrack {
-                mode: if (code & BITMASK_MODE) != 0 {
+            CommandType::FormatTrack => Command::FormatTrack {
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
                     Mode::ModifiedFrequencyModulation
                 } else {
                     Mode::FrequencyModulation
@@ -354,14 +415,14 @@ impl From<&[u8]> for Command {
                 gap_length: bytes[4],
                 data: bytes[5],
             },
-            code if code & BITMASK_SCAN_EQUAL == COMMAND_SCAN_EQUAL => Command::ScanEqual {
-                multi_track: (code & BITMASK_MULTI_TRACK) != 0,
-                mode: if (code & BITMASK_MODE) != 0 {
+            CommandType::ScanEqual => Command::ScanEqual {
+                multi_track: (bytes[0] & BITMASK_MULTI_TRACK) != 0,
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
                     Mode::ModifiedFrequencyModulation
                 } else {
                     Mode::FrequencyModulation
                 },
-                skip: (code & BITMASK_SKIP) != 0,
+                skip: (bytes[0] & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
                 cylinder_number: bytes[2],
@@ -372,113 +433,62 @@ impl From<&[u8]> for Command {
                 gap_length: bytes[7],
                 scan_type: bytes[8],
             },
-            code if code & BITMASK_SCAN_LOW_OR_EQUAL == COMMAND_SCAN_LOW_OR_EQUAL => {
-                Command::ScanLowOrEqual {
-                    multi_track: (code & BITMASK_MULTI_TRACK) != 0,
-                    mode: if (code & BITMASK_MODE) != 0 {
-                        Mode::ModifiedFrequencyModulation
-                    } else {
-                        Mode::FrequencyModulation
-                    },
-                    skip: (code & BITMASK_SKIP) != 0,
-                    head: (bytes[1] & BITMASK_HEAD) >> 2,
-                    unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                    cylinder_number: bytes[2],
-                    head_address: bytes[3],
-                    record: bytes[4],
-                    number: bytes[5],
-                    end_of_track: bytes[6],
-                    gap_length: bytes[7],
-                    scan_type: bytes[8],
-                }
-            }
-            code if code & BITMASK_SCAN_HIGH_OR_EQUAL == COMMAND_SCAN_HIGH_OR_EQUAL => {
-                Command::ScanHighOrEqual {
-                    multi_track: (code & BITMASK_MULTI_TRACK) != 0,
-                    mode: if (code & BITMASK_MODE) != 0 {
-                        Mode::ModifiedFrequencyModulation
-                    } else {
-                        Mode::FrequencyModulation
-                    },
-                    skip: (code & BITMASK_SKIP) != 0,
-                    head: (bytes[1] & BITMASK_HEAD) >> 2,
-                    unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                    cylinder_number: bytes[2],
-                    head_address: bytes[3],
-                    record: bytes[4],
-                    number: bytes[5],
-                    end_of_track: bytes[6],
-                    gap_length: bytes[7],
-                    scan_type: bytes[8],
-                }
-            }
-            code if code & BITMASK_RECALIBRATE == COMMAND_RECALIBRATE => Command::Recalibrate {
+            CommandType::ScanLowOrEqual => Command::ScanLowOrEqual {
+                multi_track: (bytes[0] & BITMASK_MULTI_TRACK) != 0,
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
+                    Mode::ModifiedFrequencyModulation
+                } else {
+                    Mode::FrequencyModulation
+                },
+                skip: (bytes[0] & BITMASK_SKIP) != 0,
+                head: (bytes[1] & BITMASK_HEAD) >> 2,
+                unit_select: bytes[1] & BITMASK_UNIT_SELECT,
+                cylinder_number: bytes[2],
+                head_address: bytes[3],
+                record: bytes[4],
+                number: bytes[5],
+                end_of_track: bytes[6],
+                gap_length: bytes[7],
+                scan_type: bytes[8],
+            },
+            CommandType::ScanHighOrEqual => Command::ScanHighOrEqual {
+                multi_track: (bytes[0] & BITMASK_MULTI_TRACK) != 0,
+                mode: if (bytes[0] & BITMASK_MODE) != 0 {
+                    Mode::ModifiedFrequencyModulation
+                } else {
+                    Mode::FrequencyModulation
+                },
+                skip: (bytes[0] & BITMASK_SKIP) != 0,
+                head: (bytes[1] & BITMASK_HEAD) >> 2,
+                unit_select: bytes[1] & BITMASK_UNIT_SELECT,
+                cylinder_number: bytes[2],
+                head_address: bytes[3],
+                record: bytes[4],
+                number: bytes[5],
+                end_of_track: bytes[6],
+                gap_length: bytes[7],
+                scan_type: bytes[8],
+            },
+            CommandType::Recalibrate => Command::Recalibrate {
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
             },
-            code if code & BITMASK_SENSE_INTERRUPT_STATUS == COMMAND_SENSE_INTERRUPT_STATUS => {
-                Command::SenseInterruptStatus
-            }
-            code if code & BITMASK_SPECIFY == COMMAND_SPECIFY => Command::Specify {
+            CommandType::SenseInterruptStatus => Command::SenseInterruptStatus,
+            CommandType::Specify => Command::Specify {
                 step_rate_time: (bytes[1] & 0b1111_0000) >> 4,
                 head_unload_time: bytes[1] & 0b0000_1111,
                 head_load_time: (bytes[2] & 0b1111_1110) >> 1,
                 non_dma_mode: (bytes[2] & 0b0000_0001) != 0,
             },
-            code if code & BITMASK_SENSE_DRIVE_STATUS == COMMAND_SENSE_DRIVE_STATUS => {
-                Command::SenseDriveStatus {
-                    head: (bytes[1] & BITMASK_HEAD) >> 2,
-                    unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                }
-            }
-            code if code & BITMASK_SEEK == COMMAND_SEEK => Command::Seek {
+            CommandType::SenseDriveStatus => Command::SenseDriveStatus {
+                head: (bytes[1] & BITMASK_HEAD) >> 2,
+                unit_select: bytes[1] & BITMASK_UNIT_SELECT,
+            },
+            CommandType::Seek => Command::Seek {
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
                 new_cylinder_number: bytes[2],
             },
-            _ => Command::Invalid,
-        }
-    }
-}
-
-impl LegacyCommand {
-    fn from_byte(byte: u8) -> LegacyCommand {
-        match byte & 0x1f {
-            0x02 => LegacyCommand::ReadTrack,
-            0x03 => LegacyCommand::Specify,
-            0x04 => LegacyCommand::SenseDriveState,
-            0x05 => LegacyCommand::WriteSector,
-            0x06 => LegacyCommand::ReadSector,
-            0x07 => LegacyCommand::Recalibrate,
-            0x08 => LegacyCommand::SenseInterruptState,
-            0x09 => LegacyCommand::WriteDeletedSector,
-            0x0a => LegacyCommand::ReadSectorId,
-            0x0c => LegacyCommand::ReadDeletedSector,
-            0x0d => LegacyCommand::FormatTrack,
-            0x0f => LegacyCommand::Seek,
-            0x11 => LegacyCommand::ScanEqual,
-            0x19 => LegacyCommand::ScanLowOrEqual,
-            0x1d => LegacyCommand::ScanHighOrEqual,
-            _ => unreachable!(),
-        }
-    }
-
-    fn expected_parameter_bytes(&self) -> usize {
-        match self {
-            LegacyCommand::ReadTrack => 8,
-            LegacyCommand::Specify => 2,
-            LegacyCommand::SenseDriveState => 1,
-            LegacyCommand::WriteSector => 8,
-            LegacyCommand::ReadSector => 8,
-            LegacyCommand::Recalibrate => 1,
-            LegacyCommand::SenseInterruptState => 0,
-            LegacyCommand::WriteDeletedSector => 8,
-            LegacyCommand::ReadSectorId => 1,
-            LegacyCommand::ReadDeletedSector => 8,
-            LegacyCommand::FormatTrack => 5,
-            LegacyCommand::Seek => 2,
-            LegacyCommand::ScanEqual => 8,
-            LegacyCommand::ScanLowOrEqual => 8,
-            LegacyCommand::ScanHighOrEqual => 8,
+            CommandType::Invalid => Command::Invalid,
         }
     }
 }
@@ -489,7 +499,7 @@ pub struct FloppyDiskController {
     drives: [Drive; 2],
     phase: Phase,
     command: Option<LegacyCommand>,
-    parameters_buffer: Vec<u8>,
+    command_buffer: Vec<u8>,
     data_buffer: VecDeque<u8>,
     result_buffer: VecDeque<u8>,
     motors_on: bool,
@@ -523,7 +533,7 @@ impl Default for FloppyDiskController {
             ],
             phase: Phase::Command,
             command: None,
-            parameters_buffer: Vec::new(),
+            command_buffer: Vec::new(),
             data_buffer: VecDeque::new(),
             result_buffer: VecDeque::new(),
             motors_on: false,
@@ -553,7 +563,8 @@ impl FloppyDiskController {
                             log::trace!("Reading data from FDC: {data:#04X}");
                             data
                         } else {
-                            unreachable!()
+                            log::error!("Unexpected FDC read in execution phase");
+                            todo!("return dummy value instead?");
                         };
 
                         if self.data_buffer.is_empty() {
@@ -569,7 +580,8 @@ impl FloppyDiskController {
                             result
                         } else {
                             // TODO: we hit this if no disk is loaded and CAT is executed
-                            unreachable!()
+                            log::error!("Unexpected FDC read in result phase");
+                            todo!("return dummy value instead?");
                         };
 
                         if self.result_buffer.is_empty() {
@@ -582,7 +594,7 @@ impl FloppyDiskController {
                     }
                     Phase::Command => {
                         log::error!("Unexpected FDC read in command phase");
-                        unreachable!() // TODO: return dummy value instead?
+                        todo!("return dummy value instead?");
                     }
                 }
             }
@@ -602,41 +614,28 @@ impl FloppyDiskController {
                 _ => unreachable!(),
             },
             0xfb7f => match self.phase {
-                Phase::Command => match &self.command {
-                    Some(command) => {
-                        if self.parameters_buffer.len() < command.expected_parameter_bytes() {
-                            self.parameters_buffer.push(value);
-                        }
-
-                        if self.parameters_buffer.len() == command.expected_parameter_bytes() {
-                            self.execute_command();
-                        }
+                Phase::Command => {
+                    if self.command_buffer.is_empty()
+                        || self.command_buffer.len()
+                            < CommandType::from(self.command_buffer[0]).expected_len()
+                    {
+                        self.command_buffer.push(value);
                     }
-                    None => {
-                        self.command = Some(LegacyCommand::from_byte(value));
-                        self.end_of_track = false;
-                        self.seek_end = false;
-                        self.drive_not_ready = false;
-                        // TODO: do we need to reset anything else?
-                        self.floppy_controller_busy = true;
 
-                        if self.parameters_buffer.len()
-                            == self.command.as_ref().unwrap().expected_parameter_bytes()
-                        {
-                            self.execute_command();
-                        }
+                    if self.command_buffer.len()
+                        == CommandType::from(self.command_buffer[0]).expected_len()
+                    {
+                        self.execute_command();
                     }
-                },
+                }
                 _ => {
                     log::error!(
                         "FDC write outside command phase using port {port:#06X}: {value:#010b}"
                     );
-                    unimplemented!();
                 }
             },
             _ => {
                 log::error!("Unexpected FDC write using port {port:#06X}: {value:#010b}");
-                unreachable!();
             }
         }
     }
@@ -661,7 +660,7 @@ impl FloppyDiskController {
             log::debug!(
                 "Executing FDC command \"{:?}\" with parameters {:?}",
                 &command,
-                &self.parameters_buffer
+                &self.command_buffer
             );
             match command {
                 LegacyCommand::ReadTrack => {
@@ -679,13 +678,12 @@ impl FloppyDiskController {
                     unimplemented!();
                 }
                 LegacyCommand::ReadSector => {
-                    self.selected_drive = self.parameters_buffer[0] as usize;
+                    self.selected_drive = self.command_buffer[0] as usize;
                     match &self.drives[self.selected_drive].disk {
                         Some(disk) => {
-                            match disk.find_track_index(
-                                self.parameters_buffer[1],
-                                self.parameters_buffer[2],
-                            ) {
+                            match disk
+                                .find_track_index(self.command_buffer[1], self.command_buffer[2])
+                            {
                                 Some(track) => {
                                     self.drives[self.selected_drive].track = track;
                                 }
@@ -693,7 +691,7 @@ impl FloppyDiskController {
                             }
 
                             match disk.tracks[self.drives[self.selected_drive].track]
-                                .find_sector(self.parameters_buffer[3])
+                                .find_sector(self.command_buffer[3])
                             {
                                 Some(sector) => {
                                     self.drives[self.selected_drive].sector = sector;
@@ -726,7 +724,7 @@ impl FloppyDiskController {
                     }
                 }
                 LegacyCommand::Recalibrate => {
-                    self.selected_drive = self.parameters_buffer[0] as usize;
+                    self.selected_drive = self.command_buffer[0] as usize;
                     match &self.drives[self.selected_drive].disk {
                         Some(_) => {
                             self.drives[self.selected_drive].track =
@@ -751,7 +749,7 @@ impl FloppyDiskController {
                     unimplemented!();
                 }
                 LegacyCommand::ReadSectorId => {
-                    self.selected_drive = self.parameters_buffer[0] as usize;
+                    self.selected_drive = self.command_buffer[0] as usize;
                     match &self.drives[self.selected_drive].disk {
                         Some(_) => {
                             self.write_standard_result();
@@ -770,8 +768,8 @@ impl FloppyDiskController {
                     unimplemented!();
                 }
                 LegacyCommand::Seek => {
-                    self.selected_drive = self.parameters_buffer[0] as usize;
-                    let track = self.parameters_buffer[1] as usize;
+                    self.selected_drive = self.command_buffer[0] as usize;
+                    let track = self.command_buffer[1] as usize;
                     match &self.drives[self.selected_drive].disk {
                         Some(_) => {
                             self.drives[self.selected_drive].track = track;
@@ -795,7 +793,7 @@ impl FloppyDiskController {
             }
         }
 
-        self.parameters_buffer.clear();
+        self.command_buffer.clear();
     }
 
     fn report_main_status_register(&self) -> u8 {
