@@ -10,6 +10,7 @@ use dsk_file::Disk;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Drive {
+    busy: bool,
     track: usize,
     sector: usize,
     disk: Option<Disk>,
@@ -493,21 +494,47 @@ impl From<&[u8]> for Command {
     }
 }
 
+struct StandardResult {
+    st0: StatusRegister0,
+    st1: StatusRegister1,
+    st2: StatusRegister2,
+    chrn: Chrn,
+}
+
+enum CommandResult {
+    ReadData(StandardResult),
+    ReadDeletedData(StandardResult),
+    WriteData(StandardResult),
+    WriteDeletedData(StandardResult),
+    ReadTrack(StandardResult),
+    ReadId(StandardResult),
+    FormatTrack(StandardResult),
+    ScanEqual(StandardResult),
+    ScanLowOrEqual(StandardResult),
+    ScanHighOrEqual(StandardResult),
+    Recalibrate,
+    SenseInterruptStatus { st0: StatusRegister0, pcn: u8 },
+    Specify,
+    SenseDriveStatus { st3: StatusRegister3 },
+    Seek,
+    Invalid { st0: StatusRegister0 },
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FloppyDiskController {
-    drives: [Drive; 2],
+    drives: Vec<Drive>,
     phase: Phase,
-    command: Option<LegacyCommand>,
     command_buffer: Vec<u8>,
     data_buffer: VecDeque<u8>,
     result_buffer: VecDeque<u8>,
+
+    step_rate_time: u8,
+    head_unload_time: u8,
+    head_load_time: u8,
+    non_dma_mode: bool,
+
     motors_on: bool,
-    request_for_master: bool,
-    data_input_output: bool, // false: CPU -> FDC, true: FDC -> CPU
-    execution_mode: bool,
-    floppy_controller_busy: bool,
-    floppy_drive_busy: [bool; 2], // TODO: do we need this? commands finish immediately in our implementation
     seek_end: bool,
     drive_not_ready: bool,
     selected_drive: usize,
@@ -518,30 +545,41 @@ pub struct FloppyDiskController {
 
 impl Default for FloppyDiskController {
     fn default() -> Self {
+        Self::new(1)
+    }
+}
+
+impl FloppyDiskController {
+    pub fn new(num_drives: usize) -> Self {
+        let mut drives = vec![
+            Drive {
+                busy: false,
+                track: 0,
+                sector: 0,
+                disk: None,
+            },
+            Drive {
+                busy: false,
+                track: 0,
+                sector: 0,
+                disk: None,
+            },
+        ];
+        drives.truncate(num_drives);
+
         Self {
-            drives: [
-                Drive {
-                    track: 0,
-                    sector: 0,
-                    disk: None,
-                },
-                Drive {
-                    track: 0,
-                    sector: 0,
-                    disk: None,
-                },
-            ],
+            drives,
             phase: Phase::Command,
-            command: None,
             command_buffer: Vec::new(),
             data_buffer: VecDeque::new(),
             result_buffer: VecDeque::new(),
+
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: false,
+
             motors_on: false,
-            request_for_master: true,
-            data_input_output: false,
-            execution_mode: false,
-            floppy_controller_busy: false,
-            floppy_drive_busy: [false; 2],
             seek_end: false,
             drive_not_ready: false,
             selected_drive: 0,
@@ -550,9 +588,7 @@ impl Default for FloppyDiskController {
             status2: 0,
         }
     }
-}
 
-impl FloppyDiskController {
     pub fn read_byte(&mut self, port: u16) -> u8 {
         match port {
             0xfb7e => self.report_main_status_register(),
@@ -568,7 +604,6 @@ impl FloppyDiskController {
                         };
 
                         if self.data_buffer.is_empty() {
-                            self.execution_mode = false;
                             self.phase = Phase::Result;
                         }
 
@@ -585,8 +620,6 @@ impl FloppyDiskController {
                         };
 
                         if self.result_buffer.is_empty() {
-                            self.data_input_output = false;
-                            self.floppy_controller_busy = false;
                             self.phase = Phase::Command;
                         }
 
@@ -653,143 +686,196 @@ impl FloppyDiskController {
         }
     }
 
-    fn execute_command(&mut self) {
+    fn execute_command(&mut self) -> CommandResult {
         self.phase = Phase::Execution;
 
-        if let Some(command) = self.command.take() {
-            log::debug!(
-                "Executing FDC command \"{:?}\" with parameters {:?}",
-                &command,
-                &self.command_buffer
-            );
-            match command {
-                LegacyCommand::ReadTrack => {
+        let command = self.command_buffer.as_slice().into();
+        log::debug!("Executing FDC command: {:?}", &command);
+        match command {
+            Command::ReadData {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                cylinder_number,
+                head_address,
+                record,
+                number,
+                end_of_track,
+                gap_length,
+                data_length,
+            } => {
+                if multi_track {
+                    log::error!("Unsupported multi-track flag set");
                     unimplemented!();
                 }
-                LegacyCommand::Specify => {
-                    // assume CPC defaults
-                    // TODO: handle other settings?
-                    self.phase = Phase::Command;
-                }
-                LegacyCommand::SenseDriveState => {
+                if let Mode::FrequencyModulation = mode {
+                    log::error!("Unsupported frequency modulation mode");
                     unimplemented!();
                 }
-                LegacyCommand::WriteSector => {
+                if skip {
+                    log::error!("Unsupported skip flag set");
                     unimplemented!();
                 }
-                LegacyCommand::ReadSector => {
-                    self.selected_drive = self.command_buffer[0] as usize;
-                    match &self.drives[self.selected_drive].disk {
-                        Some(disk) => {
-                            match disk
-                                .find_track_index(self.command_buffer[1], self.command_buffer[2])
-                            {
-                                Some(track) => {
-                                    self.drives[self.selected_drive].track = track;
-                                }
-                                None => unimplemented!(), // TODO: handle error
-                            }
+                if head != 0 {
+                    log::error!("Unsupported head number");
+                    unimplemented!();
+                }
+                if record != end_of_track {
+                    todo!("handle multiple sector reads");
+                }
 
-                            match disk.tracks[self.drives[self.selected_drive].track]
-                                .find_sector(self.command_buffer[3])
-                            {
-                                Some(sector) => {
-                                    self.drives[self.selected_drive].sector = sector;
-                                }
-                                None => unimplemented!(), // TODO: handle error
-                            }
+                self.data_buffer.clear();
+                self.result_buffer.clear();
 
-                            let sector_info = &disk.tracks[self.drives[self.selected_drive].track]
-                                .sector_infos[self.drives[self.selected_drive].sector];
-                            let sector_data = &disk.tracks[self.drives[self.selected_drive].track]
-                                .sectors[self.drives[self.selected_drive].sector];
+                match self.drives.get(unit_select as usize) {
+                    Some(drive) => {
+                        let Some(disk) = drive.disk else {
+                            todo!("handle missing disk");
+                        };
 
-                            // TODO: verify actual sector length matches input parameters
-                            self.data_buffer.extend(sector_data);
-                            log::debug!("FDC STATUS 1: {:#010b}", sector_info.fdc_status1);
-                            log::debug!("FDC STATUS 2: {:#010b}", sector_info.fdc_status2);
-                            self.status1 = sector_info.fdc_status1;
-                            self.status2 = sector_info.fdc_status2;
-                            self.end_of_track = true;
-                            self.execution_mode = true;
-                            self.data_input_output = true;
-                            self.write_standard_result();
+                        let track = drive.track;
 
-                            self.phase = Phase::Execution;
+                        let sector = match disk.tracks[track].find_sector(record) {
+                            Some(sector) => sector,
+                            None => todo!("handle missing sector"),
+                        };
+
+                        let sector_info = disk.tracks[track].sector_infos[sector];
+                        let sector_data = disk.tracks[track].sectors[sector];
+
+                        if number == 0 {
+                            self.data_buffer
+                                .extend(sector_data.iter().take(data_length as usize));
+                        } else {
+                            self.data_buffer.extend(sector_data.iter());
                         }
-                        None => {
-                            self.drive_not_ready = true;
-                            self.phase = Phase::Result;
-                        }
+
+                        // TODO: how do we force correct result usage?
+
+                        // TODO: refactor result phase data handling
+                        self.status1 = sector_info.fdc_status1;
+                        self.status2 = sector_info.fdc_status2;
+                        self.end_of_track = true;
+                        self.write_standard_result();
+
+                        self.phase = Phase::Execution;
+                    }
+                    None => {
+                        // TODO: use debugger to determine expected result phase data
+                        self.drive_not_ready = true;
+                        self.phase = Phase::Result;
                     }
                 }
-                LegacyCommand::Recalibrate => {
-                    self.selected_drive = self.command_buffer[0] as usize;
-                    match &self.drives[self.selected_drive].disk {
-                        Some(_) => {
-                            self.drives[self.selected_drive].track =
-                                self.drives[self.selected_drive].track.saturating_sub(77);
-                            self.seek_end = true;
-                        }
-                        None => {
-                            self.drive_not_ready = true;
-                        }
+            }
+            Command::ReadDeletedData { .. } => {}
+            Command::WriteData { .. } => {}
+            Command::WriteDeletedData { .. } => {}
+            Command::ReadTrack { .. } => {}
+            Command::ReadId { .. } => {}
+            Command::FormatTrack { .. } => {}
+            Command::ScanEqual { .. } => {}
+            Command::ScanLowOrEqual { .. } => {}
+            Command::ScanHighOrEqual { .. } => {}
+            Command::Recalibrate { .. } => {}
+            Command::SenseInterruptStatus { .. } => {}
+            Command::Specify {
+                step_rate_time,
+                head_unload_time,
+                head_load_time,
+                non_dma_mode,
+            } => {
+                if !non_dma_mode {
+                    unimplemented!();
+                }
+
+                self.step_rate_time = step_rate_time;
+                self.head_unload_time = head_unload_time;
+                self.head_load_time = head_load_time;
+                self.non_dma_mode = non_dma_mode;
+
+                self.phase = Phase::Command;
+            }
+            Command::SenseDriveStatus { .. } => {}
+            Command::Seek { .. } => {}
+            Command::Invalid { .. } => {}
+
+            LegacyCommand::ReadTrack => {
+                unimplemented!();
+            }
+            LegacyCommand::Specify => {}
+            LegacyCommand::SenseDriveState => {
+                unimplemented!();
+            }
+            LegacyCommand::WriteSector => {
+                unimplemented!();
+            }
+            LegacyCommand::ReadSector => {}
+            LegacyCommand::Recalibrate => {
+                self.selected_drive = self.command_buffer[0] as usize;
+                match &self.drives[self.selected_drive].disk {
+                    Some(_) => {
+                        self.drives[self.selected_drive].track =
+                            self.drives[self.selected_drive].track.saturating_sub(77);
+                        self.seek_end = true;
                     }
-                    self.phase = Phase::Command;
-                }
-                LegacyCommand::SenseInterruptState => {
-                    self.result_buffer
-                        .push_back(self.report_status_register_0());
-                    self.result_buffer
-                        .push_back(self.drives[self.selected_drive].track as u8);
-                    self.data_input_output = true;
-                    self.phase = Phase::Result;
-                }
-                LegacyCommand::WriteDeletedSector => {
-                    unimplemented!();
-                }
-                LegacyCommand::ReadSectorId => {
-                    self.selected_drive = self.command_buffer[0] as usize;
-                    match &self.drives[self.selected_drive].disk {
-                        Some(_) => {
-                            self.write_standard_result();
-                        }
-                        None => {
-                            self.drive_not_ready = true;
-                        }
+                    None => {
+                        self.drive_not_ready = true;
                     }
-                    self.data_input_output = true;
-                    self.phase = Phase::Result;
                 }
-                LegacyCommand::ReadDeletedSector => {
-                    unimplemented!();
-                }
-                LegacyCommand::FormatTrack => {
-                    unimplemented!();
-                }
-                LegacyCommand::Seek => {
-                    self.selected_drive = self.command_buffer[0] as usize;
-                    let track = self.command_buffer[1] as usize;
-                    match &self.drives[self.selected_drive].disk {
-                        Some(_) => {
-                            self.drives[self.selected_drive].track = track;
-                            self.seek_end = true;
-                        }
-                        None => {
-                            self.drive_not_ready = true;
-                        }
+                self.phase = Phase::Command;
+            }
+            LegacyCommand::SenseInterruptState => {
+                self.result_buffer
+                    .push_back(self.report_status_register_0());
+                self.result_buffer
+                    .push_back(self.drives[self.selected_drive].track as u8);
+                self.phase = Phase::Result;
+            }
+            LegacyCommand::WriteDeletedSector => {
+                unimplemented!();
+            }
+            LegacyCommand::ReadSectorId => {
+                self.selected_drive = self.command_buffer[0] as usize;
+                match &self.drives[self.selected_drive].disk {
+                    Some(_) => {
+                        self.write_standard_result();
                     }
-                    self.phase = Phase::Command;
+                    None => {
+                        self.drive_not_ready = true;
+                    }
                 }
-                LegacyCommand::ScanEqual => {
-                    unimplemented!();
+                self.phase = Phase::Result;
+            }
+            LegacyCommand::ReadDeletedSector => {
+                unimplemented!();
+            }
+            LegacyCommand::FormatTrack => {
+                unimplemented!();
+            }
+            LegacyCommand::Seek => {
+                self.selected_drive = self.command_buffer[0] as usize;
+                let track = self.command_buffer[1] as usize;
+                match &self.drives[self.selected_drive].disk {
+                    Some(_) => {
+                        self.drives[self.selected_drive].track = track;
+                        self.seek_end = true;
+                    }
+                    None => {
+                        self.drive_not_ready = true;
+                    }
                 }
-                LegacyCommand::ScanLowOrEqual => {
-                    unimplemented!();
-                }
-                LegacyCommand::ScanHighOrEqual => {
-                    unimplemented!();
-                }
+                self.phase = Phase::Command;
+            }
+            LegacyCommand::ScanEqual => {
+                unimplemented!();
+            }
+            LegacyCommand::ScanLowOrEqual => {
+                unimplemented!();
+            }
+            LegacyCommand::ScanHighOrEqual => {
+                unimplemented!();
             }
         }
 
@@ -799,29 +885,37 @@ impl FloppyDiskController {
     fn report_main_status_register(&self) -> u8 {
         let mut value = 0;
 
-        if self.request_for_master {
-            value |= 1 << 7;
-        }
+        // Request for master
+        // TODO: Can we ever observe RQM cleared? We execute commands instantly.
+        value |= 1 << 7;
 
-        if self.data_input_output {
+        // Data input/output
+        if matches!(self.phase, Phase::Execution | Phase::Result) {
             value |= 1 << 6;
         }
 
-        if self.execution_mode {
+        // Execution mode
+        if self.non_dma_mode
+            && let Phase::Execution = self.phase
+        {
             value |= 1 << 5;
         }
 
-        if self.floppy_controller_busy {
-            value |= 1 << 4;
-        }
+        // FDC busy
+        // TODO: Do we ever need to set this? We execute commands instantly.
+        // value |= 1 << 4;
 
-        if self.floppy_drive_busy[1] {
-            value |= 1 << 1;
-        }
-
-        if self.floppy_drive_busy[0] {
-            value |= 1 << 0;
-        }
+        // Drive busy flags
+        // TODO: Can we ever observe busy drives? We execute commands instantly.
+        self.drives
+            .iter()
+            .enumerate()
+            .fold(
+                value,
+                |value, (i, drive)| {
+                    if drive.busy { value | (1 << i) } else { value }
+                },
+            );
 
         log::trace!("Reporting FDC main status register: {value:#010b}");
 
