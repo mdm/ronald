@@ -127,6 +127,14 @@ impl CommandType {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct Chrn {
+    cylinder_number: u8,
+    head_address: u8,
+    record: u8,
+    number: u8,
+}
+
 impl From<u8> for CommandType {
     fn from(code: u8) -> Self {
         #[allow(clippy::identity_op)]
@@ -159,10 +167,7 @@ enum Command {
         skip: bool,
         head: u8,
         unit_select: u8,
-        cylinder_number: u8,
-        head_address: u8,
-        record: u8,
-        number: u8,
+        chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         data_length: u8,
@@ -173,10 +178,7 @@ enum Command {
         skip: bool,
         head: u8,
         unit_select: u8,
-        cylinder_number: u8,
-        head_address: u8,
-        record: u8,
-        number: u8,
+        chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         data_length: u8,
@@ -186,10 +188,7 @@ enum Command {
         mode: Mode,
         head: u8,
         unit_select: u8,
-        cylinder_number: u8,
-        head_address: u8,
-        record: u8,
-        number: u8,
+        chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         data_length: u8,
@@ -199,10 +198,7 @@ enum Command {
         mode: Mode,
         head: u8,
         unit_select: u8,
-        cylinder_number: u8,
-        head_address: u8,
-        record: u8,
-        number: u8,
+        chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         data_length: u8,
@@ -212,10 +208,7 @@ enum Command {
         skip: bool,
         head: u8,
         unit_select: u8,
-        cylinder_number: u8,
-        head_address: u8,
-        record: u8,
-        number: u8,
+        chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         data_length: u8,
@@ -240,10 +233,7 @@ enum Command {
         skip: bool,
         head: u8,
         unit_select: u8,
-        cylinder_number: u8,
-        head_address: u8,
-        record: u8,
-        number: u8,
+        chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         scan_type: u8,
@@ -254,10 +244,7 @@ enum Command {
         skip: bool,
         head: u8,
         unit_select: u8,
-        cylinder_number: u8,
-        head_address: u8,
-        record: u8,
-        number: u8,
+        chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         scan_type: u8,
@@ -268,10 +255,7 @@ enum Command {
         skip: bool,
         head: u8,
         unit_select: u8,
-        cylinder_number: u8,
-        head_address: u8,
-        record: u8,
-        number: u8,
+        chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         scan_type: u8,
@@ -317,10 +301,12 @@ impl From<&[u8]> for Command {
                 skip: (bytes[0] & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                cylinder_number: bytes[2],
-                head_address: bytes[3],
-                record: bytes[4],
-                number: bytes[5],
+                chrn: Chrn {
+                    cylinder_number: bytes[2],
+                    head_address: bytes[3],
+                    record: bytes[4],
+                    number: bytes[5],
+                },
                 end_of_track: bytes[6],
                 gap_length: bytes[7],
                 data_length: bytes[8],
@@ -335,10 +321,12 @@ impl From<&[u8]> for Command {
                 skip: (bytes[0] & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                cylinder_number: bytes[2],
-                head_address: bytes[3],
-                record: bytes[4],
-                number: bytes[5],
+                chrn: Chrn {
+                    cylinder_number: bytes[2],
+                    head_address: bytes[3],
+                    record: bytes[4],
+                    number: bytes[5],
+                },
                 end_of_track: bytes[6],
                 gap_length: bytes[7],
                 data_length: bytes[8],
@@ -352,10 +340,12 @@ impl From<&[u8]> for Command {
                 },
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                cylinder_number: bytes[2],
-                head_address: bytes[3],
-                record: bytes[4],
-                number: bytes[5],
+                chrn: Chrn {
+                    cylinder_number: bytes[2],
+                    head_address: bytes[3],
+                    record: bytes[4],
+                    number: bytes[5],
+                },
                 end_of_track: bytes[6],
                 gap_length: bytes[7],
                 data_length: bytes[8],
@@ -369,10 +359,12 @@ impl From<&[u8]> for Command {
                 },
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                cylinder_number: bytes[2],
-                head_address: bytes[3],
-                record: bytes[4],
-                number: bytes[5],
+                chrn: Chrn {
+                    cylinder_number: bytes[2],
+                    head_address: bytes[3],
+                    record: bytes[4],
+                    number: bytes[5],
+                },
                 end_of_track: bytes[6],
                 gap_length: bytes[7],
                 data_length: bytes[8],
@@ -386,10 +378,12 @@ impl From<&[u8]> for Command {
                 skip: (bytes[0] & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                cylinder_number: bytes[2],
-                head_address: bytes[3],
-                record: bytes[4],
-                number: bytes[5],
+                chrn: Chrn {
+                    cylinder_number: bytes[2],
+                    head_address: bytes[3],
+                    record: bytes[4],
+                    number: bytes[5],
+                },
                 end_of_track: bytes[6],
                 gap_length: bytes[7],
                 data_length: bytes[8],
@@ -426,10 +420,12 @@ impl From<&[u8]> for Command {
                 skip: (bytes[0] & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                cylinder_number: bytes[2],
-                head_address: bytes[3],
-                record: bytes[4],
-                number: bytes[5],
+                chrn: Chrn {
+                    cylinder_number: bytes[2],
+                    head_address: bytes[3],
+                    record: bytes[4],
+                    number: bytes[5],
+                },
                 end_of_track: bytes[6],
                 gap_length: bytes[7],
                 scan_type: bytes[8],
@@ -444,10 +440,12 @@ impl From<&[u8]> for Command {
                 skip: (bytes[0] & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                cylinder_number: bytes[2],
-                head_address: bytes[3],
-                record: bytes[4],
-                number: bytes[5],
+                chrn: Chrn {
+                    cylinder_number: bytes[2],
+                    head_address: bytes[3],
+                    record: bytes[4],
+                    number: bytes[5],
+                },
                 end_of_track: bytes[6],
                 gap_length: bytes[7],
                 scan_type: bytes[8],
@@ -462,10 +460,12 @@ impl From<&[u8]> for Command {
                 skip: (bytes[0] & BITMASK_SKIP) != 0,
                 head: (bytes[1] & BITMASK_HEAD) >> 2,
                 unit_select: bytes[1] & BITMASK_UNIT_SELECT,
-                cylinder_number: bytes[2],
-                head_address: bytes[3],
-                record: bytes[4],
-                number: bytes[5],
+                chrn: Chrn {
+                    cylinder_number: bytes[2],
+                    head_address: bytes[3],
+                    record: bytes[4],
+                    number: bytes[5],
+                },
                 end_of_track: bytes[6],
                 gap_length: bytes[7],
                 scan_type: bytes[8],
@@ -491,6 +491,187 @@ impl From<&[u8]> for Command {
             },
             CommandType::Invalid => Command::Invalid,
         }
+    }
+}
+
+#[derive(Debug, Default)]
+enum InterruptCode {
+    #[default]
+    NormalTermination,
+    AbnormalTermination,
+    InvalidCommand,
+    ReadyChanged,
+}
+
+#[derive(Debug, Default)]
+struct StatusRegister0 {
+    interrupt_code: InterruptCode,
+    seek_end: bool,
+    equipment_check: bool,
+    not_ready: bool,
+    head_address: u8,
+    unit_select: u8,
+}
+
+impl From<StatusRegister0> for u8 {
+    fn from(value: StatusRegister0) -> Self {
+        let mut byte = 0;
+
+        match value.interrupt_code {
+            InterruptCode::NormalTermination => byte |= 0b00 << 6,
+            InterruptCode::AbnormalTermination => byte |= 0b01 << 6,
+            InterruptCode::InvalidCommand => byte |= 0b10 << 6,
+            InterruptCode::ReadyChanged => byte |= 0b11 << 6,
+        }
+
+        if value.seek_end {
+            byte |= 1 << 5;
+        }
+
+        if value.equipment_check {
+            byte |= 1 << 4;
+        }
+
+        if value.not_ready {
+            byte |= 1 << 3;
+        }
+
+        byte |= (value.head_address & 1) << 2;
+
+        byte |= value.unit_select & 0b11;
+
+        byte
+    }
+}
+
+#[derive(Debug, Default)]
+struct StatusRegister1 {
+    end_of_cylinder: bool,
+    data_error: bool,
+    over_run: bool,
+    no_data: bool,
+    not_writeable: bool,
+    missing_address_mark: bool,
+}
+
+impl From<StatusRegister1> for u8 {
+    fn from(value: StatusRegister1) -> Self {
+        let mut byte = 0;
+
+        if value.end_of_cylinder {
+            byte |= 1 << 7;
+        }
+
+        if value.data_error {
+            byte |= 1 << 5;
+        }
+
+        if value.over_run {
+            byte |= 1 << 4;
+        }
+
+        if value.no_data {
+            byte |= 1 << 2;
+        }
+
+        if value.not_writeable {
+            byte |= 1 << 1;
+        }
+
+        if value.missing_address_mark {
+            byte |= 1;
+        }
+
+        byte
+    }
+}
+
+#[derive(Debug, Default)]
+struct StatusRegister2 {
+    control_mark: bool,
+    data_error_in_data_field: bool,
+    wrong_cylinder: bool,
+    scan_equal_hit: bool,
+    scan_not_satisfied: bool,
+    bad_cylinder: bool,
+    missing_address_mark_in_data_field: bool,
+}
+
+impl From<StatusRegister2> for u8 {
+    fn from(value: StatusRegister2) -> Self {
+        let mut byte = 0;
+
+        if value.control_mark {
+            byte |= 1 << 6;
+        }
+
+        if value.data_error_in_data_field {
+            byte |= 1 << 5;
+        }
+
+        if value.wrong_cylinder {
+            byte |= 1 << 4;
+        }
+
+        if value.scan_equal_hit {
+            byte |= 1 << 3;
+        }
+
+        if value.scan_not_satisfied {
+            byte |= 1 << 2;
+        }
+
+        if value.bad_cylinder {
+            byte |= 1 << 1;
+        }
+
+        if value.missing_address_mark_in_data_field {
+            byte |= 1;
+        }
+
+        byte
+    }
+}
+
+struct StatusRegister3 {
+    fault: bool,
+    write_protected: bool,
+    ready: bool,
+    track_zero: bool,
+    two_side: bool,
+    head_address: u8,
+    unit_select: u8,
+}
+
+impl From<StatusRegister3> for u8 {
+    fn from(value: StatusRegister3) -> Self {
+        let mut byte = 0;
+
+        if value.fault {
+            byte |= 1 << 7;
+        }
+
+        if value.write_protected {
+            byte |= 1 << 6;
+        }
+
+        if value.ready {
+            byte |= 1 << 5;
+        }
+
+        if value.track_zero {
+            byte |= 1 << 4;
+        }
+
+        if value.two_side {
+            byte |= 1 << 3;
+        }
+
+        byte |= (value.head_address & 1) << 2;
+
+        byte |= value.unit_select & 0b11;
+
+        byte
     }
 }
 
@@ -690,6 +871,7 @@ impl FloppyDiskController {
         self.phase = Phase::Execution;
 
         let command = self.command_buffer.as_slice().into();
+        self.command_buffer.clear();
         log::debug!("Executing FDC command: {:?}", &command);
         match command {
             Command::ReadData {
@@ -698,10 +880,13 @@ impl FloppyDiskController {
                 skip,
                 head,
                 unit_select,
-                cylinder_number,
-                head_address,
-                record,
-                number,
+                chrn:
+                    Chrn {
+                        cylinder_number,
+                        head_address,
+                        record,
+                        number,
+                    },
                 end_of_track,
                 gap_length,
                 data_length,
@@ -752,20 +937,54 @@ impl FloppyDiskController {
                             self.data_buffer.extend(sector_data.iter());
                         }
 
-                        // TODO: how do we force correct result usage?
-
-                        // TODO: refactor result phase data handling
-                        self.status1 = sector_info.fdc_status1;
-                        self.status2 = sector_info.fdc_status2;
-                        self.end_of_track = true;
-                        self.write_standard_result();
-
                         self.phase = Phase::Execution;
+
+                        if cylinder_number < end_of_track {
+                            record += 1;
+                        } else {
+                            cylinder_number += 1;
+                        }
+
+                        CommandResult::ReadData(StandardResult {
+                            st0: StatusRegister0 {
+                                head_address: head,
+                                unit_select,
+                                ..Default::default()
+                            },
+                            st1: StatusRegister1 {
+                                ..Default::default()
+                            },
+                            st2: StatusRegister2 {
+                                ..Default::default()
+                            },
+                            chrn: Chrn {
+                                cylinder_number,
+                                head_address,
+                                record,
+                                number,
+                            },
+                        })
                     }
                     None => {
-                        // TODO: use debugger to determine expected result phase data
-                        self.drive_not_ready = true;
                         self.phase = Phase::Result;
+
+                        CommandResult::ReadData(StandardResult {
+                            st0: StatusRegister0 {
+                                ..Default::default()
+                            },
+                            st1: StatusRegister1 {
+                                ..Default::default()
+                            },
+                            st2: StatusRegister2 {
+                                ..Default::default()
+                            },
+                            chrn: Chrn {
+                                cylinder_number,
+                                head_address,
+                                record,
+                                number,
+                            },
+                        })
                     }
                 }
             }
@@ -878,8 +1097,6 @@ impl FloppyDiskController {
                 unimplemented!();
             }
         }
-
-        self.command_buffer.clear();
     }
 
     fn report_main_status_register(&self) -> u8 {
