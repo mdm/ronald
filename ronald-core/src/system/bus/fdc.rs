@@ -1136,17 +1136,6 @@ impl FloppyDiskController {
             Command::Seek { .. } => {}
             Command::Invalid { .. } => {}
 
-            LegacyCommand::ReadTrack => {
-                unimplemented!();
-            }
-            LegacyCommand::Specify => {}
-            LegacyCommand::SenseDriveState => {
-                unimplemented!();
-            }
-            LegacyCommand::WriteSector => {
-                unimplemented!();
-            }
-            LegacyCommand::ReadSector => {}
             LegacyCommand::Recalibrate => {
                 self.selected_drive = self.command_buffer[0] as usize;
                 match &self.drives[self.selected_drive].disk {
@@ -1168,9 +1157,6 @@ impl FloppyDiskController {
                     .push_back(self.drives[self.selected_drive].track as u8);
                 self.phase = Phase::Result;
             }
-            LegacyCommand::WriteDeletedSector => {
-                unimplemented!();
-            }
             LegacyCommand::ReadSectorId => {
                 self.selected_drive = self.command_buffer[0] as usize;
                 match &self.drives[self.selected_drive].disk {
@@ -1182,12 +1168,6 @@ impl FloppyDiskController {
                     }
                 }
                 self.phase = Phase::Result;
-            }
-            LegacyCommand::ReadDeletedSector => {
-                unimplemented!();
-            }
-            LegacyCommand::FormatTrack => {
-                unimplemented!();
             }
             LegacyCommand::Seek => {
                 self.selected_drive = self.command_buffer[0] as usize;
@@ -1202,15 +1182,6 @@ impl FloppyDiskController {
                     }
                 }
                 self.phase = Phase::Command;
-            }
-            LegacyCommand::ScanEqual => {
-                unimplemented!();
-            }
-            LegacyCommand::ScanLowOrEqual => {
-                unimplemented!();
-            }
-            LegacyCommand::ScanHighOrEqual => {
-                unimplemented!();
             }
         }
     }
