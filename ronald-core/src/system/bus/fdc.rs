@@ -1120,7 +1120,7 @@ impl FloppyDiskController {
                 non_dma_mode,
             } => {
                 if !non_dma_mode {
-                    unimplemented!();
+                    log::error!("DMA mode is not supported");
                 }
 
                 self.step_rate_time = step_rate_time;
@@ -1129,6 +1129,8 @@ impl FloppyDiskController {
                 self.non_dma_mode = non_dma_mode;
 
                 self.phase = Phase::Command;
+
+                CommandResult::Specify
             }
             Command::SenseDriveStatus { .. } => {}
             Command::Seek { .. } => {}
