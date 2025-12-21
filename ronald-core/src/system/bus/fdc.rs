@@ -127,7 +127,7 @@ impl CommandType {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 struct Chrn {
     cylinder_number: u8,
     head_address: u8,
@@ -494,7 +494,7 @@ impl From<&[u8]> for Command {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 enum InterruptCode {
     #[default]
     NormalTermination,
@@ -776,6 +776,8 @@ impl FloppyDiskController {
             0xfb7f => {
                 match self.phase {
                     Phase::Execution => {
+                        // TODO: handle over run here (modify result if last poll more than 26us ago)
+
                         let data = if let Some(data) = self.data_buffer.pop_front() {
                             log::trace!("Reading data from FDC: {data:#04X}");
                             data
@@ -880,36 +882,24 @@ impl FloppyDiskController {
                 skip,
                 head,
                 unit_select,
-                chrn:
-                    Chrn {
-                        cylinder_number,
-                        head_address,
-                        record,
-                        number,
-                    },
+                chrn,
                 end_of_track,
                 gap_length,
                 data_length,
             } => {
                 if multi_track {
                     log::error!("Unsupported multi-track flag set");
-                    unimplemented!();
                 }
                 if let Mode::FrequencyModulation = mode {
                     log::error!("Unsupported frequency modulation mode");
-                    unimplemented!();
                 }
                 if skip {
                     log::error!("Unsupported skip flag set");
-                    unimplemented!();
                 }
                 if head != 0 {
                     log::error!("Unsupported head number");
-                    unimplemented!();
                 }
-                if record != end_of_track {
-                    todo!("handle multiple sector reads");
-                }
+                let head_address = 0;
 
                 self.data_buffer.clear();
                 self.result_buffer.clear();
@@ -922,47 +912,112 @@ impl FloppyDiskController {
 
                         let track = drive.track;
 
-                        let sector = match disk.tracks[track].find_sector(record) {
-                            Some(sector) => sector,
-                            None => todo!("handle missing sector"),
+                        let data_length = if chrn.number == 0 {
+                            data_length as usize
+                        } else {
+                            128 << chrn.number
                         };
 
-                        let sector_info = disk.tracks[track].sector_infos[sector];
-                        let sector_data = disk.tracks[track].sectors[sector];
+                        // ST0
+                        let interrupt_code = InterruptCode::NormalTermination;
 
-                        if number == 0 {
+                        // ST1
+                        let end_of_cylinder = false;
+                        let data_error = false;
+                        let no_data = false;
+                        let missing_address_mark = false;
+
+                        // ST2
+                        let control_mark = false;
+                        let data_error_in_data_field = false;
+                        let missing_address_mark_in_data_field = false;
+
+                        loop {
+                            let sector = match disk.tracks[track].find_sector(chrn) {
+                                Some(sector) => sector,
+                                None => {
+                                    no_data = true;
+                                    interrupt_code = InterruptCode::AbnormalTermination;
+                                    break;
+                                }
+                            };
+
+                            let sector_info = disk.tracks[track].sector_infos[sector];
+
+                            if sector_info.fdc_status1 & 0b0010_0000 != 0 {
+                                data_error = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
+                            }
+
+                            // Contrary to https://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
+                            // we determine the NO DATA condition above instead of from fdc_status1 bit 2
+
+                            if sector_info.fdc_status1 & 0b0000_0001 != 0 {
+                                missing_address_mark = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
+                            }
+
+                            if sector_info.fdc_status2 & 0b0100_0000 != 0 {
+                                control_mark = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
+                            }
+
+                            if sector_info.fdc_status2 & 0b0010_0000 != 0 {
+                                data_error_in_data_field = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
+                            }
+
+                            if sector_info.fdc_status2 & 0b0000_0001 != 0 {
+                                missing_address_mark_in_data_field = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
+                            }
+
+                            if !control_mark && interrupt_code == InterruptCode::AbnormalTermination
+                            {
+                                break;
+                            }
+
+                            let sector_data = disk.tracks[track].sectors[sector];
+
+                            if data_length > sector_data.len() {
+                                log::error!("Specified data length exceeds physical sector size");
+                            }
+
                             self.data_buffer
-                                .extend(sector_data.iter().take(data_length as usize));
-                        } else {
-                            self.data_buffer.extend(sector_data.iter());
-                        }
+                                .extend(sector_data.iter().take(data_length));
 
-                        self.phase = Phase::Execution;
-
-                        if cylinder_number < end_of_track {
-                            record += 1;
-                        } else {
-                            cylinder_number += 1;
+                            if !control_mark && chrn.cylinder_number < end_of_track {
+                                chrn.record += 1;
+                            } else {
+                                end_of_cylinder = true;
+                                chrn.cylinder_number += 1;
+                                chrn.record = 1;
+                                self.phase = Phase::Execution;
+                                break;
+                            }
                         }
 
                         CommandResult::ReadData(StandardResult {
                             st0: StatusRegister0 {
-                                head_address: head,
+                                interrupt_code,
+                                head_address,
                                 unit_select,
                                 ..Default::default()
                             },
                             st1: StatusRegister1 {
+                                end_of_cylinder,
+                                data_error,
+                                no_data,
+                                missing_address_mark,
                                 ..Default::default()
                             },
                             st2: StatusRegister2 {
+                                control_mark,
+                                data_error_in_data_field,
+                                missing_address_mark_in_data_field,
                                 ..Default::default()
                             },
-                            chrn: Chrn {
-                                cylinder_number,
-                                head_address,
-                                record,
-                                number,
-                            },
+                            chrn,
                         })
                     }
                     None => {
@@ -978,12 +1033,7 @@ impl FloppyDiskController {
                             st2: StatusRegister2 {
                                 ..Default::default()
                             },
-                            chrn: Chrn {
-                                cylinder_number,
-                                head_address,
-                                record,
-                                number,
-                            },
+                            chrn,
                         })
                     }
                 }
