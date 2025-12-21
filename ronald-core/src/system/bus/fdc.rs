@@ -1094,11 +1094,17 @@ impl FloppyDiskController {
                 }
             }
             Command::ReadDeletedData { .. } => {}
-            Command::WriteData { .. } => {}
-            Command::WriteDeletedData { .. } => {}
+            Command::WriteData { .. } => {
+                todo!("support write commands");
+            }
+            Command::WriteDeletedData { .. } => {
+                todo!("support write commands");
+            }
             Command::ReadTrack { .. } => {}
             Command::ReadId { .. } => {}
-            Command::FormatTrack { .. } => {}
+            Command::FormatTrack { .. } => {
+                todo!("support write commands");
+            }
             Command::ScanEqual { .. } => {}
             Command::ScanLowOrEqual { .. } => {}
             Command::ScanHighOrEqual { .. } => {}
