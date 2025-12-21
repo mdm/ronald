@@ -127,7 +127,7 @@ impl CommandType {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Chrn {
     cylinder_number: u8,
     head_address: u8,
@@ -898,6 +898,7 @@ impl FloppyDiskController {
                 }
                 if head != 0 {
                     log::error!("Unsupported head number");
+                    todo!("Return NOT READY in ST0")
                 }
                 let head_address = 0;
 
@@ -907,7 +908,32 @@ impl FloppyDiskController {
                 match self.drives.get(unit_select as usize) {
                     Some(drive) => {
                         let Some(disk) = drive.disk else {
-                            todo!("handle missing disk");
+                            self.phase = Phase::Result;
+
+                            // ST0
+                            let interrupt_code = InterruptCode::AbnormalTermination;
+
+                            // ST1
+                            let no_data = true;
+
+                            // ST2
+                            let missing_address_mark_in_data_field = true;
+
+                            return CommandResult::ReadData(StandardResult {
+                                st0: StatusRegister0 {
+                                    interrupt_code,
+                                    ..Default::default()
+                                },
+                                st1: StatusRegister1 {
+                                    no_data,
+                                    ..Default::default()
+                                },
+                                st2: StatusRegister2 {
+                                    missing_address_mark_in_data_field,
+                                    ..Default::default()
+                                },
+                                chrn,
+                            });
                         };
 
                         let track = drive.track;
@@ -930,6 +956,8 @@ impl FloppyDiskController {
                         // ST2
                         let control_mark = false;
                         let data_error_in_data_field = false;
+                        let wrong_cylinder = false;
+                        let bad_cylinder = false;
                         let missing_address_mark_in_data_field = false;
 
                         loop {
@@ -964,6 +992,15 @@ impl FloppyDiskController {
 
                             if sector_info.fdc_status2 & 0b0010_0000 != 0 {
                                 data_error_in_data_field = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
+                            }
+
+                            if sector_info.chrn.cylinder_number != chrn.cylinder_number {
+                                no_data = true;
+                                wrong_cylinder = true;
+                                if sector_info.chrn.cylinder_number == 0xff {
+                                    bad_cylinder = true;
+                                }
                                 interrupt_code = InterruptCode::AbnormalTermination;
                             }
 
@@ -1014,6 +1051,8 @@ impl FloppyDiskController {
                             st2: StatusRegister2 {
                                 control_mark,
                                 data_error_in_data_field,
+                                wrong_cylinder,
+                                bad_cylinder,
                                 missing_address_mark_in_data_field,
                                 ..Default::default()
                             },
@@ -1023,14 +1062,30 @@ impl FloppyDiskController {
                     None => {
                         self.phase = Phase::Result;
 
+                        // ST0
+                        let interrupt_code = InterruptCode::AbnormalTermination;
+                        let equipment_check = true;
+
+                        // ST1
+                        let no_data = true;
+                        let end_of_cylinder = true;
+
+                        // ST2
+                        let missing_address_mark_in_data_field = true;
+
                         CommandResult::ReadData(StandardResult {
                             st0: StatusRegister0 {
+                                interrupt_code,
+                                equipment_check,
                                 ..Default::default()
                             },
                             st1: StatusRegister1 {
+                                no_data,
+                                end_of_cylinder,
                                 ..Default::default()
                             },
                             st2: StatusRegister2 {
+                                missing_address_mark_in_data_field,
                                 ..Default::default()
                             },
                             chrn,
@@ -1048,7 +1103,10 @@ impl FloppyDiskController {
             Command::ScanLowOrEqual { .. } => {}
             Command::ScanHighOrEqual { .. } => {}
             Command::Recalibrate { .. } => {}
-            Command::SenseInterruptStatus { .. } => {}
+            Command::SenseInterruptStatus { .. } => {
+                //TODO: return InterruptCode::InvalidCommand if SEEK or RECALIBRATE still in
+                //progress
+            }
             Command::Specify {
                 step_rate_time,
                 head_unload_time,
