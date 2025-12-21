@@ -2,6 +2,8 @@ use std::{convert::TryInto, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::system::bus::fdc::Chrn;
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Disk {
@@ -87,10 +89,12 @@ impl Disk {
                             };
 
                             sector_infos.push(SectorInfo {
-                                track: contents[sector_info_start], // TODO: verify this is the same as above?
-                                side: contents[sector_info_start + 0x01], // TODO: verify this is the same as above?
-                                sector_id: contents[sector_info_start + 0x02],
-                                sector_size: contents[sector_info_start + 0x03], // TODO: verify this is the same as above?
+                                chrn: Chrn {
+                                    cylinder_number: contents[sector_info_start],
+                                    head_address: contents[sector_info_start + 0x01],
+                                    record: contents[sector_info_start + 0x02],
+                                    number: contents[sector_info_start + 0x03],
+                                },
                                 fdc_status1: contents[sector_info_start + 0x04],
                                 fdc_status2: contents[sector_info_start + 0x05],
                                 actual_length,
@@ -157,20 +161,17 @@ pub struct Track {
 }
 
 impl Track {
-    pub fn find_sector(&self, sector_id: u8) -> Option<usize> {
+    pub fn find_sector(&self, chrn: Chrn) -> Option<usize> {
         self.sector_infos
             .iter()
-            .position(|sector_info| sector_info.sector_id == sector_id)
+            .position(|sector_info| sector_info.chrn == chrn)
     }
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SectorInfo {
-    pub track: u8,
-    pub side: u8,
-    pub sector_id: u8,
-    pub sector_size: u8,
+    pub chrn: Chrn,
     pub fdc_status1: u8, // TODO: do we actually use this?
     pub fdc_status2: u8, // TODO: do we actually use this?
     pub actual_length: Option<u16>,
