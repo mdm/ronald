@@ -1027,6 +1027,7 @@ impl FloppyDiskController {
                                 chrn.record += 1;
                             } else {
                                 end_of_cylinder = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
                                 chrn.cylinder_number += 1;
                                 chrn.record = 1;
                                 self.phase = Phase::Execution;
