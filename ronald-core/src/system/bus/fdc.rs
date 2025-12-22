@@ -874,9 +874,22 @@ impl FloppyDiskController {
 
         let command = self.command_buffer.as_slice().into();
         self.command_buffer.clear();
+        self.data_buffer.clear();
+        self.result_buffer.clear();
         log::debug!("Executing FDC command: {:?}", &command);
         match command {
             Command::ReadData {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
+            }
+            | Command::ReadDeletedData {
                 multi_track,
                 mode,
                 skip,
@@ -902,9 +915,6 @@ impl FloppyDiskController {
                 }
                 let head_address = 0;
 
-                self.data_buffer.clear();
-                self.result_buffer.clear();
-
                 match self.drives.get(unit_select as usize) {
                     Some(drive) => {
                         let Some(disk) = drive.disk else {
@@ -919,7 +929,7 @@ impl FloppyDiskController {
                             // ST2
                             let missing_address_mark_in_data_field = true;
 
-                            return CommandResult::ReadData(StandardResult {
+                            let result = StandardResult {
                                 st0: StatusRegister0 {
                                     interrupt_code,
                                     ..Default::default()
@@ -933,7 +943,16 @@ impl FloppyDiskController {
                                     ..Default::default()
                                 },
                                 chrn,
-                            });
+                            };
+                            match command {
+                                Command::ReadData { .. } => {
+                                    return CommandResult::ReadData(result);
+                                }
+                                Command::ReadDeletedData { .. } => {
+                                    return CommandResult::ReadDeletedData(result);
+                                }
+                                _ => unreachable!(),
+                            }
                         };
 
                         let track = drive.track;
@@ -1020,8 +1039,10 @@ impl FloppyDiskController {
                                 log::error!("Specified data length exceeds physical sector size");
                             }
 
-                            self.data_buffer
-                                .extend(sector_data.iter().take(data_length));
+                            if control_mark || matches!(command, Command::ReadData { .. }) {
+                                self.data_buffer
+                                    .extend(sector_data.iter().take(data_length));
+                            }
 
                             if !control_mark && chrn.cylinder_number < end_of_track {
                                 chrn.record += 1;
@@ -1035,7 +1056,7 @@ impl FloppyDiskController {
                             }
                         }
 
-                        CommandResult::ReadData(StandardResult {
+                        let result = StandardResult {
                             st0: StatusRegister0 {
                                 interrupt_code,
                                 head_address,
@@ -1058,7 +1079,14 @@ impl FloppyDiskController {
                                 ..Default::default()
                             },
                             chrn,
-                        })
+                        };
+                        match command {
+                            Command::ReadData { .. } => CommandResult::ReadData(result),
+                            Command::ReadDeletedData { .. } => {
+                                CommandResult::ReadDeletedData(result)
+                            }
+                            _ => unreachable!(),
+                        }
                     }
                     None => {
                         self.phase = Phase::Result;
@@ -1074,7 +1102,7 @@ impl FloppyDiskController {
                         // ST2
                         let missing_address_mark_in_data_field = true;
 
-                        CommandResult::ReadData(StandardResult {
+                        let result = StandardResult {
                             st0: StatusRegister0 {
                                 interrupt_code,
                                 equipment_check,
@@ -1090,11 +1118,17 @@ impl FloppyDiskController {
                                 ..Default::default()
                             },
                             chrn,
-                        })
+                        };
+                        match command {
+                            Command::ReadData { .. } => CommandResult::ReadData(result),
+                            Command::ReadDeletedData { .. } => {
+                                CommandResult::ReadDeletedData(result)
+                            }
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }
-            Command::ReadDeletedData { .. } => {}
             Command::WriteData { .. } => {
                 todo!("support write commands");
             }
