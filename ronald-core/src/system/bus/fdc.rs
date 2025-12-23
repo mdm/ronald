@@ -981,7 +981,7 @@ impl FloppyDiskController {
                         let missing_address_mark_in_data_field = false;
 
                         loop {
-                            let sector = match disk.tracks[track].find_sector(chrn) {
+                            let sector = match disk.tracks[track].find_sector(chrn, false) {
                                 Some(sector) => sector,
                                 None => {
                                     no_data = true;
@@ -1205,35 +1205,24 @@ impl FloppyDiskController {
                         let end_of_cylinder = false;
                         let data_error = false; // TODO: is this reported for Read Track?
                         let no_data = false;
-                        let missing_address_mark = true; // should be true if no sector ID found
+                        let missing_address_mark = true; // reset below if any sector ID found
 
                         // ST2 // TODO: is this reported for Read Track?
                         let control_mark = false;
                         let data_error_in_data_field = false;
-                        let wrong_cylinder = false;
-                        let bad_cylinder = false;
-                        let missing_address_mark_in_data_field = false;
 
                         loop {
-                            if disk.tracks[track].find_sector(chrn).is_none() {
-                                no_data = true;
-                            }
-
                             for sector in 0..end_of_track as usize {
-                                missing_address_mark = false;
+                                if missing_address_mark {
+                                    // first valid sector found
+                                    missing_address_mark = false;
+                                    interrupt_code = InterruptCode::NormalTermination;
+                                }
 
                                 let sector_info = disk.tracks[track].sector_infos[sector];
 
                                 if sector_info.fdc_status1 & 0b0010_0000 != 0 {
                                     data_error = true;
-                                    interrupt_code = InterruptCode::AbnormalTermination;
-                                }
-
-                                // Contrary to https://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
-                                // we determine the NO DATA condition above instead of from fdc_status1 bit 2
-
-                                if sector_info.fdc_status1 & 0b0000_0001 != 0 {
-                                    missing_address_mark = true;
                                     interrupt_code = InterruptCode::AbnormalTermination;
                                 }
 
@@ -1247,23 +1236,10 @@ impl FloppyDiskController {
                                     interrupt_code = InterruptCode::AbnormalTermination;
                                 }
 
-                                if sector_info.chrn.cylinder_number != chrn.cylinder_number {
-                                    no_data = true;
-                                    wrong_cylinder = true;
-                                    if sector_info.chrn.cylinder_number == 0xff {
-                                        bad_cylinder = true;
-                                    }
-                                    interrupt_code = InterruptCode::AbnormalTermination;
-                                }
-
-                                if sector_info.fdc_status2 & 0b0000_0001 != 0 {
-                                    missing_address_mark_in_data_field = true;
-                                    interrupt_code = InterruptCode::AbnormalTermination;
-                                }
-
-                                if !control_mark
-                                    && interrupt_code == InterruptCode::AbnormalTermination
-                                {
+                                if sector >= disk.tracks[track].sectors.len() {
+                                    log::error!(
+                                        "Specified end of track exceeds physical track length"
+                                    );
                                     break;
                                 }
 
@@ -1275,10 +1251,8 @@ impl FloppyDiskController {
                                     );
                                 }
 
-                                if control_mark || matches!(command, Command::ReadData { .. }) {
-                                    self.data_buffer
-                                        .extend(sector_data.iter().take(data_length));
-                                }
+                                self.data_buffer
+                                    .extend(sector_data.iter().take(data_length));
                             }
 
                             end_of_cylinder = true;
@@ -1287,6 +1261,11 @@ impl FloppyDiskController {
                             chrn.record = 1;
                             self.phase = Phase::Execution;
                             break;
+                        }
+
+                        if disk.tracks[track].find_sector(chrn, true).is_none() {
+                            no_data = true;
+                            interrupt_code = InterruptCode::AbnormalTermination;
                         }
 
                         let result = StandardResult {
@@ -1306,9 +1285,6 @@ impl FloppyDiskController {
                             st2: StatusRegister2 {
                                 control_mark,
                                 data_error_in_data_field,
-                                wrong_cylinder,
-                                bad_cylinder,
-                                missing_address_mark_in_data_field,
                                 ..Default::default()
                             },
                             chrn,
@@ -1346,13 +1322,7 @@ impl FloppyDiskController {
                             },
                             chrn,
                         };
-                        match command {
-                            Command::ReadData { .. } => CommandResult::ReadData(result),
-                            Command::ReadDeletedData { .. } => {
-                                CommandResult::ReadDeletedData(result)
-                            }
-                            _ => unreachable!(),
-                        }
+                        CommandResult::ReadTrack(result)
                     }
                 }
             }
