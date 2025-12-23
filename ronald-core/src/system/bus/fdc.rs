@@ -1359,7 +1359,18 @@ impl FloppyDiskController {
             }
             Command::SenseDriveStatus { .. } => {}
             Command::Seek { .. } => {}
-            Command::Invalid { .. } => {}
+            Command::Invalid { .. } => {
+                log::error!("Invalid FDC command received");
+
+                let interrupt_code = InterruptCode::InvalidCommand;
+
+                CommandResult::Invalid {
+                    st0: StatusRegister0 {
+                        interrupt_code,
+                        ..Default::default()
+                    },
+                }
+            }
 
             LegacyCommand::Recalibrate => {
                 self.selected_drive = self.command_buffer[0] as usize;
