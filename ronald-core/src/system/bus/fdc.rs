@@ -842,6 +842,7 @@ impl FloppyDiskController {
                         == CommandType::from(self.command_buffer[0]).expected_len()
                     {
                         self.execute_command();
+                        todo!("populate result buffer");
                     }
                 }
                 _ => {
@@ -1479,84 +1480,6 @@ impl FloppyDiskController {
 
         value
     }
-
-    fn report_status_register_0(&self) -> u8 {
-        let mut value = 0;
-
-        if self.end_of_track {
-            // assume no other errors occur
-            value |= 1 << 6;
-        }
-
-        if self.seek_end {
-            value |= 1 << 5;
-        }
-
-        if self.drive_not_ready {
-            value |= 1 << 3;
-        }
-
-        value |= self.selected_drive as u8;
-
-        // TODO: reset status field here?
-        // no - better in separate reset method
-        // some flags are shared between status registers
-
-        value
-    }
-
-    fn report_status_register_1(&self) -> u8 {
-        let mut value = self.status1;
-
-        if self.end_of_track {
-            value |= 1 << 7;
-        }
-
-        value
-    }
-
-    fn report_status_register_2(&self) -> u8 {
-        // let value = self.status2;
-
-        // // TODO: handle bits 4, 3 and 2
-
-        // value
-        self.status2
-    }
-
-    fn report_status_register_3(&self) -> u8 {
-        let mut value = 0;
-
-        if self.drives[self.selected_drive].track == 0 {
-            value |= 1 << 4;
-        }
-
-        value |= self.selected_drive as u8;
-
-        value
-    }
-
-    fn write_standard_result(&mut self) {
-        self.result_buffer
-            .push_back(self.report_status_register_0());
-        self.result_buffer
-            .push_back(self.report_status_register_1());
-        self.result_buffer
-            .push_back(self.report_status_register_2());
-
-        match &self.drives[self.selected_drive].disk {
-            Some(disk) => {
-                let track = self.drives[self.selected_drive].track;
-                let sector = self.drives[self.selected_drive].sector;
-                let sector_info = &disk.tracks[track].sector_infos[sector];
-                self.result_buffer.push_back(sector_info.track);
-                self.result_buffer.push_back(sector_info.side);
-                self.result_buffer.push_back(sector_info.sector_id);
-                self.result_buffer.push_back(sector_info.sector_size);
-            }
-            None => unreachable!(),
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1568,7 +1491,5 @@ enum Phase {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
     use super::*;
 }
