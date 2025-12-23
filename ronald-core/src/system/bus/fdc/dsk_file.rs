@@ -161,9 +161,10 @@ pub struct Track {
 }
 
 impl Track {
-    pub fn find_sector(&self, chrn: Chrn) -> Option<usize> {
+    pub fn find_sector(&self, chrn: Chrn, match_cylinder: bool) -> Option<usize> {
         self.sector_infos.iter().position(|sector_info| {
-            sector_info.chrn.head_address == chrn.head_address
+            (!match_cylinder || sector_info.chrn.cylinder_number == chrn.cylinder_number)
+                && sector_info.chrn.head_address == chrn.head_address
                 && sector_info.chrn.record == chrn.record
                 && sector_info.chrn.number == chrn.number
         })
