@@ -1326,7 +1326,158 @@ impl FloppyDiskController {
                     }
                 }
             }
-            Command::ReadId { .. } => {}
+            Command::ReadId {
+                mode,
+                head,
+                unit_select,
+            } => {
+                if let Mode::FrequencyModulation = mode {
+                    log::error!("Unsupported frequency modulation mode");
+                }
+                if head != 0 {
+                    log::error!("Unsupported head number");
+                    todo!("Return NOT READY in ST0")
+                }
+                let head_address = 0;
+
+                match self.drives.get(unit_select as usize) {
+                    Some(drive) => {
+                        let Some(disk) = drive.disk else {
+                            self.phase = Phase::Result;
+
+                            // ST0
+                            let interrupt_code = InterruptCode::AbnormalTermination;
+
+                            // ST1
+                            let no_data = true;
+
+                            let chrn = Chrn {
+                                cylinder_number: 0,
+                                head_address: 0,
+                                record: 0,
+                                number: 0,
+                            };
+
+                            let result = StandardResult {
+                                st0: StatusRegister0 {
+                                    interrupt_code,
+                                    ..Default::default()
+                                },
+                                st1: StatusRegister1 {
+                                    no_data,
+                                    ..Default::default()
+                                },
+                                st2: StatusRegister2 {
+                                    ..Default::default()
+                                },
+                                chrn,
+                            };
+                            return CommandResult::ReadId(result);
+                        };
+
+                        let track = drive.track;
+
+                        // ST0
+                        let interrupt_code = InterruptCode::NormalTermination;
+
+                        // ST1
+                        let data_error = false;
+                        let no_data = false;
+                        let missing_address_mark = false;
+
+                        let chrn = if disk.tracks[track].sector_infos.is_empty() {
+                            no_data = true;
+                            interrupt_code = InterruptCode::AbnormalTermination;
+                            Chrn {
+                                cylinder_number: 0,
+                                head_address: 0,
+                                record: 0,
+                                number: 0,
+                            }
+                        } else {
+                            let sector_info = disk.tracks[track].sector_infos[0];
+
+                            if sector_info.fdc_status1 & 0b0010_0000 != 0 {
+                                data_error = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
+                            }
+
+                            // Contrary to https://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
+                            // we determine the NO DATA condition above instead of from fdc_status1 bit 2
+
+                            if sector_info.fdc_status1 & 0b0000_0001 != 0 {
+                                missing_address_mark = true;
+                                interrupt_code = InterruptCode::AbnormalTermination;
+                            }
+
+                            if interrupt_code == InterruptCode::NormalTermination {
+                                sector_info.chrn
+                            } else {
+                                Chrn {
+                                    cylinder_number: 0,
+                                    head_address: 0,
+                                    record: 0,
+                                    number: 0,
+                                }
+                            }
+                        };
+
+                        let result = StandardResult {
+                            st0: StatusRegister0 {
+                                interrupt_code,
+                                head_address,
+                                unit_select,
+                                ..Default::default()
+                            },
+                            st1: StatusRegister1 {
+                                data_error,
+                                no_data,
+                                missing_address_mark,
+                                ..Default::default()
+                            },
+                            st2: StatusRegister2 {
+                                ..Default::default()
+                            },
+                            chrn,
+                        };
+                        CommandResult::ReadId(result)
+                    }
+                    None => {
+                        self.phase = Phase::Result;
+
+                        // ST0
+                        let interrupt_code = InterruptCode::AbnormalTermination;
+                        let equipment_check = true;
+
+                        // ST1
+                        let end_of_cylinder = true;
+
+                        let chrn = Chrn {
+                            cylinder_number: 0,
+                            head_address: 0,
+                            record: 0,
+                            number: 0,
+                        };
+
+                        let result = StandardResult {
+                            st0: StatusRegister0 {
+                                interrupt_code,
+                                equipment_check,
+                                ..Default::default()
+                            },
+                            st1: StatusRegister1 {
+                                end_of_cylinder,
+                                ..Default::default()
+                            },
+                            st2: StatusRegister2 {
+                                ..Default::default()
+                            },
+                            chrn,
+                        };
+                        CommandResult::ReadId(result)
+                    }
+                }
+            }
             Command::FormatTrack { .. } => {
                 todo!("support write commands");
             }
