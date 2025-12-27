@@ -85,7 +85,7 @@ enum Phase {
     Result,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 enum Mode {
     FrequencyModulation,
     ModifiedFrequencyModulation,
@@ -134,7 +134,7 @@ impl CommandType {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct Chrn {
     cylinder_number: u8,
     head_address: u8,
@@ -287,6 +287,30 @@ enum Command {
         new_cylinder_number: u8,
     },
     Invalid,
+}
+
+impl Command {
+    fn write_len(&self) -> usize {
+        match self {
+            Self::WriteData {
+                chrn, data_length, ..
+            }
+            | Self::WriteDeletedData {
+                chrn, data_length, ..
+            } => {
+                if chrn.number == 0 {
+                    *data_length as usize
+                } else {
+                    128 << chrn.number
+                }
+            }
+            Self::FormatTrack { sector, .. } => *sector as usize * 4,
+            Self::ScanEqual { chrn, .. }
+            | Self::ScanLowOrEqual { chrn, .. }
+            | Self::ScanHighOrEqual { chrn, .. } => 128 << chrn.number,
+            _ => 0,
+        }
+    }
 }
 
 const BITMASK_MULTI_TRACK: u8 = 0b1000_0000;
@@ -689,6 +713,24 @@ struct StandardResult {
     chrn: Chrn,
 }
 
+impl IntoIterator for StandardResult {
+    type Item = u8;
+    type IntoIter = std::vec::IntoIter<u8>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        vec![
+            self.st0.into(),
+            self.st1.into(),
+            self.st2.into(),
+            self.chrn.cylinder_number,
+            self.chrn.head_address,
+            self.chrn.record,
+            self.chrn.number,
+        ]
+        .into_iter()
+    }
+}
+
 enum CommandResult {
     ReadData(StandardResult),
     ReadDeletedData(StandardResult),
@@ -706,6 +748,30 @@ enum CommandResult {
     SenseDriveStatus { st3: StatusRegister3 },
     Seek,
     Invalid { st0: StatusRegister0 },
+}
+
+impl IntoIterator for CommandResult {
+    type Item = u8;
+    type IntoIter = std::vec::IntoIter<u8>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Self::ReadData(result)
+            | Self::ReadDeletedData(result)
+            | Self::WriteData(result)
+            | Self::WriteDeletedData(result)
+            | Self::ReadTrack(result)
+            | Self::ReadId(result)
+            | Self::FormatTrack(result)
+            | Self::ScanEqual(result)
+            | Self::ScanLowOrEqual(result)
+            | Self::ScanHighOrEqual(result) => result.into_iter(),
+            Self::Recalibrate | Self::Seek | Self::Specify => vec![].into_iter(),
+            Self::SenseInterruptStatus { st0, pcn } => vec![st0.into(), pcn].into_iter(),
+            Self::SenseDriveStatus { st3 } => vec![st3.into()].into_iter(),
+            Self::Invalid { st0 } => vec![st0.into()].into_iter(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -782,7 +848,7 @@ impl FloppyDiskController {
             0xfb7e => self.report_main_status_register(),
             0xfb7f => {
                 match self.phase {
-                    Phase::Execution => {
+                    Phase::Execution(None) => {
                         // TODO: handle over run here (modify result if last poll more than 26us ago)
 
                         let data = if let Some(data) = self.data_buffer.pop_front() {
@@ -798,6 +864,10 @@ impl FloppyDiskController {
                         }
 
                         data
+                    }
+                    Phase::Execution(_) => {
+                        log::error!("Unexpected FDC read in execution phase");
+                        todo!("return dummy value instead?");
                     }
                     Phase::Result => {
                         let result = if let Some(result) = self.result_buffer.pop_front() {
@@ -836,7 +906,7 @@ impl FloppyDiskController {
                 }
                 _ => unreachable!(),
             },
-            0xfb7f => match self.phase {
+            0xfb7f => match &self.phase {
                 Phase::Command => {
                     if self.command_buffer.is_empty()
                         || self.command_buffer.len()
@@ -856,7 +926,7 @@ impl FloppyDiskController {
                     }
                 }
                 Phase::Execution(command) => {
-                    if self.data_buffer.len() < command.write_len() {
+                    if self.data_buffer.len() < command.as_ref().map_or(0, |c| c.write_len()) {
                         self.data_buffer.push_back(value);
                     } else {
                         log::error!(
@@ -877,7 +947,12 @@ impl FloppyDiskController {
     }
 
     pub fn step(&mut self) {
-        let Phase::Execution(Some(command)) = self.phase else {
+        let Phase::Execution(command) = &mut self.phase else {
+            return;
+        };
+
+        let Some(command) = command.take() else {
+            // only executed once
             return;
         };
 
@@ -944,17 +1019,20 @@ impl FloppyDiskController {
                 end_of_track,
                 gap_length,
                 data_length,
-            } => self.command_write_data(
-                multi_track,
-                mode,
-                head,
-                unit_select,
-                chrn,
-                end_of_track,
-                gap_length,
-                data_length,
-                matches!(command, Command::WriteDeletedData { .. }),
-            ),
+            } => {
+                self.phase = Phase::Result;
+                self.command_write_data(
+                    multi_track,
+                    mode,
+                    head,
+                    unit_select,
+                    chrn,
+                    end_of_track,
+                    gap_length,
+                    data_length,
+                    matches!(command, Command::WriteDeletedData { .. }),
+                )
+            }
             Command::ReadTrack {
                 mode,
                 skip,
@@ -982,9 +1060,22 @@ impl FloppyDiskController {
                 mode,
                 head,
                 unit_select,
-            } => self.command_read_id(mode, head, unit_select),
-            Command::FormatTrack { .. } => {
-                todo!("support write commands");
+            } => {
+                self.phase = Phase::Result;
+                self.command_read_id(mode, head, unit_select)
+            }
+            Command::FormatTrack {
+                mode,
+                head,
+                unit_select,
+                number,
+                sector,
+                gap_length,
+                data,
+                ..
+            } => {
+                self.phase = Phase::Result;
+                self.command_format_track(mode, head, unit_select, number, sector, gap_length, data)
             }
             Command::ScanEqual {
                 multi_track,
@@ -1019,18 +1110,30 @@ impl FloppyDiskController {
                 gap_length,
                 scan_type,
             } => {
-                todo!("support scan commands");
-                match command {
-                    Command::ScanEqual { .. } => CommandResult::ScanEqual,
-                    Command::ScanLowOrEqual { .. } => CommandResult::ScanLowOrEqual,
-                    Command::ScanHighOrEqual { .. } => CommandResult::ScanHighOrEqual,
-                    _ => unreachable!(),
-                }
+                self.phase = Phase::Result;
+                self.command_scan(
+                    multi_track,
+                    mode,
+                    skip,
+                    head,
+                    unit_select,
+                    chrn,
+                    end_of_track,
+                    gap_length,
+                    scan_type,
+                    matches!(command, Command::ScanLowOrEqual { .. }),
+                    matches!(command, Command::ScanHighOrEqual { .. }),
+                )
             }
-            Command::Recalibrate { .. } => {}
-            Command::SenseInterruptStatus { .. } => {
+            Command::Recalibrate { unit_select } => {
+                self.phase = Phase::Command;
+                self.command_recalibrate(unit_select)
+            }
+            Command::SenseInterruptStatus => {
                 //TODO: return InterruptCode::InvalidCommand if SEEK or RECALIBRATE still in
                 //progress
+                self.phase = Phase::Result;
+                self.command_sense_interrupt_status()
             }
             Command::Specify {
                 step_rate_time,
@@ -1038,36 +1141,33 @@ impl FloppyDiskController {
                 head_load_time,
                 non_dma_mode,
             } => {
-                if !non_dma_mode {
-                    log::error!("DMA mode is not supported");
-                }
-
-                self.step_rate_time = step_rate_time;
-                self.head_unload_time = head_unload_time;
-                self.head_load_time = head_load_time;
-                self.non_dma_mode = non_dma_mode;
-
                 self.phase = Phase::Command;
-
-                CommandResult::Specify
+                self.command_specify(
+                    step_rate_time,
+                    head_unload_time,
+                    head_load_time,
+                    non_dma_mode,
+                )
             }
-            Command::SenseDriveStatus { .. } => {}
-            Command::Seek { .. } => {}
-            Command::Invalid { .. } => {
-                log::error!("Invalid FDC command received");
-
-                let interrupt_code = InterruptCode::InvalidCommand;
-
-                CommandResult::Invalid {
-                    st0: StatusRegister0 {
-                        interrupt_code,
-                        ..Default::default()
-                    },
-                }
+            Command::SenseDriveStatus { head, unit_select } => {
+                self.phase = Phase::Result;
+                self.command_sense_drive_status(head, unit_select)
+            }
+            Command::Seek {
+                head,
+                unit_select,
+                new_cylinder_number,
+            } => {
+                self.phase = Phase::Command;
+                self.command_seek(head, unit_select, new_cylinder_number)
+            }
+            Command::Invalid => {
+                self.phase = Phase::Result;
+                self.command_invalid()
             }
         };
 
-        // TODO: serialize result into result_buffer
+        self.result_buffer.extend(result.into_iter());
     }
 
     pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
@@ -1181,7 +1281,7 @@ impl FloppyDiskController {
                         }
                     };
 
-                    let sector_info = disk.tracks[track].sector_infos[sector];
+                    let sector_info = &disk.tracks[track].sector_infos[sector];
 
                     if sector_info.fdc_status1 & 0b0010_0000 != 0 {
                         data_error = true;
@@ -1224,7 +1324,7 @@ impl FloppyDiskController {
                         break;
                     }
 
-                    let sector_data = disk.tracks[track].sectors[sector];
+                    let sector_data = &disk.tracks[track].sectors[sector];
 
                     if data_length > sector_data.len() {
                         log::error!("Specified data length exceeds physical sector size");
@@ -1337,7 +1437,7 @@ impl FloppyDiskController {
         skip: bool,
         head: u8,
         unit_select: u8,
-        chrn: Chrn,
+        mut chrn: Chrn,
         end_of_track: u8,
         gap_length: u8,
         data_length: u8,
@@ -1356,7 +1456,7 @@ impl FloppyDiskController {
 
         match self.drives.get(unit_select as usize) {
             Some(drive) => {
-                let Some(disk) = drive.disk else {
+                let Some(disk) = &drive.disk else {
                     self.phase = Phase::Result;
 
                     // ST0
@@ -1395,65 +1495,59 @@ impl FloppyDiskController {
                 };
 
                 // ST0
-                let interrupt_code = InterruptCode::AbnormalTermination;
+                let mut interrupt_code = InterruptCode::AbnormalTermination;
 
                 // ST1
-                let end_of_cylinder = false;
-                let data_error = false; // TODO: is this reported for Read Track?
-                let no_data = false;
-                let missing_address_mark = true; // reset below if any sector ID found
+                let end_of_cylinder = true;
+                let mut data_error = false; // TODO: is this reported for Read Track?
+                let mut no_data = false;
+                let mut missing_address_mark = true; // reset below if any sector ID found
 
                 // ST2 // TODO: is this reported for Read Track?
-                let control_mark = false;
-                let data_error_in_data_field = false;
+                let mut control_mark = false;
+                let mut data_error_in_data_field = false;
 
-                loop {
-                    for sector in 0..end_of_track as usize {
-                        if missing_address_mark {
-                            // first valid sector found
-                            missing_address_mark = false;
-                            interrupt_code = InterruptCode::NormalTermination;
-                        }
-
-                        let sector_info = disk.tracks[track].sector_infos[sector];
-
-                        if sector_info.fdc_status1 & 0b0010_0000 != 0 {
-                            data_error = true;
-                            interrupt_code = InterruptCode::AbnormalTermination;
-                        }
-
-                        if sector_info.fdc_status2 & 0b0100_0000 != 0 {
-                            control_mark = true;
-                            interrupt_code = InterruptCode::AbnormalTermination;
-                        }
-
-                        if sector_info.fdc_status2 & 0b0010_0000 != 0 {
-                            data_error_in_data_field = true;
-                            interrupt_code = InterruptCode::AbnormalTermination;
-                        }
-
-                        if sector >= disk.tracks[track].sectors.len() {
-                            log::error!("Specified end of track exceeds physical track length");
-                            break;
-                        }
-
-                        let sector_data = disk.tracks[track].sectors[sector];
-
-                        if data_length > sector_data.len() {
-                            log::error!("Specified data length exceeds physical sector size");
-                        }
-
-                        self.data_buffer
-                            .extend(sector_data.iter().take(data_length));
+                for sector in 0..end_of_track as usize {
+                    if missing_address_mark {
+                        // first valid sector found
+                        missing_address_mark = false;
+                        interrupt_code = InterruptCode::NormalTermination;
                     }
 
-                    end_of_cylinder = true;
-                    interrupt_code = InterruptCode::AbnormalTermination;
-                    chrn.cylinder_number += 1;
-                    chrn.record = 1;
-                    self.phase = Phase::Execution;
-                    break;
+                    let sector_info = &disk.tracks[track].sector_infos[sector];
+
+                    if sector_info.fdc_status1 & 0b0010_0000 != 0 {
+                        data_error = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if sector_info.fdc_status2 & 0b0100_0000 != 0 {
+                        control_mark = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if sector_info.fdc_status2 & 0b0010_0000 != 0 {
+                        data_error_in_data_field = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if sector >= disk.tracks[track].sectors.len() {
+                        log::error!("Specified end of track exceeds physical track length");
+                        break;
+                    }
+
+                    let sector_data = &disk.tracks[track].sectors[sector];
+
+                    if data_length > sector_data.len() {
+                        log::error!("Specified data length exceeds physical sector size");
+                    }
+
+                    self.data_buffer
+                        .extend(sector_data.iter().take(data_length));
                 }
+
+                chrn.cylinder_number += 1;
+                chrn.record = 1;
 
                 if disk.tracks[track].find_sector(chrn, true).is_none() {
                     no_data = true;
@@ -1567,12 +1661,12 @@ impl FloppyDiskController {
                 let track = drive.track;
 
                 // ST0
-                let interrupt_code = InterruptCode::NormalTermination;
+                let mut interrupt_code = InterruptCode::NormalTermination;
 
                 // ST1
-                let data_error = false;
-                let no_data = false;
-                let missing_address_mark = false;
+                let mut data_error = false;
+                let mut no_data = false;
+                let mut missing_address_mark = false;
 
                 let chrn = if disk.tracks[track].sector_infos.is_empty() {
                     no_data = true;
@@ -1584,7 +1678,7 @@ impl FloppyDiskController {
                         number: 0,
                     }
                 } else {
-                    let sector_info = disk.tracks[track].sector_infos[0];
+                    let sector_info = &disk.tracks[track].sector_infos[0];
 
                     if sector_info.fdc_status1 & 0b0010_0000 != 0 {
                         data_error = true;
@@ -1668,67 +1762,116 @@ impl FloppyDiskController {
         }
     }
 
-    fn start_command(&mut self) -> CommandResult {
-        self.phase = Phase::Execution;
-
-        // let command = self.command_buffer.as_slice().into();
-        // self.command_buffer.clear();
-        // self.data_buffer.clear();
-        // self.result_buffer.clear();
-        log::debug!("Executing FDC command: {:?}", &command);
-        match command {
-            LegacyCommand::Recalibrate => {
-                self.selected_drive = self.command_buffer[0] as usize;
-                match &self.drives[self.selected_drive].disk {
-                    Some(_) => {
-                        self.drives[self.selected_drive].track =
-                            self.drives[self.selected_drive].track.saturating_sub(77);
-                        self.seek_end = true;
-                    }
-                    None => {
-                        self.drive_not_ready = true;
-                    }
-                }
-                self.phase = Phase::Command;
-            }
-            LegacyCommand::SenseInterruptState => {
-                self.result_buffer
-                    .push_back(self.report_status_register_0());
-                self.result_buffer
-                    .push_back(self.drives[self.selected_drive].track as u8);
-                self.phase = Phase::Result;
-            }
-            LegacyCommand::ReadSectorId => {
-                self.selected_drive = self.command_buffer[0] as usize;
-                match &self.drives[self.selected_drive].disk {
-                    Some(_) => {
-                        self.write_standard_result();
-                    }
-                    None => {
-                        self.drive_not_ready = true;
-                    }
-                }
-                self.phase = Phase::Result;
-            }
-            LegacyCommand::Seek => {
-                self.selected_drive = self.command_buffer[0] as usize;
-                let track = self.command_buffer[1] as usize;
-                match &self.drives[self.selected_drive].disk {
-                    Some(_) => {
-                        self.drives[self.selected_drive].track = track;
-                        self.seek_end = true;
-                    }
-                    None => {
-                        self.drive_not_ready = true;
-                    }
-                }
-                self.phase = Phase::Command;
-            }
-        }
+    fn command_format_track(
+        &mut self,
+        mode: Mode,
+        head: u8,
+        unit_select: u8,
+        number: u8,
+        sector: u8,
+        gap_length: u8,
+        data: u8,
+    ) -> CommandResult {
+        todo!("support write commands")
     }
 
-    fn finish_write_command(&mut self, command: &Command, data: &[u8]) -> CommandResult {
-        todo!()
+    fn command_scan(
+        &mut self,
+        multi_track: bool,
+        mode: Mode,
+        skip: bool,
+        head: u8,
+        unit_select: u8,
+        chrn: Chrn,
+        end_of_track: u8,
+        gap_length: u8,
+        scan_type: u8,
+        low_or_equal: bool,
+        high_or_equal: bool,
+    ) -> CommandResult {
+        todo!("support scan commands")
+    }
+
+    fn command_recalibrate(&mut self, unit_select: u8) -> CommandResult {
+        // self.selected_drive = self.command_buffer[0] as usize;
+        // match &self.drives[self.selected_drive].disk {
+        //     Some(_) => {
+        //         self.drives[self.selected_drive].track =
+        //             self.drives[self.selected_drive].track.saturating_sub(77);
+        //         self.seek_end = true;
+        //     }
+        //     None => {
+        //         self.drive_not_ready = true;
+        //     }
+        // }
+        // self.phase = Phase::Command;
+        todo!("implement recalibrate command")
+    }
+
+    fn command_sense_interrupt_status(&mut self) -> CommandResult {
+        // self.result_buffer
+        //     .push_back(self.report_status_register_0());
+        // self.result_buffer
+        //     .push_back(self.drives[self.selected_drive].track as u8);
+        // self.phase = Phase::Result;
+        todo!("implement sense interrupt status command")
+    }
+
+    fn command_specify(
+        &mut self,
+        step_rate_time: u8,
+        head_unload_time: u8,
+        head_load_time: u8,
+        non_dma_mode: bool,
+    ) -> CommandResult {
+        if !non_dma_mode {
+            log::error!("DMA mode is not supported");
+        }
+
+        self.step_rate_time = step_rate_time;
+        self.head_unload_time = head_unload_time;
+        self.head_load_time = head_load_time;
+        self.non_dma_mode = non_dma_mode;
+
+        CommandResult::Specify
+    }
+
+    fn command_sense_drive_status(&mut self, head: u8, unit_select: u8) -> CommandResult {
+        todo!("implement sense drive status command")
+    }
+
+    fn command_seek(
+        &mut self,
+        head: u8,
+        unit_select: u8,
+        new_cylinder_number: u8,
+    ) -> CommandResult {
+        // self.selected_drive = self.command_buffer[0] as usize;
+        // let track = self.command_buffer[1] as usize;
+        // match &self.drives[self.selected_drive].disk {
+        //     Some(_) => {
+        //         self.drives[self.selected_drive].track = track;
+        //         self.seek_end = true;
+        //     }
+        //     None => {
+        //         self.drive_not_ready = true;
+        //     }
+        // }
+        // self.phase = Phase::Command;
+        todo!("implement seek command")
+    }
+
+    fn command_invalid(&mut self) -> CommandResult {
+        log::error!("Invalid FDC command received");
+
+        let interrupt_code = InterruptCode::InvalidCommand;
+
+        CommandResult::Invalid {
+            st0: StatusRegister0 {
+                interrupt_code,
+                ..Default::default()
+            },
+        }
     }
 
     fn report_main_status_register(&self) -> u8 {
@@ -1739,13 +1882,13 @@ impl FloppyDiskController {
         value |= 1 << 7;
 
         // Data input/output
-        if matches!(self.phase, Phase::Execution | Phase::Result) {
+        if matches!(self.phase, Phase::Execution(None) | Phase::Result) {
             value |= 1 << 6;
         }
 
         // Execution mode
         if self.non_dma_mode
-            && let Phase::Execution = self.phase
+            && let Phase::Execution(_) = self.phase
         {
             value |= 1 << 5;
         }
