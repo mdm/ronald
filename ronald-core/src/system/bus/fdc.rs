@@ -7,6 +7,8 @@ mod dsk_file;
 
 use dsk_file::Disk;
 
+use crate::system::clock::MasterClockTick;
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Drive {
@@ -14,68 +16,6 @@ struct Drive {
     track: usize,
     sector: usize,
     disk: Option<Disk>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-enum LegacyCommand {
-    ReadTrack,
-    Specify,
-    SenseDriveState,
-    WriteSector,
-    ReadSector,
-    Recalibrate,
-    SenseInterruptState,
-    WriteDeletedSector,
-    ReadSectorId,
-    ReadDeletedSector,
-    FormatTrack,
-    Seek,
-    ScanEqual,
-    ScanLowOrEqual,
-    ScanHighOrEqual,
-}
-
-impl LegacyCommand {
-    fn from_byte(byte: u8) -> LegacyCommand {
-        match byte & 0x1f {
-            0x02 => LegacyCommand::ReadTrack,
-            0x03 => LegacyCommand::Specify,
-            0x04 => LegacyCommand::SenseDriveState,
-            0x05 => LegacyCommand::WriteSector,
-            0x06 => LegacyCommand::ReadSector,
-            0x07 => LegacyCommand::Recalibrate,
-            0x08 => LegacyCommand::SenseInterruptState,
-            0x09 => LegacyCommand::WriteDeletedSector,
-            0x0a => LegacyCommand::ReadSectorId,
-            0x0c => LegacyCommand::ReadDeletedSector,
-            0x0d => LegacyCommand::FormatTrack,
-            0x0f => LegacyCommand::Seek,
-            0x11 => LegacyCommand::ScanEqual,
-            0x19 => LegacyCommand::ScanLowOrEqual,
-            0x1d => LegacyCommand::ScanHighOrEqual,
-            _ => unreachable!(),
-        }
-    }
-
-    fn expected_parameter_bytes(&self) -> usize {
-        match self {
-            LegacyCommand::ReadTrack => 8,
-            LegacyCommand::Specify => 2,
-            LegacyCommand::SenseDriveState => 1,
-            LegacyCommand::WriteSector => 8,
-            LegacyCommand::ReadSector => 8,
-            LegacyCommand::Recalibrate => 1,
-            LegacyCommand::SenseInterruptState => 0,
-            LegacyCommand::WriteDeletedSector => 8,
-            LegacyCommand::ReadSectorId => 1,
-            LegacyCommand::ReadDeletedSector => 8,
-            LegacyCommand::FormatTrack => 5,
-            LegacyCommand::Seek => 2,
-            LegacyCommand::ScanEqual => 8,
-            LegacyCommand::ScanLowOrEqual => 8,
-            LegacyCommand::ScanHighOrEqual => 8,
-        }
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -777,6 +717,7 @@ impl IntoIterator for CommandResult {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FloppyDiskController {
+    master_clock: MasterClockTick,
     drives: Vec<Drive>,
     phase: Phase,
     command_buffer: Vec<u8>,
@@ -822,6 +763,7 @@ impl FloppyDiskController {
         drives.truncate(num_drives);
 
         Self {
+            master_clock: MasterClockTick::default(),
             drives,
             phase: Phase::Command,
             command_buffer: Vec::new(),
@@ -946,7 +888,9 @@ impl FloppyDiskController {
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self, master_clock: MasterClockTick) {
+        self.master_clock = master_clock;
+
         let Phase::Execution(command) = &mut self.phase else {
             return;
         };
@@ -1167,7 +1111,7 @@ impl FloppyDiskController {
             }
         };
 
-        self.result_buffer.extend(result.into_iter());
+        self.result_buffer.extend(result);
     }
 
     pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
@@ -1183,6 +1127,7 @@ impl FloppyDiskController {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn command_read_data(
         &mut self,
         multi_track: bool,
@@ -1192,7 +1137,7 @@ impl FloppyDiskController {
         unit_select: u8,
         mut chrn: Chrn,
         end_of_track: u8,
-        gap_length: u8,
+        _gap_length: u8,
         data_length: u8,
         deleted: bool,
     ) -> CommandResult {
@@ -1371,9 +1316,9 @@ impl FloppyDiskController {
                     chrn,
                 };
                 if deleted {
-                    return CommandResult::ReadDeletedData(result);
+                    CommandResult::ReadDeletedData(result)
                 } else {
-                    return CommandResult::ReadData(result);
+                    CommandResult::ReadData(result)
                 }
             }
             None => {
@@ -1408,14 +1353,15 @@ impl FloppyDiskController {
                     chrn,
                 };
                 if deleted {
-                    return CommandResult::ReadDeletedData(result);
+                    CommandResult::ReadDeletedData(result)
                 } else {
-                    return CommandResult::ReadData(result);
+                    CommandResult::ReadData(result)
                 }
             }
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn command_write_data(
         &mut self,
         multi_track: bool,
@@ -1431,6 +1377,7 @@ impl FloppyDiskController {
         todo!("support write commands")
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn command_read_track(
         &mut self,
         mode: Mode,
@@ -1439,7 +1386,7 @@ impl FloppyDiskController {
         unit_select: u8,
         mut chrn: Chrn,
         end_of_track: u8,
-        gap_length: u8,
+        _gap_length: u8,
         data_length: u8,
     ) -> CommandResult {
         if let Mode::FrequencyModulation = mode {
@@ -1762,6 +1709,7 @@ impl FloppyDiskController {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn command_format_track(
         &mut self,
         mode: Mode,
@@ -1775,6 +1723,7 @@ impl FloppyDiskController {
         todo!("support write commands")
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn command_scan(
         &mut self,
         multi_track: bool,
