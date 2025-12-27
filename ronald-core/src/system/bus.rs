@@ -114,6 +114,7 @@ where
         audio: &mut impl AudioSink,
         master_clock: MasterClockTick,
     ) -> bool {
+        self.fdc.step(master_clock);
         self.psg.step(audio);
         self.crtc.step(master_clock);
         self.gate_array
