@@ -79,6 +79,13 @@ impl LegacyCommand {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+enum Phase {
+    Command,
+    Execution(Option<Command>),
+    Result,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 enum Mode {
     FrequencyModulation,
     ModifiedFrequencyModulation,
@@ -105,7 +112,7 @@ enum CommandType {
 }
 
 impl CommandType {
-    fn expected_len(&self) -> usize {
+    fn command_len(&self) -> usize {
         match self {
             Self::ReadData => 9,
             Self::ReadDeletedData => 9,
@@ -833,21 +840,33 @@ impl FloppyDiskController {
                 Phase::Command => {
                     if self.command_buffer.is_empty()
                         || self.command_buffer.len()
-                            < CommandType::from(self.command_buffer[0]).expected_len()
+                            < CommandType::from(self.command_buffer[0]).command_len()
                     {
                         self.command_buffer.push(value);
                     }
 
                     if self.command_buffer.len()
-                        == CommandType::from(self.command_buffer[0]).expected_len()
+                        == CommandType::from(self.command_buffer[0]).command_len()
                     {
-                        self.execute_command();
-                        todo!("populate result buffer");
+                        let command = self.command_buffer.as_slice().into();
+                        self.command_buffer.clear();
+                        self.data_buffer.clear();
+                        self.result_buffer.clear();
+                        self.phase = Phase::Execution(Some(command));
                     }
                 }
-                _ => {
+                Phase::Execution(command) => {
+                    if self.data_buffer.len() < command.write_len() {
+                        self.data_buffer.push_back(value);
+                    } else {
+                        log::error!(
+                            "Unexpected FDC write in execution phase using port {port:#06X}: {value:#010b}"
+                        );
+                    }
+                }
+                Phase::Result => {
                     log::error!(
-                        "FDC write outside command phase using port {port:#06X}: {value:#010b}"
+                        "Unexpected FDC write in result phase using port {port:#06X}: {value:#010b}"
                     );
                 }
             },
@@ -857,28 +876,18 @@ impl FloppyDiskController {
         }
     }
 
-    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
-        self.drives[drive].disk = match dsk_file::Disk::load(rom, path) {
-            Ok(disk) => {
-                log::info!("Disk loaded successfully");
-                Some(disk)
-            }
-            Err(error) => {
-                log::warn!("Disk could not be loaded: {error}");
-                None
-            }
+    pub fn step(&mut self) {
+        let Phase::Execution(Some(command)) = self.phase else {
+            return;
+        };
+
+        if self.data_buffer.len() < command.write_len() {
+            // Can't execute command yet, waiting for more data
+            self.phase = Phase::Execution(Some(command));
+            return;
         }
-    }
 
-    fn execute_command(&mut self) -> CommandResult {
-        self.phase = Phase::Execution;
-
-        let command = self.command_buffer.as_slice().into();
-        self.command_buffer.clear();
-        self.data_buffer.clear();
-        self.result_buffer.clear();
-        log::debug!("Executing FDC command: {:?}", &command);
-        match command {
+        let result = match command {
             Command::ReadData {
                 multi_track,
                 mode,
@@ -901,241 +910,51 @@ impl FloppyDiskController {
                 gap_length,
                 data_length,
             } => {
-                if multi_track {
-                    log::error!("Unsupported multi-track flag set");
-                }
-                if let Mode::FrequencyModulation = mode {
-                    log::error!("Unsupported frequency modulation mode");
-                }
-                if skip {
-                    log::error!("Unsupported skip flag set");
-                }
-                if head != 0 {
-                    log::error!("Unsupported head number");
-                    todo!("Return NOT READY in ST0")
-                }
-                let head_address = 0;
-
-                match self.drives.get(unit_select as usize) {
-                    Some(drive) => {
-                        let Some(disk) = drive.disk else {
-                            self.phase = Phase::Result;
-
-                            // ST0
-                            let interrupt_code = InterruptCode::AbnormalTermination;
-
-                            // ST1
-                            let no_data = true;
-
-                            // ST2
-                            let missing_address_mark_in_data_field = true;
-
-                            let result = StandardResult {
-                                st0: StatusRegister0 {
-                                    interrupt_code,
-                                    ..Default::default()
-                                },
-                                st1: StatusRegister1 {
-                                    no_data,
-                                    ..Default::default()
-                                },
-                                st2: StatusRegister2 {
-                                    missing_address_mark_in_data_field,
-                                    ..Default::default()
-                                },
-                                chrn,
-                            };
-                            match command {
-                                Command::ReadData { .. } => {
-                                    return CommandResult::ReadData(result);
-                                }
-                                Command::ReadDeletedData { .. } => {
-                                    return CommandResult::ReadDeletedData(result);
-                                }
-                                _ => unreachable!(),
-                            }
-                        };
-
-                        let track = drive.track;
-
-                        let data_length = if chrn.number == 0 {
-                            data_length as usize
-                        } else {
-                            128 << chrn.number
-                        };
-
-                        // ST0
-                        let interrupt_code = InterruptCode::NormalTermination;
-
-                        // ST1
-                        let end_of_cylinder = false;
-                        let data_error = false;
-                        let no_data = false;
-                        let missing_address_mark = false;
-
-                        // ST2
-                        let control_mark = false;
-                        let data_error_in_data_field = false;
-                        let wrong_cylinder = false;
-                        let bad_cylinder = false;
-                        let missing_address_mark_in_data_field = false;
-
-                        loop {
-                            let sector = match disk.tracks[track].find_sector(chrn, false) {
-                                Some(sector) => sector,
-                                None => {
-                                    no_data = true;
-                                    interrupt_code = InterruptCode::AbnormalTermination;
-                                    break;
-                                }
-                            };
-
-                            let sector_info = disk.tracks[track].sector_infos[sector];
-
-                            if sector_info.fdc_status1 & 0b0010_0000 != 0 {
-                                data_error = true;
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                            }
-
-                            // Contrary to https://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
-                            // we determine the NO DATA condition above instead of from fdc_status1 bit 2
-
-                            if sector_info.fdc_status1 & 0b0000_0001 != 0 {
-                                missing_address_mark = true;
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                            }
-
-                            if sector_info.fdc_status2 & 0b0100_0000 != 0 {
-                                control_mark = true;
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                            }
-
-                            if sector_info.fdc_status2 & 0b0010_0000 != 0 {
-                                data_error_in_data_field = true;
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                            }
-
-                            if sector_info.chrn.cylinder_number != chrn.cylinder_number {
-                                no_data = true;
-                                wrong_cylinder = true;
-                                if sector_info.chrn.cylinder_number == 0xff {
-                                    bad_cylinder = true;
-                                }
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                            }
-
-                            if sector_info.fdc_status2 & 0b0000_0001 != 0 {
-                                missing_address_mark_in_data_field = true;
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                            }
-
-                            if !control_mark && interrupt_code == InterruptCode::AbnormalTermination
-                            {
-                                break;
-                            }
-
-                            let sector_data = disk.tracks[track].sectors[sector];
-
-                            if data_length > sector_data.len() {
-                                log::error!("Specified data length exceeds physical sector size");
-                            }
-
-                            if control_mark || matches!(command, Command::ReadData { .. }) {
-                                self.data_buffer
-                                    .extend(sector_data.iter().take(data_length));
-                            }
-
-                            if !control_mark && chrn.cylinder_number < end_of_track {
-                                chrn.record += 1;
-                            } else {
-                                end_of_cylinder = true;
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                                chrn.cylinder_number += 1;
-                                chrn.record = 1;
-                                self.phase = Phase::Execution;
-                                break;
-                            }
-                        }
-
-                        let result = StandardResult {
-                            st0: StatusRegister0 {
-                                interrupt_code,
-                                head_address,
-                                unit_select,
-                                ..Default::default()
-                            },
-                            st1: StatusRegister1 {
-                                end_of_cylinder,
-                                data_error,
-                                no_data,
-                                missing_address_mark,
-                                ..Default::default()
-                            },
-                            st2: StatusRegister2 {
-                                control_mark,
-                                data_error_in_data_field,
-                                wrong_cylinder,
-                                bad_cylinder,
-                                missing_address_mark_in_data_field,
-                                ..Default::default()
-                            },
-                            chrn,
-                        };
-                        match command {
-                            Command::ReadData { .. } => CommandResult::ReadData(result),
-                            Command::ReadDeletedData { .. } => {
-                                CommandResult::ReadDeletedData(result)
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                    None => {
-                        self.phase = Phase::Result;
-
-                        // ST0
-                        let interrupt_code = InterruptCode::AbnormalTermination;
-                        let equipment_check = true;
-
-                        // ST1
-                        let no_data = true;
-                        let end_of_cylinder = true;
-
-                        // ST2
-                        let missing_address_mark_in_data_field = true;
-
-                        let result = StandardResult {
-                            st0: StatusRegister0 {
-                                interrupt_code,
-                                equipment_check,
-                                ..Default::default()
-                            },
-                            st1: StatusRegister1 {
-                                no_data,
-                                end_of_cylinder,
-                                ..Default::default()
-                            },
-                            st2: StatusRegister2 {
-                                missing_address_mark_in_data_field,
-                                ..Default::default()
-                            },
-                            chrn,
-                        };
-                        match command {
-                            Command::ReadData { .. } => CommandResult::ReadData(result),
-                            Command::ReadDeletedData { .. } => {
-                                CommandResult::ReadDeletedData(result)
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                }
+                // Data not yet read by host. Stay in execution phase.
+                self.phase = Phase::Execution(None);
+                self.command_read_data(
+                    multi_track,
+                    mode,
+                    skip,
+                    head,
+                    unit_select,
+                    chrn,
+                    end_of_track,
+                    gap_length,
+                    data_length,
+                    matches!(command, Command::ReadDeletedData { .. }),
+                )
             }
-            Command::WriteData { .. } => {
-                todo!("support write commands");
+            Command::WriteData {
+                multi_track,
+                mode,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
             }
-            Command::WriteDeletedData { .. } => {
-                todo!("support write commands");
-            }
+            | Command::WriteDeletedData {
+                multi_track,
+                mode,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
+            } => self.command_write_data(
+                multi_track,
+                mode,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
+                matches!(command, Command::WriteDeletedData { .. }),
+            ),
             Command::ReadTrack {
                 mode,
                 skip,
@@ -1146,344 +965,68 @@ impl FloppyDiskController {
                 gap_length,
                 data_length,
             } => {
-                if let Mode::FrequencyModulation = mode {
-                    log::error!("Unsupported frequency modulation mode");
-                }
-                if skip {
-                    log::warn!("ReadTrack FDC command ignores skip flag");
-                }
-                if head != 0 {
-                    log::error!("Unsupported head number");
-                    todo!("Return NOT READY in ST0")
-                }
-                let head_address = 0;
-
-                match self.drives.get(unit_select as usize) {
-                    Some(drive) => {
-                        let Some(disk) = drive.disk else {
-                            self.phase = Phase::Result;
-
-                            // ST0
-                            let interrupt_code = InterruptCode::AbnormalTermination;
-
-                            // ST1
-                            let no_data = true;
-
-                            // ST2
-                            let missing_address_mark_in_data_field = true;
-
-                            let result = StandardResult {
-                                st0: StatusRegister0 {
-                                    interrupt_code,
-                                    ..Default::default()
-                                },
-                                st1: StatusRegister1 {
-                                    no_data,
-                                    ..Default::default()
-                                },
-                                st2: StatusRegister2 {
-                                    missing_address_mark_in_data_field,
-                                    ..Default::default()
-                                },
-                                chrn,
-                            };
-                            return CommandResult::ReadTrack(result);
-                        };
-
-                        let track = drive.track;
-
-                        let data_length = if chrn.number == 0 {
-                            data_length as usize
-                        } else {
-                            128 << chrn.number
-                        };
-
-                        // ST0
-                        let interrupt_code = InterruptCode::AbnormalTermination;
-
-                        // ST1
-                        let end_of_cylinder = false;
-                        let data_error = false; // TODO: is this reported for Read Track?
-                        let no_data = false;
-                        let missing_address_mark = true; // reset below if any sector ID found
-
-                        // ST2 // TODO: is this reported for Read Track?
-                        let control_mark = false;
-                        let data_error_in_data_field = false;
-
-                        loop {
-                            for sector in 0..end_of_track as usize {
-                                if missing_address_mark {
-                                    // first valid sector found
-                                    missing_address_mark = false;
-                                    interrupt_code = InterruptCode::NormalTermination;
-                                }
-
-                                let sector_info = disk.tracks[track].sector_infos[sector];
-
-                                if sector_info.fdc_status1 & 0b0010_0000 != 0 {
-                                    data_error = true;
-                                    interrupt_code = InterruptCode::AbnormalTermination;
-                                }
-
-                                if sector_info.fdc_status2 & 0b0100_0000 != 0 {
-                                    control_mark = true;
-                                    interrupt_code = InterruptCode::AbnormalTermination;
-                                }
-
-                                if sector_info.fdc_status2 & 0b0010_0000 != 0 {
-                                    data_error_in_data_field = true;
-                                    interrupt_code = InterruptCode::AbnormalTermination;
-                                }
-
-                                if sector >= disk.tracks[track].sectors.len() {
-                                    log::error!(
-                                        "Specified end of track exceeds physical track length"
-                                    );
-                                    break;
-                                }
-
-                                let sector_data = disk.tracks[track].sectors[sector];
-
-                                if data_length > sector_data.len() {
-                                    log::error!(
-                                        "Specified data length exceeds physical sector size"
-                                    );
-                                }
-
-                                self.data_buffer
-                                    .extend(sector_data.iter().take(data_length));
-                            }
-
-                            end_of_cylinder = true;
-                            interrupt_code = InterruptCode::AbnormalTermination;
-                            chrn.cylinder_number += 1;
-                            chrn.record = 1;
-                            self.phase = Phase::Execution;
-                            break;
-                        }
-
-                        if disk.tracks[track].find_sector(chrn, true).is_none() {
-                            no_data = true;
-                            interrupt_code = InterruptCode::AbnormalTermination;
-                        }
-
-                        let result = StandardResult {
-                            st0: StatusRegister0 {
-                                interrupt_code,
-                                head_address,
-                                unit_select,
-                                ..Default::default()
-                            },
-                            st1: StatusRegister1 {
-                                end_of_cylinder,
-                                data_error,
-                                no_data,
-                                missing_address_mark,
-                                ..Default::default()
-                            },
-                            st2: StatusRegister2 {
-                                control_mark,
-                                data_error_in_data_field,
-                                ..Default::default()
-                            },
-                            chrn,
-                        };
-                        CommandResult::ReadTrack(result)
-                    }
-                    None => {
-                        self.phase = Phase::Result;
-
-                        // ST0
-                        let interrupt_code = InterruptCode::AbnormalTermination;
-                        let equipment_check = true;
-
-                        // ST1
-                        let no_data = true;
-                        let end_of_cylinder = true;
-
-                        // ST2
-                        let missing_address_mark_in_data_field = true;
-
-                        let result = StandardResult {
-                            st0: StatusRegister0 {
-                                interrupt_code,
-                                equipment_check,
-                                ..Default::default()
-                            },
-                            st1: StatusRegister1 {
-                                no_data,
-                                end_of_cylinder,
-                                ..Default::default()
-                            },
-                            st2: StatusRegister2 {
-                                missing_address_mark_in_data_field,
-                                ..Default::default()
-                            },
-                            chrn,
-                        };
-                        CommandResult::ReadTrack(result)
-                    }
-                }
+                // Data not yet read by host. Stay in execution phase.
+                self.phase = Phase::Execution(None);
+                self.command_read_track(
+                    mode,
+                    skip,
+                    head,
+                    unit_select,
+                    chrn,
+                    end_of_track,
+                    gap_length,
+                    data_length,
+                )
             }
             Command::ReadId {
                 mode,
                 head,
                 unit_select,
-            } => {
-                if let Mode::FrequencyModulation = mode {
-                    log::error!("Unsupported frequency modulation mode");
-                }
-                if head != 0 {
-                    log::error!("Unsupported head number");
-                    todo!("Return NOT READY in ST0")
-                }
-                let head_address = 0;
-
-                match self.drives.get(unit_select as usize) {
-                    Some(drive) => {
-                        let Some(disk) = drive.disk else {
-                            self.phase = Phase::Result;
-
-                            // ST0
-                            let interrupt_code = InterruptCode::AbnormalTermination;
-
-                            // ST1
-                            let no_data = true;
-
-                            let chrn = Chrn {
-                                cylinder_number: 0,
-                                head_address: 0,
-                                record: 0,
-                                number: 0,
-                            };
-
-                            let result = StandardResult {
-                                st0: StatusRegister0 {
-                                    interrupt_code,
-                                    ..Default::default()
-                                },
-                                st1: StatusRegister1 {
-                                    no_data,
-                                    ..Default::default()
-                                },
-                                st2: StatusRegister2 {
-                                    ..Default::default()
-                                },
-                                chrn,
-                            };
-                            return CommandResult::ReadId(result);
-                        };
-
-                        let track = drive.track;
-
-                        // ST0
-                        let interrupt_code = InterruptCode::NormalTermination;
-
-                        // ST1
-                        let data_error = false;
-                        let no_data = false;
-                        let missing_address_mark = false;
-
-                        let chrn = if disk.tracks[track].sector_infos.is_empty() {
-                            no_data = true;
-                            interrupt_code = InterruptCode::AbnormalTermination;
-                            Chrn {
-                                cylinder_number: 0,
-                                head_address: 0,
-                                record: 0,
-                                number: 0,
-                            }
-                        } else {
-                            let sector_info = disk.tracks[track].sector_infos[0];
-
-                            if sector_info.fdc_status1 & 0b0010_0000 != 0 {
-                                data_error = true;
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                            }
-
-                            // Contrary to https://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
-                            // we determine the NO DATA condition above instead of from fdc_status1 bit 2
-
-                            if sector_info.fdc_status1 & 0b0000_0001 != 0 {
-                                missing_address_mark = true;
-                                interrupt_code = InterruptCode::AbnormalTermination;
-                            }
-
-                            if interrupt_code == InterruptCode::NormalTermination {
-                                sector_info.chrn
-                            } else {
-                                Chrn {
-                                    cylinder_number: 0,
-                                    head_address: 0,
-                                    record: 0,
-                                    number: 0,
-                                }
-                            }
-                        };
-
-                        let result = StandardResult {
-                            st0: StatusRegister0 {
-                                interrupt_code,
-                                head_address,
-                                unit_select,
-                                ..Default::default()
-                            },
-                            st1: StatusRegister1 {
-                                data_error,
-                                no_data,
-                                missing_address_mark,
-                                ..Default::default()
-                            },
-                            st2: StatusRegister2 {
-                                ..Default::default()
-                            },
-                            chrn,
-                        };
-                        CommandResult::ReadId(result)
-                    }
-                    None => {
-                        self.phase = Phase::Result;
-
-                        // ST0
-                        let interrupt_code = InterruptCode::AbnormalTermination;
-                        let equipment_check = true;
-
-                        // ST1
-                        let end_of_cylinder = true;
-
-                        let chrn = Chrn {
-                            cylinder_number: 0,
-                            head_address: 0,
-                            record: 0,
-                            number: 0,
-                        };
-
-                        let result = StandardResult {
-                            st0: StatusRegister0 {
-                                interrupt_code,
-                                equipment_check,
-                                ..Default::default()
-                            },
-                            st1: StatusRegister1 {
-                                end_of_cylinder,
-                                ..Default::default()
-                            },
-                            st2: StatusRegister2 {
-                                ..Default::default()
-                            },
-                            chrn,
-                        };
-                        CommandResult::ReadId(result)
-                    }
-                }
-            }
+            } => self.command_read_id(mode, head, unit_select),
             Command::FormatTrack { .. } => {
                 todo!("support write commands");
             }
-            Command::ScanEqual { .. } => {}
-            Command::ScanLowOrEqual { .. } => {}
-            Command::ScanHighOrEqual { .. } => {}
+            Command::ScanEqual {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                scan_type,
+            }
+            | Command::ScanLowOrEqual {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                scan_type,
+            }
+            | Command::ScanHighOrEqual {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                scan_type,
+            } => {
+                todo!("support scan commands");
+                match command {
+                    Command::ScanEqual { .. } => CommandResult::ScanEqual,
+                    Command::ScanLowOrEqual { .. } => CommandResult::ScanLowOrEqual,
+                    Command::ScanHighOrEqual { .. } => CommandResult::ScanHighOrEqual,
+                    _ => unreachable!(),
+                }
+            }
             Command::Recalibrate { .. } => {}
             Command::SenseInterruptStatus { .. } => {
                 //TODO: return InterruptCode::InvalidCommand if SEEK or RECALIBRATE still in
@@ -1522,7 +1065,618 @@ impl FloppyDiskController {
                     },
                 }
             }
+        };
 
+        // TODO: serialize result into result_buffer
+    }
+
+    pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
+        self.drives[drive].disk = match dsk_file::Disk::load(rom, path) {
+            Ok(disk) => {
+                log::info!("Disk loaded successfully");
+                Some(disk)
+            }
+            Err(error) => {
+                log::warn!("Disk could not be loaded: {error}");
+                None
+            }
+        }
+    }
+
+    fn command_read_data(
+        &mut self,
+        multi_track: bool,
+        mode: Mode,
+        skip: bool,
+        head: u8,
+        unit_select: u8,
+        mut chrn: Chrn,
+        end_of_track: u8,
+        gap_length: u8,
+        data_length: u8,
+        deleted: bool,
+    ) -> CommandResult {
+        if multi_track {
+            log::error!("Unsupported multi-track flag set");
+        }
+        if let Mode::FrequencyModulation = mode {
+            log::error!("Unsupported frequency modulation mode");
+        }
+        if skip {
+            log::error!("Unsupported skip flag set");
+        }
+        if head != 0 {
+            log::error!("Unsupported head number");
+            todo!("Return NOT READY in ST0")
+        }
+        let head_address = 0;
+
+        match self.drives.get(unit_select as usize) {
+            Some(drive) => {
+                let Some(disk) = &drive.disk else {
+                    self.phase = Phase::Result;
+
+                    // ST0
+                    let interrupt_code = InterruptCode::AbnormalTermination;
+
+                    // ST1
+                    let no_data = true;
+
+                    // ST2
+                    let missing_address_mark_in_data_field = true;
+
+                    let result = StandardResult {
+                        st0: StatusRegister0 {
+                            interrupt_code,
+                            ..Default::default()
+                        },
+                        st1: StatusRegister1 {
+                            no_data,
+                            ..Default::default()
+                        },
+                        st2: StatusRegister2 {
+                            missing_address_mark_in_data_field,
+                            ..Default::default()
+                        },
+                        chrn,
+                    };
+                    if deleted {
+                        return CommandResult::ReadDeletedData(result);
+                    } else {
+                        return CommandResult::ReadData(result);
+                    }
+                };
+
+                let track = drive.track;
+
+                let data_length = if chrn.number == 0 {
+                    data_length as usize
+                } else {
+                    128 << chrn.number
+                };
+
+                // ST0
+                let mut interrupt_code = InterruptCode::NormalTermination;
+
+                // ST1
+                let mut end_of_cylinder = false;
+                let mut data_error = false;
+                let mut no_data = false;
+                let mut missing_address_mark = false;
+
+                // ST2
+                let mut control_mark = false;
+                let mut data_error_in_data_field = false;
+                let mut wrong_cylinder = false;
+                let mut bad_cylinder = false;
+                let mut missing_address_mark_in_data_field = false;
+
+                loop {
+                    let sector = match disk.tracks[track].find_sector(chrn, false) {
+                        Some(sector) => sector,
+                        None => {
+                            no_data = true;
+                            interrupt_code = InterruptCode::AbnormalTermination;
+                            break;
+                        }
+                    };
+
+                    let sector_info = disk.tracks[track].sector_infos[sector];
+
+                    if sector_info.fdc_status1 & 0b0010_0000 != 0 {
+                        data_error = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    // Contrary to https://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
+                    // we determine the NO DATA condition above instead of from fdc_status1 bit 2
+
+                    if sector_info.fdc_status1 & 0b0000_0001 != 0 {
+                        missing_address_mark = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if sector_info.fdc_status2 & 0b0100_0000 != 0 {
+                        control_mark = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if sector_info.fdc_status2 & 0b0010_0000 != 0 {
+                        data_error_in_data_field = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if sector_info.chrn.cylinder_number != chrn.cylinder_number {
+                        no_data = true;
+                        wrong_cylinder = true;
+                        if sector_info.chrn.cylinder_number == 0xff {
+                            bad_cylinder = true;
+                        }
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if sector_info.fdc_status2 & 0b0000_0001 != 0 {
+                        missing_address_mark_in_data_field = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if !control_mark && interrupt_code == InterruptCode::AbnormalTermination {
+                        break;
+                    }
+
+                    let sector_data = disk.tracks[track].sectors[sector];
+
+                    if data_length > sector_data.len() {
+                        log::error!("Specified data length exceeds physical sector size");
+                    }
+
+                    if control_mark || !deleted {
+                        self.data_buffer
+                            .extend(sector_data.iter().take(data_length));
+                    }
+
+                    if !control_mark && chrn.cylinder_number < end_of_track {
+                        chrn.record += 1;
+                    } else {
+                        end_of_cylinder = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                        chrn.cylinder_number += 1;
+                        chrn.record = 1;
+                        break;
+                    }
+                }
+
+                let result = StandardResult {
+                    st0: StatusRegister0 {
+                        interrupt_code,
+                        head_address,
+                        unit_select,
+                        ..Default::default()
+                    },
+                    st1: StatusRegister1 {
+                        end_of_cylinder,
+                        data_error,
+                        no_data,
+                        missing_address_mark,
+                        ..Default::default()
+                    },
+                    st2: StatusRegister2 {
+                        control_mark,
+                        data_error_in_data_field,
+                        wrong_cylinder,
+                        bad_cylinder,
+                        missing_address_mark_in_data_field,
+                        ..Default::default()
+                    },
+                    chrn,
+                };
+                if deleted {
+                    return CommandResult::ReadDeletedData(result);
+                } else {
+                    return CommandResult::ReadData(result);
+                }
+            }
+            None => {
+                self.phase = Phase::Result;
+
+                // ST0
+                let interrupt_code = InterruptCode::AbnormalTermination;
+                let equipment_check = true;
+
+                // ST1
+                let no_data = true;
+                let end_of_cylinder = true;
+
+                // ST2
+                let missing_address_mark_in_data_field = true;
+
+                let result = StandardResult {
+                    st0: StatusRegister0 {
+                        interrupt_code,
+                        equipment_check,
+                        ..Default::default()
+                    },
+                    st1: StatusRegister1 {
+                        no_data,
+                        end_of_cylinder,
+                        ..Default::default()
+                    },
+                    st2: StatusRegister2 {
+                        missing_address_mark_in_data_field,
+                        ..Default::default()
+                    },
+                    chrn,
+                };
+                if deleted {
+                    return CommandResult::ReadDeletedData(result);
+                } else {
+                    return CommandResult::ReadData(result);
+                }
+            }
+        }
+    }
+
+    fn command_write_data(
+        &mut self,
+        multi_track: bool,
+        mode: Mode,
+        head: u8,
+        unit_select: u8,
+        chrn: Chrn,
+        end_of_track: u8,
+        gap_length: u8,
+        data_length: u8,
+        deleted: bool,
+    ) -> CommandResult {
+        todo!("support write commands")
+    }
+
+    fn command_read_track(
+        &mut self,
+        mode: Mode,
+        skip: bool,
+        head: u8,
+        unit_select: u8,
+        chrn: Chrn,
+        end_of_track: u8,
+        gap_length: u8,
+        data_length: u8,
+    ) -> CommandResult {
+        if let Mode::FrequencyModulation = mode {
+            log::error!("Unsupported frequency modulation mode");
+        }
+        if skip {
+            log::warn!("ReadTrack FDC command ignores skip flag");
+        }
+        if head != 0 {
+            log::error!("Unsupported head number");
+            todo!("Return NOT READY in ST0")
+        }
+        let head_address = 0;
+
+        match self.drives.get(unit_select as usize) {
+            Some(drive) => {
+                let Some(disk) = drive.disk else {
+                    self.phase = Phase::Result;
+
+                    // ST0
+                    let interrupt_code = InterruptCode::AbnormalTermination;
+
+                    // ST1
+                    let no_data = true;
+
+                    // ST2
+                    let missing_address_mark_in_data_field = true;
+
+                    let result = StandardResult {
+                        st0: StatusRegister0 {
+                            interrupt_code,
+                            ..Default::default()
+                        },
+                        st1: StatusRegister1 {
+                            no_data,
+                            ..Default::default()
+                        },
+                        st2: StatusRegister2 {
+                            missing_address_mark_in_data_field,
+                            ..Default::default()
+                        },
+                        chrn,
+                    };
+                    return CommandResult::ReadTrack(result);
+                };
+
+                let track = drive.track;
+
+                let data_length = if chrn.number == 0 {
+                    data_length as usize
+                } else {
+                    128 << chrn.number
+                };
+
+                // ST0
+                let interrupt_code = InterruptCode::AbnormalTermination;
+
+                // ST1
+                let end_of_cylinder = false;
+                let data_error = false; // TODO: is this reported for Read Track?
+                let no_data = false;
+                let missing_address_mark = true; // reset below if any sector ID found
+
+                // ST2 // TODO: is this reported for Read Track?
+                let control_mark = false;
+                let data_error_in_data_field = false;
+
+                loop {
+                    for sector in 0..end_of_track as usize {
+                        if missing_address_mark {
+                            // first valid sector found
+                            missing_address_mark = false;
+                            interrupt_code = InterruptCode::NormalTermination;
+                        }
+
+                        let sector_info = disk.tracks[track].sector_infos[sector];
+
+                        if sector_info.fdc_status1 & 0b0010_0000 != 0 {
+                            data_error = true;
+                            interrupt_code = InterruptCode::AbnormalTermination;
+                        }
+
+                        if sector_info.fdc_status2 & 0b0100_0000 != 0 {
+                            control_mark = true;
+                            interrupt_code = InterruptCode::AbnormalTermination;
+                        }
+
+                        if sector_info.fdc_status2 & 0b0010_0000 != 0 {
+                            data_error_in_data_field = true;
+                            interrupt_code = InterruptCode::AbnormalTermination;
+                        }
+
+                        if sector >= disk.tracks[track].sectors.len() {
+                            log::error!("Specified end of track exceeds physical track length");
+                            break;
+                        }
+
+                        let sector_data = disk.tracks[track].sectors[sector];
+
+                        if data_length > sector_data.len() {
+                            log::error!("Specified data length exceeds physical sector size");
+                        }
+
+                        self.data_buffer
+                            .extend(sector_data.iter().take(data_length));
+                    }
+
+                    end_of_cylinder = true;
+                    interrupt_code = InterruptCode::AbnormalTermination;
+                    chrn.cylinder_number += 1;
+                    chrn.record = 1;
+                    self.phase = Phase::Execution;
+                    break;
+                }
+
+                if disk.tracks[track].find_sector(chrn, true).is_none() {
+                    no_data = true;
+                    interrupt_code = InterruptCode::AbnormalTermination;
+                }
+
+                let result = StandardResult {
+                    st0: StatusRegister0 {
+                        interrupt_code,
+                        head_address,
+                        unit_select,
+                        ..Default::default()
+                    },
+                    st1: StatusRegister1 {
+                        end_of_cylinder,
+                        data_error,
+                        no_data,
+                        missing_address_mark,
+                        ..Default::default()
+                    },
+                    st2: StatusRegister2 {
+                        control_mark,
+                        data_error_in_data_field,
+                        ..Default::default()
+                    },
+                    chrn,
+                };
+                CommandResult::ReadTrack(result)
+            }
+            None => {
+                self.phase = Phase::Result;
+
+                // ST0
+                let interrupt_code = InterruptCode::AbnormalTermination;
+                let equipment_check = true;
+
+                // ST1
+                let no_data = true;
+                let end_of_cylinder = true;
+
+                // ST2
+                let missing_address_mark_in_data_field = true;
+
+                let result = StandardResult {
+                    st0: StatusRegister0 {
+                        interrupt_code,
+                        equipment_check,
+                        ..Default::default()
+                    },
+                    st1: StatusRegister1 {
+                        no_data,
+                        end_of_cylinder,
+                        ..Default::default()
+                    },
+                    st2: StatusRegister2 {
+                        missing_address_mark_in_data_field,
+                        ..Default::default()
+                    },
+                    chrn,
+                };
+                CommandResult::ReadTrack(result)
+            }
+        }
+    }
+
+    fn command_read_id(&mut self, mode: Mode, head: u8, unit_select: u8) -> CommandResult {
+        if let Mode::FrequencyModulation = mode {
+            log::error!("Unsupported frequency modulation mode");
+        }
+        if head != 0 {
+            log::error!("Unsupported head number");
+            todo!("Return NOT READY in ST0")
+        }
+        let head_address = 0;
+
+        match self.drives.get(unit_select as usize) {
+            Some(drive) => {
+                let Some(disk) = &drive.disk else {
+                    self.phase = Phase::Result;
+
+                    // ST0
+                    let interrupt_code = InterruptCode::AbnormalTermination;
+
+                    // ST1
+                    let no_data = true;
+
+                    let chrn = Chrn {
+                        cylinder_number: 0,
+                        head_address: 0,
+                        record: 0,
+                        number: 0,
+                    };
+
+                    let result = StandardResult {
+                        st0: StatusRegister0 {
+                            interrupt_code,
+                            ..Default::default()
+                        },
+                        st1: StatusRegister1 {
+                            no_data,
+                            ..Default::default()
+                        },
+                        st2: StatusRegister2 {
+                            ..Default::default()
+                        },
+                        chrn,
+                    };
+                    return CommandResult::ReadId(result);
+                };
+
+                let track = drive.track;
+
+                // ST0
+                let interrupt_code = InterruptCode::NormalTermination;
+
+                // ST1
+                let data_error = false;
+                let no_data = false;
+                let missing_address_mark = false;
+
+                let chrn = if disk.tracks[track].sector_infos.is_empty() {
+                    no_data = true;
+                    interrupt_code = InterruptCode::AbnormalTermination;
+                    Chrn {
+                        cylinder_number: 0,
+                        head_address: 0,
+                        record: 0,
+                        number: 0,
+                    }
+                } else {
+                    let sector_info = disk.tracks[track].sector_infos[0];
+
+                    if sector_info.fdc_status1 & 0b0010_0000 != 0 {
+                        data_error = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    // Contrary to https://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
+                    // we determine the NO DATA condition above instead of from fdc_status1 bit 2
+
+                    if sector_info.fdc_status1 & 0b0000_0001 != 0 {
+                        missing_address_mark = true;
+                        interrupt_code = InterruptCode::AbnormalTermination;
+                    }
+
+                    if interrupt_code == InterruptCode::NormalTermination {
+                        sector_info.chrn
+                    } else {
+                        Chrn {
+                            cylinder_number: 0,
+                            head_address: 0,
+                            record: 0,
+                            number: 0,
+                        }
+                    }
+                };
+
+                let result = StandardResult {
+                    st0: StatusRegister0 {
+                        interrupt_code,
+                        head_address,
+                        unit_select,
+                        ..Default::default()
+                    },
+                    st1: StatusRegister1 {
+                        data_error,
+                        no_data,
+                        missing_address_mark,
+                        ..Default::default()
+                    },
+                    st2: StatusRegister2 {
+                        ..Default::default()
+                    },
+                    chrn,
+                };
+                CommandResult::ReadId(result)
+            }
+            None => {
+                self.phase = Phase::Result;
+
+                // ST0
+                let interrupt_code = InterruptCode::AbnormalTermination;
+                let equipment_check = true;
+
+                // ST1
+                let end_of_cylinder = true;
+
+                let chrn = Chrn {
+                    cylinder_number: 0,
+                    head_address: 0,
+                    record: 0,
+                    number: 0,
+                };
+
+                let result = StandardResult {
+                    st0: StatusRegister0 {
+                        interrupt_code,
+                        equipment_check,
+                        ..Default::default()
+                    },
+                    st1: StatusRegister1 {
+                        end_of_cylinder,
+                        ..Default::default()
+                    },
+                    st2: StatusRegister2 {
+                        ..Default::default()
+                    },
+                    chrn,
+                };
+                CommandResult::ReadId(result)
+            }
+        }
+    }
+
+    fn start_command(&mut self) -> CommandResult {
+        self.phase = Phase::Execution;
+
+        // let command = self.command_buffer.as_slice().into();
+        // self.command_buffer.clear();
+        // self.data_buffer.clear();
+        // self.result_buffer.clear();
+        log::debug!("Executing FDC command: {:?}", &command);
+        match command {
             LegacyCommand::Recalibrate => {
                 self.selected_drive = self.command_buffer[0] as usize;
                 match &self.drives[self.selected_drive].disk {
@@ -1573,6 +1727,10 @@ impl FloppyDiskController {
         }
     }
 
+    fn finish_write_command(&mut self, command: &Command, data: &[u8]) -> CommandResult {
+        todo!()
+    }
+
     fn report_main_status_register(&self) -> u8 {
         let mut value = 0;
 
@@ -1612,13 +1770,6 @@ impl FloppyDiskController {
 
         value
     }
-}
-
-#[derive(Serialize, Deserialize)]
-enum Phase {
-    Command,
-    Execution,
-    Result,
 }
 
 #[cfg(test)]
