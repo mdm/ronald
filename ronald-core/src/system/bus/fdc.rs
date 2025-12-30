@@ -604,6 +604,7 @@ impl From<StatusRegister2> for u8 {
     }
 }
 
+#[derive(Debug, Default)]
 struct StatusRegister3 {
     fault: bool,
     write_protected: bool,
@@ -1833,22 +1834,41 @@ impl FloppyDiskController {
     fn command_sense_drive_status(&mut self, head: u8, unit_select: u8) -> CommandResult {
         if head != 0 {
             log::error!("Unsupported head number");
-            todo!("Return NOT READY in ST0")
         }
         let head_address = 0;
 
         match self.drives.get_mut(unit_select as usize) {
             Some(drive) => {
-                let Some(disk) = &drive.disk else {
-                    return CommandResult::Seek;
+                let Some(_disk) = &drive.disk else {
+                    let st3 = StatusRegister3 {
+                        head_address,
+                        unit_select,
+                        ..Default::default()
+                    };
+                    return CommandResult::SenseDriveStatus { st3 };
                 };
 
-                drive.busy = false;
-            }
-            None => {}
-        }
+                let ready = true;
+                let track_zero = drive.track == 0;
 
-        todo!("implement sense drive status command")
+                let st3 = StatusRegister3 {
+                    ready,
+                    track_zero,
+                    head_address,
+                    unit_select,
+                    ..Default::default()
+                };
+                CommandResult::SenseDriveStatus { st3 }
+            }
+            None => {
+                let st3 = StatusRegister3 {
+                    head_address,
+                    unit_select,
+                    ..Default::default()
+                };
+                CommandResult::SenseDriveStatus { st3 }
+            }
+        }
     }
 
     fn command_seek(
