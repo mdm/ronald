@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::{collections::VecDeque, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 
@@ -74,14 +74,6 @@ impl CommandType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-struct Chrn {
-    cylinder_number: u8,
-    head_address: u8,
-    record: u8,
-    number: u8,
-}
-
 impl From<u8> for CommandType {
     fn from(code: u8) -> Self {
         #[allow(clippy::identity_op)]
@@ -103,6 +95,24 @@ impl From<u8> for CommandType {
             code if code & 0b1111_1111 == 0b0000_1111 => Self::Seek,
             _ => Self::Invalid,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct Chrn {
+    cylinder_number: u8,
+    head_address: u8,
+    record: u8,
+    number: u8,
+}
+
+impl Display for Chrn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}:{}:{}:{}",
+            self.cylinder_number, self.head_address, self.record, self.number
+        )
     }
 }
 
@@ -1175,6 +1185,7 @@ impl FloppyDiskController {
         match self.drives.get(unit_select as usize) {
             Some(drive) => {
                 let Some(disk) = &drive.disk else {
+                    log::debug!("No disk in drive {}", unit_select);
                     self.phase = Phase::Result;
 
                     let result = StandardResult::not_ready(chrn);
@@ -1213,8 +1224,10 @@ impl FloppyDiskController {
                     let sector = match disk.tracks[track].find_sector(chrn, false) {
                         Some(sector) => sector,
                         None => {
+                            self.phase = Phase::Result;
                             no_data = true;
                             interrupt_code = InterruptCode::AbnormalTermination;
+                            log::debug!("Sector ID {} not found", chrn);
                             break;
                         }
                     };
@@ -1258,7 +1271,22 @@ impl FloppyDiskController {
                         interrupt_code = InterruptCode::AbnormalTermination;
                     }
 
+                    log::debug!(
+                        "Reading sector ID {}:{}:{} -> ST1={:08b} ST2={:08b}",
+                        chrn.cylinder_number,
+                        chrn.head_address,
+                        chrn.record,
+                        sector_info.fdc_status1,
+                        sector_info.fdc_status2,
+                    );
+
                     if !control_mark && interrupt_code == InterruptCode::AbnormalTermination {
+                        log::debug!(
+                            "Abnormal termination on sector ID {}:{}:{}",
+                            chrn.cylinder_number,
+                            chrn.head_address,
+                            chrn.record
+                        );
                         break;
                     }
 
@@ -1280,6 +1308,7 @@ impl FloppyDiskController {
                         interrupt_code = InterruptCode::AbnormalTermination;
                         chrn.cylinder_number += 1;
                         chrn.record = 1;
+                        log::debug!("Read {} bytes from disk", self.data_buffer.len());
                         break;
                     }
                 }
@@ -1315,6 +1344,7 @@ impl FloppyDiskController {
                 }
             }
             None => {
+                log::debug!("Drive {} not connected", unit_select);
                 self.phase = Phase::Result;
 
                 let result = StandardResult::not_ready(chrn);
@@ -1630,7 +1660,7 @@ impl FloppyDiskController {
                         ..Default::default()
                     });
 
-                    return CommandResult::Seek;
+                    return CommandResult::Recalibrate;
                 };
 
                 drive.busy = true;
@@ -1654,7 +1684,7 @@ impl FloppyDiskController {
                     ..Default::default()
                 });
 
-                CommandResult::Seek
+                CommandResult::Recalibrate
             }
             None => {
                 let interrupt_code = InterruptCode::AbnormalTermination;
@@ -1668,7 +1698,7 @@ impl FloppyDiskController {
                     ..Default::default()
                 });
 
-                CommandResult::Seek
+                CommandResult::Recalibrate
             }
         }
     }
