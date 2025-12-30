@@ -465,7 +465,7 @@ impl From<&[u8]> for Command {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 enum InterruptCode {
     #[default]
     NormalTermination,
@@ -474,7 +474,7 @@ enum InterruptCode {
     ReadyChanged,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 struct StatusRegister0 {
     interrupt_code: InterruptCode,
     seek_end: bool,
@@ -719,23 +719,17 @@ impl IntoIterator for CommandResult {
 pub struct FloppyDiskController {
     master_clock: MasterClockTick,
     drives: Vec<Drive>,
+    motors_on: bool,
     phase: Phase,
     command_buffer: Vec<u8>,
     data_buffer: VecDeque<u8>,
     result_buffer: VecDeque<u8>,
+    interrupt_status: Option<StatusRegister0>,
 
     step_rate_time: u8,
     head_unload_time: u8,
     head_load_time: u8,
     non_dma_mode: bool,
-
-    motors_on: bool,
-    seek_end: bool,
-    drive_not_ready: bool,
-    selected_drive: usize,
-    end_of_track: bool,
-    status1: u8,
-    status2: u8,
 }
 
 impl Default for FloppyDiskController {
@@ -765,23 +759,17 @@ impl FloppyDiskController {
         Self {
             master_clock: MasterClockTick::default(),
             drives,
+            motors_on: false,
             phase: Phase::Command,
             command_buffer: Vec::new(),
             data_buffer: VecDeque::new(),
             result_buffer: VecDeque::new(),
+            interrupt_status: None,
 
             step_rate_time: 0,
             head_unload_time: 0,
             head_load_time: 0,
             non_dma_mode: false,
-
-            motors_on: false,
-            seek_end: false,
-            drive_not_ready: false,
-            selected_drive: 0,
-            end_of_track: false,
-            status1: 0,
-            status2: 0,
         }
     }
 
@@ -822,6 +810,7 @@ impl FloppyDiskController {
                         };
 
                         if self.result_buffer.is_empty() {
+                            self.interrupt_status = None;
                             self.phase = Phase::Command;
                         }
 
@@ -1074,8 +1063,6 @@ impl FloppyDiskController {
                 self.command_recalibrate(unit_select)
             }
             Command::SenseInterruptStatus => {
-                //TODO: return InterruptCode::InvalidCommand if SEEK or RECALIBRATE still in
-                //progress
                 self.phase = Phase::Result;
                 self.command_sense_interrupt_status()
             }
@@ -1742,28 +1729,86 @@ impl FloppyDiskController {
     }
 
     fn command_recalibrate(&mut self, unit_select: u8) -> CommandResult {
-        // self.selected_drive = self.command_buffer[0] as usize;
-        // match &self.drives[self.selected_drive].disk {
-        //     Some(_) => {
-        //         self.drives[self.selected_drive].track =
-        //             self.drives[self.selected_drive].track.saturating_sub(77);
-        //         self.seek_end = true;
-        //     }
-        //     None => {
-        //         self.drive_not_ready = true;
-        //     }
-        // }
-        // self.phase = Phase::Command;
-        todo!("implement recalibrate command")
+        let head_address = 0;
+
+        match self.drives.get_mut(unit_select as usize) {
+            Some(drive) => {
+                let Some(_disk) = &drive.disk else {
+                    let interrupt_code = InterruptCode::AbnormalTermination;
+                    let not_ready = true;
+
+                    self.interrupt_status = Some(StatusRegister0 {
+                        interrupt_code,
+                        not_ready,
+                        head_address,
+                        unit_select,
+                        ..Default::default()
+                    });
+
+                    return CommandResult::Seek;
+                };
+
+                drive.busy = true;
+                drive.track = drive.track.saturating_sub(77);
+
+                let mut interrupt_code = InterruptCode::NormalTermination;
+                let seek_end = true;
+                let mut equipment_check = false;
+
+                if drive.track != 0 {
+                    interrupt_code = InterruptCode::AbnormalTermination;
+                    equipment_check = true;
+                }
+
+                self.interrupt_status = Some(StatusRegister0 {
+                    interrupt_code,
+                    seek_end,
+                    equipment_check,
+                    head_address,
+                    unit_select,
+                    ..Default::default()
+                });
+
+                CommandResult::Seek
+            }
+            None => {
+                let interrupt_code = InterruptCode::AbnormalTermination;
+                let not_ready = true;
+
+                self.interrupt_status = Some(StatusRegister0 {
+                    interrupt_code,
+                    not_ready,
+                    head_address,
+                    unit_select,
+                    ..Default::default()
+                });
+
+                CommandResult::Seek
+            }
+        }
     }
 
     fn command_sense_interrupt_status(&mut self) -> CommandResult {
-        // self.result_buffer
-        //     .push_back(self.report_status_register_0());
-        // self.result_buffer
-        //     .push_back(self.drives[self.selected_drive].track as u8);
-        // self.phase = Phase::Result;
-        todo!("implement sense interrupt status command")
+        match self.interrupt_status.take() {
+            Some(st0) => {
+                let pcn = self
+                    .drives
+                    .get(st0.unit_select as usize)
+                    .map_or(0, |drive| drive.track as u8);
+                CommandResult::SenseInterruptStatus { st0, pcn }
+            }
+            None => {
+                log::warn!("Sense Interrupt Status command called without pending interrupt");
+                let interrupt_code = InterruptCode::InvalidCommand;
+
+                CommandResult::Invalid {
+                    st0: StatusRegister0 {
+                        interrupt_code,
+                        ..Default::default()
+                    },
+                }
+            }
+        }
     }
 
     fn command_specify(
@@ -1786,6 +1831,23 @@ impl FloppyDiskController {
     }
 
     fn command_sense_drive_status(&mut self, head: u8, unit_select: u8) -> CommandResult {
+        if head != 0 {
+            log::error!("Unsupported head number");
+            todo!("Return NOT READY in ST0")
+        }
+        let head_address = 0;
+
+        match self.drives.get_mut(unit_select as usize) {
+            Some(drive) => {
+                let Some(disk) = &drive.disk else {
+                    return CommandResult::Seek;
+                };
+
+                drive.busy = false;
+            }
+            None => {}
+        }
+
         todo!("implement sense drive status command")
     }
 
@@ -1795,19 +1857,59 @@ impl FloppyDiskController {
         unit_select: u8,
         new_cylinder_number: u8,
     ) -> CommandResult {
-        // self.selected_drive = self.command_buffer[0] as usize;
-        // let track = self.command_buffer[1] as usize;
-        // match &self.drives[self.selected_drive].disk {
-        //     Some(_) => {
-        //         self.drives[self.selected_drive].track = track;
-        //         self.seek_end = true;
-        //     }
-        //     None => {
-        //         self.drive_not_ready = true;
-        //     }
-        // }
-        // self.phase = Phase::Command;
-        todo!("implement seek command")
+        if head != 0 {
+            log::error!("Unsupported head number");
+            todo!("Return NOT READY in ST0")
+        }
+        let head_address = 0;
+
+        match self.drives.get_mut(unit_select as usize) {
+            Some(drive) => {
+                let Some(_disk) = &drive.disk else {
+                    let interrupt_code = InterruptCode::AbnormalTermination;
+                    let not_ready = true;
+
+                    self.interrupt_status = Some(StatusRegister0 {
+                        interrupt_code,
+                        not_ready,
+                        head_address,
+                        unit_select,
+                        ..Default::default()
+                    });
+
+                    return CommandResult::Seek;
+                };
+
+                drive.busy = true;
+                drive.track = new_cylinder_number as usize;
+
+                let interrupt_code = InterruptCode::NormalTermination;
+                let seek_end = true;
+                self.interrupt_status = Some(StatusRegister0 {
+                    interrupt_code,
+                    seek_end,
+                    head_address,
+                    unit_select,
+                    ..Default::default()
+                });
+
+                CommandResult::Seek
+            }
+            None => {
+                let interrupt_code = InterruptCode::AbnormalTermination;
+                let not_ready = true;
+
+                self.interrupt_status = Some(StatusRegister0 {
+                    interrupt_code,
+                    not_ready,
+                    head_address,
+                    unit_select,
+                    ..Default::default()
+                });
+
+                CommandResult::Seek
+            }
+        }
     }
 
     fn command_invalid(&mut self) -> CommandResult {
