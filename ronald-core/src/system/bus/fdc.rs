@@ -755,6 +755,7 @@ pub struct FloppyDiskController {
     master_clock: MasterClockTick,
     drives: Vec<Drive>,
     motors_on: bool,
+    busy: bool,
     phase: Phase,
     command_buffer: Vec<u8>,
     data_buffer: VecDeque<u8>,
@@ -795,6 +796,7 @@ impl FloppyDiskController {
             master_clock: MasterClockTick::default(),
             drives,
             motors_on: false,
+            busy: false,
             phase: Phase::Command,
             command_buffer: Vec::new(),
             data_buffer: VecDeque::new(),
@@ -846,6 +848,7 @@ impl FloppyDiskController {
 
                         if self.result_buffer.is_empty() {
                             self.interrupt_status = None;
+                            self.busy = false;
                             self.phase = Phase::Command;
                         }
 
@@ -874,6 +877,8 @@ impl FloppyDiskController {
             },
             0xfb7f => match &self.phase {
                 Phase::Command => {
+                    self.busy = true;
+
                     if self.command_buffer.is_empty()
                         || self.command_buffer.len()
                             < CommandType::from(self.command_buffer[0]).command_len()
@@ -1096,6 +1101,7 @@ impl FloppyDiskController {
                 )
             }
             Command::Recalibrate { unit_select } => {
+                self.busy = false;
                 self.phase = Phase::Command;
                 self.command_recalibrate(unit_select)
             }
@@ -1109,6 +1115,7 @@ impl FloppyDiskController {
                 head_load_time,
                 non_dma_mode,
             } => {
+                self.busy = false;
                 self.phase = Phase::Command;
                 self.command_specify(
                     step_rate_time,
@@ -1126,6 +1133,7 @@ impl FloppyDiskController {
                 unit_select,
                 new_cylinder_number,
             } => {
+                self.busy = false;
                 self.phase = Phase::Command;
                 self.command_seek(head, unit_select, new_cylinder_number)
             }
@@ -1879,11 +1887,11 @@ impl FloppyDiskController {
         }
 
         // FDC busy
-        // TODO: Do we ever need to set this? We execute commands instantly.
-        // value |= 1 << 4;
+        if self.busy {
+            value |= 1 << 4;
+        }
 
         // Drive busy flags
-        // TODO: Can we ever observe busy drives? We execute commands instantly.
         self.drives
             .iter()
             .enumerate()
