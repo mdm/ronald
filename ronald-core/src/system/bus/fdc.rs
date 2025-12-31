@@ -1309,7 +1309,7 @@ impl FloppyDiskController {
                             .extend(sector_data.iter().take(data_length));
                     }
 
-                    if !control_mark && chrn.cylinder_number < end_of_track {
+                    if !control_mark && chrn.record < end_of_track {
                         chrn.record += 1;
                     } else {
                         end_of_cylinder = true;
