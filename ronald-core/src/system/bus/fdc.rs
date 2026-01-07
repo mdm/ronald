@@ -14,14 +14,13 @@ use crate::system::clock::MasterClockTick;
 struct Drive {
     busy: bool,
     track: usize,
-    sector: usize,
     disk: Option<Disk>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-enum Phase {
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum Phase {
     Command,
-    Execution(Option<Command>),
+    Execution,
     Result,
 }
 
@@ -760,6 +759,7 @@ pub struct FloppyDiskController {
     command_buffer: Vec<u8>,
     data_buffer: VecDeque<u8>,
     result_buffer: VecDeque<u8>,
+    current_command: Option<Command>,
     interrupt_status: Option<StatusRegister0>,
 
     step_rate_time: u8,
@@ -780,13 +780,11 @@ impl FloppyDiskController {
             Drive {
                 busy: false,
                 track: 0,
-                sector: 0,
                 disk: None,
             },
             Drive {
                 busy: false,
                 track: 0,
-                sector: 0,
                 disk: None,
             },
         ];
@@ -801,6 +799,7 @@ impl FloppyDiskController {
             command_buffer: Vec::new(),
             data_buffer: VecDeque::new(),
             result_buffer: VecDeque::new(),
+            current_command: None,
             interrupt_status: None,
 
             step_rate_time: 0,
@@ -815,7 +814,7 @@ impl FloppyDiskController {
             0xfb7e => self.report_main_status_register(),
             0xfb7f => {
                 match self.phase {
-                    Phase::Execution(None) => {
+                    Phase::Execution => {
                         // TODO: handle over run here (modify result if last poll more than 26us ago)
 
                         let data = if let Some(data) = self.data_buffer.pop_front() {
@@ -831,10 +830,6 @@ impl FloppyDiskController {
                         }
 
                         data
-                    }
-                    Phase::Execution(_) => {
-                        log::error!("Unexpected FDC read in execution phase");
-                        todo!("return dummy value instead?");
                     }
                     Phase::Result => {
                         let result = if let Some(result) = self.result_buffer.pop_front() {
@@ -893,11 +888,14 @@ impl FloppyDiskController {
                         self.command_buffer.clear();
                         self.data_buffer.clear();
                         self.result_buffer.clear();
-                        self.phase = Phase::Execution(Some(command));
+                        self.current_command = Some(command);
+                        self.phase = Phase::Execution;
                     }
                 }
-                Phase::Execution(command) => {
-                    if self.data_buffer.len() < command.as_ref().map_or(0, |c| c.write_len()) {
+                Phase::Execution => {
+                    if let Some(command) = &self.current_command
+                        && self.data_buffer.len() < command.write_len()
+                    {
                         self.data_buffer.push_back(value);
                     } else {
                         log::error!(
@@ -920,18 +918,18 @@ impl FloppyDiskController {
     pub fn step(&mut self, master_clock: MasterClockTick) {
         self.master_clock = master_clock;
 
-        let Phase::Execution(command) = &mut self.phase else {
+        let Phase::Execution = self.phase else {
             return;
         };
 
-        let Some(command) = command.take() else {
+        let Some(command) = self.current_command.take() else {
             // only executed once
             return;
         };
 
         if self.data_buffer.len() < command.write_len() {
             // Can't execute command yet, waiting for more data
-            self.phase = Phase::Execution(Some(command));
+            self.current_command = Some(command);
             return;
         }
 
@@ -961,7 +959,6 @@ impl FloppyDiskController {
                 data_length,
             } => {
                 // Data not yet read by host. Stay in execution phase.
-                self.phase = Phase::Execution(None);
                 self.command_read_data(
                     multi_track,
                     mode,
@@ -1019,7 +1016,6 @@ impl FloppyDiskController {
                 data_length,
             } => {
                 // Data not yet read by host. Stay in execution phase.
-                self.phase = Phase::Execution(None);
                 self.command_read_track(
                     mode,
                     skip,
@@ -1875,13 +1871,13 @@ impl FloppyDiskController {
         value |= 1 << 7;
 
         // Data input/output
-        if matches!(self.phase, Phase::Execution(None) | Phase::Result) {
+        if matches!(self.phase, Phase::Execution | Phase::Result) {
             value |= 1 << 6;
         }
 
         // Execution mode
         if self.non_dma_mode
-            && let Phase::Execution(_) = self.phase
+            && let Phase::Execution = self.phase
         {
             value |= 1 << 5;
         }
