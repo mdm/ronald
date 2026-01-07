@@ -7,6 +7,8 @@ mod dsk_file;
 
 use dsk_file::Disk;
 
+use crate::debug::view::FdcDebugView;
+use crate::debug::{DebugSource, Debuggable, Snapshottable};
 use crate::system::clock::MasterClockTick;
 
 #[derive(Serialize, Deserialize)]
@@ -115,7 +117,7 @@ impl Display for Chrn {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum Command {
     ReadData {
         multi_track: bool,
@@ -1902,6 +1904,37 @@ impl FloppyDiskController {
 
         value
     }
+}
+
+impl Snapshottable for FloppyDiskController {
+    type View = FdcDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        let main_status_register = self.report_main_status_register();
+        let phase = self.phase.clone();
+        let command_buffer = self.command_buffer.iter().copied().collect();
+        let data_buffer = self.data_buffer.iter().copied().collect();
+        let result_buffer = self.result_buffer.iter().copied().collect();
+        let motors_on = self.motors_on;
+        let drive_a_track = self.drives.get(0).map(|d| d.track);
+        let drive_b_track = self.drives.get(1).map(|d| d.track);
+
+        Self::View {
+            main_status_register,
+            phase,
+            command_buffer,
+            data_buffer,
+            result_buffer,
+            motors_on,
+            drive_a_track,
+            drive_b_track,
+        }
+    }
+}
+
+impl Debuggable for FloppyDiskController {
+    const SOURCE: DebugSource = DebugSource::Fdc;
+    type Event = FdcDebugEvent;
 }
 
 #[cfg(test)]

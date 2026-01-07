@@ -9,7 +9,7 @@ use crate::system::memory::{AnyMemory, MemManage, MemRead};
 use crate::{AudioSink, VideoSink};
 
 pub mod crtc;
-mod fdc;
+pub mod fdc;
 pub mod gate_array;
 pub mod keyboard; // TODO: refactor to not use pub
 mod ppi;
