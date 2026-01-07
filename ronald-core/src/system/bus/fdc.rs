@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::{collections::VecDeque, fmt::Display};
 
+use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
 
 mod dsk_file;
@@ -750,6 +751,14 @@ impl IntoIterator for CommandResult {
     }
 }
 
+#[derive(Debug, Clone, Copy, TryFromPrimitive)]
+#[repr(u16)]
+pub enum Register {
+    MainStatus = 0xfb7e,
+    ReadWrite = 0xfb7f,
+    MotorControl = 0xfa7e,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FloppyDiskController {
@@ -812,9 +821,9 @@ impl FloppyDiskController {
     }
 
     pub fn read_byte(&mut self, port: u16) -> u8 {
-        match port {
-            0xfb7e => self.report_main_status_register(),
-            0xfb7f => {
+        match port.try_into() {
+            Ok(Register::MainStatus) => self.report_main_status_register(),
+            Ok(Register::ReadWrite) => {
                 match self.phase {
                     Phase::Execution => {
                         // TODO: handle over run here (modify result if last poll more than 26us ago)
@@ -857,13 +866,16 @@ impl FloppyDiskController {
                     }
                 }
             }
-            _ => unreachable!(),
+            _ => {
+                log::error!("Unexpected FDC read using port {port:#06X}");
+                todo!("return dummy value instead?");
+            }
         }
     }
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
-        match port {
-            0xfa7e => match value {
+        match port.try_into() {
+            Ok(Register::MotorControl) => match value {
                 0 => {
                     self.motors_on = false;
                 }
@@ -872,7 +884,7 @@ impl FloppyDiskController {
                 }
                 _ => unreachable!(),
             },
-            0xfb7f => match &self.phase {
+            Ok(Register::ReadWrite) => match &self.phase {
                 Phase::Command => {
                     self.busy = true;
 
