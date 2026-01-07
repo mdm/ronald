@@ -1,4 +1,5 @@
 use crate::system::bus::crtc::Register as CrtcRegister;
+use crate::system::bus::fdc::{Phase, Register as FdcRegister};
 use crate::system::cpu::{Register8, Register16};
 
 /// A DebugEvent is any internal state change and any input or output
@@ -125,7 +126,27 @@ impl From<GateArrayDebugEvent> for DebugEvent {
 }
 
 #[derive(Debug, Clone)]
-pub enum FdcDebugEvent {}
+pub enum FdcDebugEvent {
+    RegisterRead {
+        register: FdcRegister,
+        value: u8,
+    },
+    RegisterWritten {
+        register: FdcRegister,
+        is: u8,
+        was: u8,
+    },
+    PhaseChanged {
+        is: Phase,
+        was: Phase,
+    },
+}
+
+impl From<FdcDebugEvent> for DebugEvent {
+    fn from(event: FdcDebugEvent) -> Self {
+        DebugEvent::Fdc(event)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum PpiDebugEvent {}
