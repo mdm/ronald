@@ -8,6 +8,7 @@ mod dsk_file;
 
 use dsk_file::Disk;
 
+use crate::debug::event::FdcDebugEvent;
 use crate::debug::view::FdcDebugView;
 use crate::debug::{DebugSource, Debuggable, Snapshottable};
 use crate::system::clock::MasterClockTick;
@@ -28,7 +29,7 @@ pub enum Phase {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-enum Mode {
+pub enum Mode {
     FrequencyModulation,
     ModifiedFrequencyModulation,
 }
@@ -101,7 +102,7 @@ impl From<u8> for CommandType {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-struct Chrn {
+pub struct Chrn {
     cylinder_number: u8,
     head_address: u8,
     record: u8,
@@ -119,7 +120,7 @@ impl Display for Chrn {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-enum Command {
+pub enum Command {
     ReadData {
         multi_track: bool,
         mode: Mode,
@@ -477,7 +478,7 @@ impl From<&[u8]> for Command {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum InterruptCode {
     #[default]
     NormalTermination,
@@ -486,8 +487,8 @@ enum InterruptCode {
     ReadyChanged,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct StatusRegister0 {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StatusRegister0 {
     interrupt_code: InterruptCode,
     seek_end: bool,
     equipment_check: bool,
@@ -527,7 +528,7 @@ impl From<StatusRegister0> for u8 {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct StatusRegister1 {
     end_of_cylinder: bool,
     data_error: bool,
@@ -569,7 +570,7 @@ impl From<StatusRegister1> for u8 {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct StatusRegister2 {
     control_mark: bool,
     data_error_in_data_field: bool,
@@ -616,8 +617,8 @@ impl From<StatusRegister2> for u8 {
     }
 }
 
-#[derive(Debug, Default)]
-struct StatusRegister3 {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StatusRegister3 {
     fault: bool,
     write_protected: bool,
     ready: bool,
@@ -659,8 +660,8 @@ impl From<StatusRegister3> for u8 {
     }
 }
 
-#[derive(Debug)]
-struct StandardResult {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StandardResult {
     st0: StatusRegister0,
     st1: StatusRegister1,
     st2: StatusRegister2,
@@ -707,8 +708,8 @@ impl IntoIterator for StandardResult {
     }
 }
 
-#[derive(Debug)]
-enum CommandResult {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CommandResult {
     ReadData(StandardResult),
     ReadDeletedData(StandardResult),
     WriteData(StandardResult),
@@ -771,6 +772,7 @@ pub struct FloppyDiskController {
     data_buffer: VecDeque<u8>,
     result_buffer: VecDeque<u8>,
     current_command: Option<Command>,
+    current_result: Option<CommandResult>,
     interrupt_status: Option<StatusRegister0>,
 
     step_rate_time: u8,
@@ -811,6 +813,7 @@ impl FloppyDiskController {
             data_buffer: VecDeque::new(),
             result_buffer: VecDeque::new(),
             current_command: None,
+            current_result: None,
             interrupt_status: None,
 
             step_rate_time: 0,
@@ -936,20 +939,23 @@ impl FloppyDiskController {
             return;
         };
 
-        let Some(command) = self.current_command.take() else {
-            // only executed once
+        let Some(command) = &self.current_command else {
             return;
         };
 
         if self.data_buffer.len() < command.write_len() {
             // Can't execute command yet, waiting for more data
-            self.current_command = Some(command);
+            return;
+        }
+
+        if command.write_len() == 0 && !self.data_buffer.is_empty() {
+            // `data_buffer` contains data from read command, wait until host reads it
             return;
         }
 
         log::debug!("Executing FDC command: {:?}", command);
 
-        let result = match command {
+        let result = match *command {
             Command::ReadData {
                 multi_track,
                 mode,
@@ -1155,6 +1161,7 @@ impl FloppyDiskController {
 
         log::debug!("FDC command result: {:?}", result);
 
+        self.current_result = Some(result.clone());
         self.result_buffer.extend(result);
     }
 
@@ -1923,12 +1930,14 @@ impl Snapshottable for FloppyDiskController {
 
     fn debug_view(&self) -> Self::View {
         let main_status_register = self.report_main_status_register();
-        let phase = self.phase.clone();
-        let command_buffer = self.command_buffer.iter().copied().collect();
+        let phase = self.phase;
+        let command_buffer = self.command_buffer.clone();
         let data_buffer = self.data_buffer.iter().copied().collect();
         let result_buffer = self.result_buffer.iter().copied().collect();
+        let current_command = self.current_command.clone();
+        let current_result = self.current_result.clone();
         let motors_on = self.motors_on;
-        let drive_a_track = self.drives.get(0).map(|d| d.track);
+        let drive_a_track = self.drives.first().map(|d| d.track);
         let drive_b_track = self.drives.get(1).map(|d| d.track);
 
         Self::View {
@@ -1937,6 +1946,8 @@ impl Snapshottable for FloppyDiskController {
             command_buffer,
             data_buffer,
             result_buffer,
+            current_command,
+            current_result,
             motors_on,
             drive_a_track,
             drive_b_track,

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use crate::system::{
-    bus::crtc::Register as CrtcRegister, bus::fdc::Phase, clock::MasterClockTick,
+    bus::crtc::Register as CrtcRegister,
+    bus::fdc::{Command as FdcCommand, CommandResult as FdcResult, Phase as FdcPhase},
+    clock::MasterClockTick,
     instruction::InterruptMode,
 };
 
@@ -85,10 +87,12 @@ pub struct CrtcDebugView {
 
 pub struct FdcDebugView {
     pub main_status_register: u8,
-    pub phase: Phase,
+    pub phase: FdcPhase,
     pub command_buffer: Vec<u8>,
     pub data_buffer: Vec<u8>,
     pub result_buffer: Vec<u8>,
+    pub current_command: Option<FdcCommand>,
+    pub current_result: Option<FdcResult>,
     pub motors_on: bool,
     pub drive_a_track: Option<usize>,
     pub drive_b_track: Option<usize>,
