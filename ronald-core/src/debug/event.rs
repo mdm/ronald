@@ -1,5 +1,5 @@
 use crate::system::bus::crtc::Register as CrtcRegister;
-use crate::system::bus::fdc::{Phase, Register as FdcRegister};
+use crate::system::bus::fdc::{Phase as FdcPhase, Register as FdcRegister};
 use crate::system::cpu::{Register8, Register16};
 
 /// A DebugEvent is any internal state change and any input or output
@@ -137,8 +137,8 @@ pub enum FdcDebugEvent {
         was: u8,
     },
     PhaseChanged {
-        is: Phase,
-        was: Phase,
+        is: FdcPhase,
+        was: FdcPhase,
     },
 }
 
