@@ -13,6 +13,7 @@ pub struct SystemDebugView {
     pub memory: MemoryDebugView,
     pub gate_array: GateArrayDebugView,
     pub crtc: CrtcDebugView,
+    pub fdc: FdcDebugView,
 }
 
 pub struct CpuDebugView {
