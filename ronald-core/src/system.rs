@@ -141,6 +141,7 @@ where
             memory: self.memory.debug_view(),
             gate_array: bus_debug_view.gate_array,
             crtc: bus_debug_view.crtc,
+            fdc: bus_debug_view.fdc,
         };
         record_debug_events(true);
 

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::debug::Snapshottable;
-use crate::debug::view::{CrtcDebugView, GateArrayDebugView};
+use crate::debug::view::{CrtcDebugView, FdcDebugView, GateArrayDebugView};
 use crate::system::clock::MasterClockTick;
 use crate::system::memory::{AnyMemory, MemManage, MemRead};
 use crate::{AudioSink, VideoSink};
@@ -29,6 +29,7 @@ use tape::TapeController;
 pub struct BusDebugView {
     pub gate_array: GateArrayDebugView,
     pub crtc: CrtcDebugView,
+    pub fdc: FdcDebugView,
 }
 
 pub trait Bus: Default {
@@ -149,6 +150,7 @@ where
         BusDebugView {
             gate_array: self.gate_array.debug_view(),
             crtc: self.crtc.debug_view(),
+            fdc: self.fdc.debug_view(),
         }
     }
 }

@@ -127,19 +127,9 @@ impl From<GateArrayDebugEvent> for DebugEvent {
 
 #[derive(Debug, Clone)]
 pub enum FdcDebugEvent {
-    RegisterRead {
-        register: FdcRegister,
-        value: u8,
-    },
-    RegisterWritten {
-        register: FdcRegister,
-        is: u8,
-        was: u8,
-    },
-    PhaseChanged {
-        is: FdcPhase,
-        was: FdcPhase,
-    },
+    RegisterRead { register: FdcRegister, value: u8 },
+    RegisterWritten { register: FdcRegister, value: u8 },
+    PhaseChanged { is: FdcPhase, was: FdcPhase },
 }
 
 impl From<FdcDebugEvent> for DebugEvent {

@@ -825,9 +825,19 @@ impl FloppyDiskController {
 
     pub fn read_byte(&mut self, port: u16) -> u8 {
         match port.try_into() {
-            Ok(Register::MainStatus) => self.report_main_status_register(),
+            Ok(Register::MainStatus) => {
+                let value = self.report_main_status_register();
+                self.emit_debug_event(
+                    FdcDebugEvent::RegisterRead {
+                        register: Register::MainStatus,
+                        value,
+                    },
+                    self.master_clock,
+                );
+                value
+            }
             Ok(Register::ReadWrite) => {
-                match self.phase {
+                let value = match self.phase {
                     Phase::Execution => {
                         // TODO: handle over run here (modify result if last poll more than 26us ago)
 
@@ -840,7 +850,7 @@ impl FloppyDiskController {
                         };
 
                         if self.data_buffer.is_empty() {
-                            self.phase = Phase::Result;
+                            self.enter_phase(Phase::Result);
                         }
 
                         data
@@ -858,7 +868,7 @@ impl FloppyDiskController {
                         if self.result_buffer.is_empty() {
                             self.interrupt_status = None;
                             self.busy = false;
-                            self.phase = Phase::Command;
+                            self.enter_phase(Phase::Command);
                         }
 
                         result
@@ -867,7 +877,15 @@ impl FloppyDiskController {
                         log::error!("Unexpected FDC read in command phase");
                         todo!("return dummy value instead?");
                     }
-                }
+                };
+                self.emit_debug_event(
+                    FdcDebugEvent::RegisterRead {
+                        register: Register::ReadWrite,
+                        value,
+                    },
+                    self.master_clock,
+                );
+                value
             }
             _ => {
                 log::error!("Unexpected FDC read using port {port:#06X}");
@@ -878,54 +896,72 @@ impl FloppyDiskController {
 
     pub fn write_byte(&mut self, port: u16, value: u8) {
         match port.try_into() {
-            Ok(Register::MotorControl) => match value {
-                0 => {
-                    self.motors_on = false;
-                }
-                1 => {
-                    self.motors_on = true;
-                }
-                _ => unreachable!(),
-            },
-            Ok(Register::ReadWrite) => match &self.phase {
-                Phase::Command => {
-                    self.busy = true;
-
-                    if self.command_buffer.is_empty()
-                        || self.command_buffer.len()
-                            < CommandType::from(self.command_buffer[0]).command_len()
-                    {
-                        self.command_buffer.push(value);
+            Ok(Register::MotorControl) => {
+                match value {
+                    0 => {
+                        self.motors_on = false;
                     }
-
-                    if self.command_buffer.len()
-                        == CommandType::from(self.command_buffer[0]).command_len()
-                    {
-                        let command = self.command_buffer.as_slice().into();
-                        self.command_buffer.clear();
-                        self.data_buffer.clear();
-                        self.result_buffer.clear();
-                        self.current_command = Some(command);
-                        self.phase = Phase::Execution;
+                    1 => {
+                        self.motors_on = true;
                     }
+                    _ => unreachable!(),
                 }
-                Phase::Execution => {
-                    if let Some(command) = &self.current_command
-                        && self.data_buffer.len() < command.write_len()
-                    {
-                        self.data_buffer.push_back(value);
-                    } else {
+                self.emit_debug_event(
+                    FdcDebugEvent::RegisterWritten {
+                        register: Register::MotorControl,
+                        value,
+                    },
+                    self.master_clock,
+                );
+            }
+            Ok(Register::ReadWrite) => {
+                match &self.phase {
+                    Phase::Command => {
+                        self.busy = true;
+
+                        if self.command_buffer.is_empty()
+                            || self.command_buffer.len()
+                                < CommandType::from(self.command_buffer[0]).command_len()
+                        {
+                            self.command_buffer.push(value);
+                        }
+
+                        if self.command_buffer.len()
+                            == CommandType::from(self.command_buffer[0]).command_len()
+                        {
+                            let command = self.command_buffer.as_slice().into();
+                            self.command_buffer.clear();
+                            self.data_buffer.clear();
+                            self.result_buffer.clear();
+                            self.current_command = Some(command);
+                            self.enter_phase(Phase::Execution);
+                        }
+                    }
+                    Phase::Execution => {
+                        if let Some(command) = &self.current_command
+                            && self.data_buffer.len() < command.write_len()
+                        {
+                            self.data_buffer.push_back(value);
+                        } else {
+                            log::error!(
+                                "Unexpected FDC write in execution phase using port {port:#06X}: {value:#010b}"
+                            );
+                        }
+                    }
+                    Phase::Result => {
                         log::error!(
-                            "Unexpected FDC write in execution phase using port {port:#06X}: {value:#010b}"
+                            "Unexpected FDC write in result phase using port {port:#06X}: {value:#010b}"
                         );
                     }
                 }
-                Phase::Result => {
-                    log::error!(
-                        "Unexpected FDC write in result phase using port {port:#06X}: {value:#010b}"
-                    );
-                }
-            },
+                self.emit_debug_event(
+                    FdcDebugEvent::RegisterWritten {
+                        register: Register::ReadWrite,
+                        value,
+                    },
+                    self.master_clock,
+                );
+            }
             _ => {
                 log::error!("Unexpected FDC write using port {port:#06X}: {value:#010b}");
             }
@@ -1012,7 +1048,8 @@ impl FloppyDiskController {
                 gap_length,
                 data_length,
             } => {
-                self.phase = Phase::Result;
+                let deleted = matches!(command, Command::WriteDeletedData { .. });
+                self.enter_phase(Phase::Result);
                 self.command_write_data(
                     multi_track,
                     mode,
@@ -1022,7 +1059,7 @@ impl FloppyDiskController {
                     end_of_track,
                     gap_length,
                     data_length,
-                    matches!(command, Command::WriteDeletedData { .. }),
+                    deleted,
                 )
             }
             Command::ReadTrack {
@@ -1052,7 +1089,7 @@ impl FloppyDiskController {
                 head,
                 unit_select,
             } => {
-                self.phase = Phase::Result;
+                self.enter_phase(Phase::Result);
                 self.command_read_id(mode, head, unit_select)
             }
             Command::FormatTrack {
@@ -1065,7 +1102,7 @@ impl FloppyDiskController {
                 data,
                 ..
             } => {
-                self.phase = Phase::Result;
+                self.enter_phase(Phase::Result);
                 self.command_format_track(mode, head, unit_select, number, sector, gap_length, data)
             }
             Command::ScanEqual {
@@ -1101,7 +1138,9 @@ impl FloppyDiskController {
                 gap_length,
                 scan_type,
             } => {
-                self.phase = Phase::Result;
+                let low_or_equal = matches!(command, Command::ScanLowOrEqual { .. });
+                let high_or_equal = matches!(command, Command::ScanHighOrEqual { .. });
+                self.enter_phase(Phase::Result);
                 self.command_scan(
                     multi_track,
                     mode,
@@ -1112,17 +1151,17 @@ impl FloppyDiskController {
                     end_of_track,
                     gap_length,
                     scan_type,
-                    matches!(command, Command::ScanLowOrEqual { .. }),
-                    matches!(command, Command::ScanHighOrEqual { .. }),
+                    low_or_equal,
+                    high_or_equal,
                 )
             }
             Command::Recalibrate { unit_select } => {
                 self.busy = false;
-                self.phase = Phase::Command;
+                self.enter_phase(Phase::Command);
                 self.command_recalibrate(unit_select)
             }
             Command::SenseInterruptStatus => {
-                self.phase = Phase::Result;
+                self.enter_phase(Phase::Result);
                 self.command_sense_interrupt_status()
             }
             Command::Specify {
@@ -1132,7 +1171,7 @@ impl FloppyDiskController {
                 non_dma_mode,
             } => {
                 self.busy = false;
-                self.phase = Phase::Command;
+                self.enter_phase(Phase::Command);
                 self.command_specify(
                     step_rate_time,
                     head_unload_time,
@@ -1141,7 +1180,7 @@ impl FloppyDiskController {
                 )
             }
             Command::SenseDriveStatus { head, unit_select } => {
-                self.phase = Phase::Result;
+                self.enter_phase(Phase::Result);
                 self.command_sense_drive_status(head, unit_select)
             }
             Command::Seek {
@@ -1150,11 +1189,11 @@ impl FloppyDiskController {
                 new_cylinder_number,
             } => {
                 self.busy = false;
-                self.phase = Phase::Command;
+                self.enter_phase(Phase::Command);
                 self.command_seek(head, unit_select, new_cylinder_number)
             }
             Command::Invalid => {
-                self.phase = Phase::Result;
+                self.enter_phase(Phase::Result);
                 self.command_invalid()
             }
         };
@@ -1176,6 +1215,17 @@ impl FloppyDiskController {
                 None
             }
         }
+    }
+
+    fn enter_phase(&mut self, phase: Phase) {
+        self.emit_debug_event(
+            FdcDebugEvent::PhaseChanged {
+                is: phase,
+                was: self.phase,
+            },
+            self.master_clock,
+        );
+        self.phase = phase;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1211,7 +1261,7 @@ impl FloppyDiskController {
             Some(drive) => {
                 let Some(disk) = &drive.disk else {
                     log::debug!("No disk in drive {}", unit_select);
-                    self.phase = Phase::Result;
+                    self.enter_phase(Phase::Result);
 
                     let result = StandardResult::not_ready(chrn);
                     if deleted {
@@ -1249,7 +1299,7 @@ impl FloppyDiskController {
                     let sector = match disk.tracks[track].find_sector(chrn, false) {
                         Some(sector) => sector,
                         None => {
-                            self.phase = Phase::Result;
+                            self.enter_phase(Phase::Result);
                             no_data = true;
                             interrupt_code = InterruptCode::AbnormalTermination;
                             log::debug!("Sector ID {} not found", chrn);
@@ -1370,7 +1420,7 @@ impl FloppyDiskController {
             }
             None => {
                 log::debug!("Drive {} not connected", unit_select);
-                self.phase = Phase::Result;
+                self.enter_phase(Phase::Result);
 
                 let result = StandardResult::not_ready(chrn);
                 if deleted {
@@ -1425,7 +1475,7 @@ impl FloppyDiskController {
         match self.drives.get(unit_select as usize) {
             Some(drive) => {
                 let Some(disk) = &drive.disk else {
-                    self.phase = Phase::Result;
+                    self.enter_phase(Phase::Result);
 
                     let result = StandardResult::not_ready(chrn);
                     return CommandResult::ReadTrack(result);
@@ -1523,7 +1573,7 @@ impl FloppyDiskController {
                 CommandResult::ReadTrack(result)
             }
             None => {
-                self.phase = Phase::Result;
+                self.enter_phase(Phase::Result);
 
                 let result = StandardResult::not_ready(chrn);
                 CommandResult::ReadTrack(result)
