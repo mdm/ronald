@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use serde::de::value;
-
-use crate::debug::event::{CpuDebugEvent, CrtcDebugEvent, GateArrayDebugEvent, MemoryDebugEvent};
+use crate::debug::event::{
+    CpuDebugEvent, CrtcDebugEvent, FdcDebugEvent, GateArrayDebugEvent, MemoryDebugEvent,
+};
 use crate::debug::{DebugEvent, DebugSource, EventSubscription};
 use crate::system::bus::crtc::Register as CrtcRegister;
+use crate::system::bus::fdc::{Phase as FdcPhase, Register as FdcRegister};
 use crate::system::clock::MasterClockTick;
 use crate::system::cpu::{Register8, Register16};
 
@@ -1040,6 +1041,141 @@ impl fmt::Display for CrtcAddressBreakpoint {
         match self.value {
             Some(value) => write!(f, "Address = {:#06X}", value),
             None => write!(f, "Any address change"),
+        }
+    }
+}
+
+struct FdcRegisterBreakpoint {
+    pub register: Option<FdcRegister>,
+    pub value: Option<u8>,
+    pub on_read: bool,
+    pub on_write: bool,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl Breakpoint for FdcRegisterBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Fdc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Fdc(FdcDebugEvent::RegisterRead { register, value }) => {
+                self.on_read
+                    && self.register.is_none_or(|r| r == *register)
+                    && self.value.is_none_or(|v| v == *value)
+            }
+            DebugEvent::Fdc(FdcDebugEvent::RegisterWritten { register, value }) => {
+                self.on_write
+                    && self.register.is_none_or(|r| r == *register)
+                    && self.value.is_none_or(|v| v == *value)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for FdcRegisterBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let register = match self.register {
+            Some(FdcRegister::MainStatus) => "Main Status",
+            Some(FdcRegister::Data) => "Data",
+            Some(FdcRegister::MotorControl) => "Motor Control",
+            None => "Any register",
+        };
+        let access = match (self.on_read, self.on_write) {
+            (true, true) => "access",
+            (true, false) => "read",
+            (false, true) => "write",
+            (false, false) => "never",
+        };
+        let value = match self.value {
+            Some(value) => "{:#04X}",
+            None => "Any value",
+        };
+        write!(f, "{register} {access} = {value}",)
+    }
+}
+
+struct FdcPhaseBreakpoint {
+    pub value: Option<FdcPhase>,
+    enabled: bool,
+    one_shot: bool,
+    triggered: Option<MasterClockTick>,
+}
+
+impl Breakpoint for FdcPhaseBreakpoint {
+    fn should_break(&mut self, source: DebugSource, event: &DebugEvent) -> bool {
+        if !self.enabled || source != DebugSource::Fdc {
+            return false;
+        }
+
+        match event {
+            DebugEvent::Fdc(FdcDebugEvent::PhaseChanged { is, .. }) => {
+                self.value.is_none_or(|v| v == *is)
+            }
+            _ => false,
+        }
+    }
+
+    fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    fn set_one_shot(&mut self, one_shot: bool) {
+        self.one_shot = one_shot;
+    }
+
+    fn triggered(&self) -> Option<MasterClockTick> {
+        self.triggered
+    }
+
+    fn set_triggered(&mut self, triggered: Option<MasterClockTick>) {
+        self.triggered = triggered;
+    }
+}
+
+impl fmt::Display for FdcPhaseBreakpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.value {
+            Some(FdcPhase::Command) => write!(f, "Command (idle) phase entered"),
+            Some(FdcPhase::Execution) => write!(f, "Execution phase entered"),
+            Some(FdcPhase::Result) => write!(f, "Result phase entered"),
+            None => write!(f, "Phase changed"),
         }
     }
 }

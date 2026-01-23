@@ -21,7 +21,7 @@ struct Drive {
     disk: Option<Disk>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Phase {
     Command,
     Execution,
@@ -752,11 +752,11 @@ impl IntoIterator for CommandResult {
     }
 }
 
-#[derive(Debug, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFromPrimitive)]
 #[repr(u16)]
 pub enum Register {
     MainStatus = 0xfb7e,
-    ReadWrite = 0xfb7f,
+    Data = 0xfb7f,
     MotorControl = 0xfa7e,
 }
 
@@ -836,7 +836,7 @@ impl FloppyDiskController {
                 );
                 value
             }
-            Ok(Register::ReadWrite) => {
+            Ok(Register::Data) => {
                 let value = match self.phase {
                     Phase::Execution => {
                         // TODO: handle over run here (modify result if last poll more than 26us ago)
@@ -880,7 +880,7 @@ impl FloppyDiskController {
                 };
                 self.emit_debug_event(
                     FdcDebugEvent::RegisterRead {
-                        register: Register::ReadWrite,
+                        register: Register::Data,
                         value,
                     },
                     self.master_clock,
@@ -914,7 +914,7 @@ impl FloppyDiskController {
                     self.master_clock,
                 );
             }
-            Ok(Register::ReadWrite) => {
+            Ok(Register::Data) => {
                 match &self.phase {
                     Phase::Command => {
                         self.busy = true;
@@ -956,7 +956,7 @@ impl FloppyDiskController {
                 }
                 self.emit_debug_event(
                     FdcDebugEvent::RegisterWritten {
-                        register: Register::ReadWrite,
+                        register: Register::Data,
                         value,
                     },
                     self.master_clock,
