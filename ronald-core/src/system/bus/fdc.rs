@@ -28,6 +28,16 @@ pub enum Phase {
     Result,
 }
 
+impl Display for Phase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Command => write!(f, "Command"),
+            Self::Execution => write!(f, "Execution"),
+            Self::Result => write!(f, "Result"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Mode {
     FrequencyModulation,
@@ -758,6 +768,16 @@ pub enum Register {
     MainStatus = 0xfb7e,
     Data = 0xfb7f,
     MotorControl = 0xfa7e,
+}
+
+impl Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MainStatus => write!(f, "Main Status"),
+            Self::Data => write!(f, "Data"),
+            Self::MotorControl => write!(f, "Motor Control"),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]

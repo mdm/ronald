@@ -548,6 +548,7 @@ pub struct GateArrayInterruptBreakpoint {
     triggered: Option<MasterClockTick>,
 }
 
+#[allow(clippy::new_without_default)]
 impl GateArrayInterruptBreakpoint {
     pub fn new() -> Self {
         Self {
@@ -1045,7 +1046,8 @@ impl fmt::Display for CrtcAddressBreakpoint {
     }
 }
 
-struct FdcRegisterBreakpoint {
+#[derive(Debug, Clone)]
+pub struct FdcRegisterBreakpoint {
     pub register: Option<FdcRegister>,
     pub value: Option<u8>,
     pub on_read: bool,
@@ -1053,6 +1055,25 @@ struct FdcRegisterBreakpoint {
     enabled: bool,
     one_shot: bool,
     triggered: Option<MasterClockTick>,
+}
+
+impl FdcRegisterBreakpoint {
+    pub fn new(
+        register: Option<FdcRegister>,
+        value: Option<u8>,
+        on_read: bool,
+        on_write: bool,
+    ) -> Self {
+        Self {
+            register,
+            value,
+            on_read,
+            on_write,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
 }
 
 impl Breakpoint for FdcRegisterBreakpoint {
@@ -1103,31 +1124,46 @@ impl Breakpoint for FdcRegisterBreakpoint {
 
 impl fmt::Display for FdcRegisterBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let register = match self.register {
-            Some(FdcRegister::MainStatus) => "Main Status",
-            Some(FdcRegister::Data) => "Data",
-            Some(FdcRegister::MotorControl) => "Motor Control",
-            None => "Any register",
-        };
-        let access = match (self.on_read, self.on_write) {
-            (true, true) => "access",
-            (true, false) => "read",
-            (false, true) => "write",
-            (false, false) => "never",
-        };
-        let value = match self.value {
-            Some(value) => "{:#04X}",
-            None => "Any value",
-        };
-        write!(f, "{register} {access} = {value}",)
+        match self.register {
+            Some(FdcRegister::MainStatus) => write!(f, "Main Status ")?,
+            Some(FdcRegister::Data) => write!(f, "Data ")?,
+            Some(FdcRegister::MotorControl) => write!(f, "Motor Control ")?,
+            None => write!(f, "Any register ")?,
+        }
+        match (self.on_read, self.on_write) {
+            (true, true) => write!(f, "access")?,
+            (true, false) => write!(f, "read")?,
+            (false, true) => write!(f, "write")?,
+            (false, false) => write!(f, "never")?,
+        }
+        match self.value {
+            Some(value) => write!(f, " = {:#04X}", value),
+            None => write!(f, " = Any value"),
+        }
     }
 }
 
-struct FdcPhaseBreakpoint {
+#[derive(Debug, Clone)]
+pub struct FdcPhaseBreakpoint {
     pub value: Option<FdcPhase>,
+    pub on_enter: bool,
+    pub on_leave: bool,
     enabled: bool,
     one_shot: bool,
     triggered: Option<MasterClockTick>,
+}
+
+impl FdcPhaseBreakpoint {
+    pub fn new(value: Option<FdcPhase>, on_enter: bool, on_leave: bool) -> Self {
+        Self {
+            value,
+            on_enter,
+            on_leave,
+            enabled: true,
+            one_shot: false,
+            triggered: None,
+        }
+    }
 }
 
 impl Breakpoint for FdcPhaseBreakpoint {
@@ -1137,8 +1173,11 @@ impl Breakpoint for FdcPhaseBreakpoint {
         }
 
         match event {
-            DebugEvent::Fdc(FdcDebugEvent::PhaseChanged { is, .. }) => {
+            DebugEvent::Fdc(FdcDebugEvent::PhaseChanged { is, .. }) if self.on_enter => {
                 self.value.is_none_or(|v| v == *is)
+            }
+            DebugEvent::Fdc(FdcDebugEvent::PhaseChanged { was, .. }) if self.on_leave => {
+                self.value.is_none_or(|v| v == *was)
             }
             _ => false,
         }
@@ -1196,6 +1235,8 @@ pub enum AnyBreakpoint {
     CrtcHorizontalSync(CrtcHorizontalSyncBreakpoint),
     CrtcVerticalSync(CrtcVerticalSyncBreakpoint),
     CrtcDisplayEnable(CrtcDisplayEnableBreakpoint),
+    FdcRegister(FdcRegisterBreakpoint),
+    FdcPhase(FdcPhaseBreakpoint),
 }
 
 impl AnyBreakpoint {
@@ -1288,6 +1329,21 @@ impl AnyBreakpoint {
     pub fn crtc_dispaly_enable_breakpoint(on_start: bool, on_end: bool) -> Self {
         Self::CrtcDisplayEnable(CrtcDisplayEnableBreakpoint::new(on_start, on_end))
     }
+
+    pub fn fdc_register_breakpoint(
+        register: Option<FdcRegister>,
+        value: Option<u8>,
+        on_read: bool,
+        on_write: bool,
+    ) -> Self {
+        Self::FdcRegister(FdcRegisterBreakpoint::new(
+            register, value, on_read, on_write,
+        ))
+    }
+
+    pub fn fdc_phase_breakpoint(value: Option<FdcPhase>, on_enter: bool, on_leave: bool) -> Self {
+        Self::FdcPhase(FdcPhaseBreakpoint::new(value, on_enter, on_leave))
+    }
 }
 
 impl Breakpoint for AnyBreakpoint {
@@ -1307,6 +1363,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.should_break(source, event),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.should_break(source, event),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.should_break(source, event),
+            AnyBreakpoint::FdcRegister(bp) => bp.should_break(source, event),
+            AnyBreakpoint::FdcPhase(bp) => bp.should_break(source, event),
         }
     }
 
@@ -1326,6 +1384,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.enabled(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.enabled(),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.enabled(),
+            AnyBreakpoint::FdcRegister(bp) => bp.enabled(),
+            AnyBreakpoint::FdcPhase(bp) => bp.enabled(),
         }
     }
 
@@ -1345,6 +1405,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_enabled(enabled),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::FdcRegister(bp) => bp.set_enabled(enabled),
+            AnyBreakpoint::FdcPhase(bp) => bp.set_enabled(enabled),
         }
     }
 
@@ -1364,6 +1426,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.one_shot(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.one_shot(),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.one_shot(),
+            AnyBreakpoint::FdcRegister(bp) => bp.one_shot(),
+            AnyBreakpoint::FdcPhase(bp) => bp.one_shot(),
         }
     }
 
@@ -1383,6 +1447,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_one_shot(one_shot),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::FdcRegister(bp) => bp.set_one_shot(one_shot),
+            AnyBreakpoint::FdcPhase(bp) => bp.set_one_shot(one_shot),
         }
     }
 
@@ -1402,6 +1468,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.triggered(),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.triggered(),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.triggered(),
+            AnyBreakpoint::FdcRegister(bp) => bp.triggered(),
+            AnyBreakpoint::FdcPhase(bp) => bp.triggered(),
         }
     }
 
@@ -1421,6 +1489,8 @@ impl Breakpoint for AnyBreakpoint {
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.set_triggered(triggered),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::FdcRegister(bp) => bp.set_triggered(triggered),
+            AnyBreakpoint::FdcPhase(bp) => bp.set_triggered(triggered),
         }
     }
 }
@@ -1442,6 +1512,8 @@ impl fmt::Display for AnyBreakpoint {
             AnyBreakpoint::CrtcHorizontalSync(bp) => bp.fmt(f),
             AnyBreakpoint::CrtcVerticalSync(bp) => bp.fmt(f),
             AnyBreakpoint::CrtcDisplayEnable(bp) => bp.fmt(f),
+            AnyBreakpoint::FdcRegister(bp) => bp.fmt(f),
+            AnyBreakpoint::FdcPhase(bp) => bp.fmt(f),
         }
     }
 }
