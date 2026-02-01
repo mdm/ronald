@@ -2,7 +2,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
-use ronald_core::system::bus::crtc::Register as CrtcRegister;
+use ronald_core::system::bus::fdc::{Phase, Register};
 
 use crate::colors;
 use crate::debug::Debugger;
@@ -12,9 +12,19 @@ use crate::debug::Debugger;
 pub struct FdcDebugWindow {
     pub show: bool,
 
+    // Register read breakpoint
+    #[serde(skip, default)]
+    register_read_register: Option<Register>,
+    #[serde(skip, default)]
+    register_read_value_input: String,
+    #[serde(skip, default)]
+    register_read_any_register: bool,
+    #[serde(skip, default)]
+    register_read_any_value: bool,
+
     // Register write breakpoint
     #[serde(skip, default)]
-    register_write_register: Option<CrtcRegister>,
+    register_write_register: Option<Register>,
     #[serde(skip, default)]
     register_write_value_input: String,
     #[serde(skip, default)]
@@ -22,43 +32,13 @@ pub struct FdcDebugWindow {
     #[serde(skip, default)]
     register_write_any_value: bool,
 
-    // Counters breakpoint
+    // Phase change breakpoint
     #[serde(skip, default)]
-    character_row_value_input: String,
+    phase: Option<Phase>,
     #[serde(skip, default)]
-    scan_line_value_input: String,
+    phase_on_enter: bool,
     #[serde(skip, default)]
-    horizontal_counter_value_input: String,
-    #[serde(skip, default)]
-    character_row_any_value: bool,
-    #[serde(skip, default)]
-    scan_line_any_value: bool,
-    #[serde(skip, default)]
-    horizontal_counter_any_value: bool,
-
-    // Address breakpoint
-    #[serde(skip, default)]
-    address_value_input: String,
-    #[serde(skip, default)]
-    address_any_value: bool,
-
-    // Horizontal sync breakpoint
-    #[serde(skip, default)]
-    hsync_on_start: bool,
-    #[serde(skip, default)]
-    hsync_on_end: bool,
-
-    // Vertical sync breakpoint
-    #[serde(skip, default)]
-    vsync_on_start: bool,
-    #[serde(skip, default)]
-    vsync_on_end: bool,
-
-    // Display enable breakpoint
-    #[serde(skip, default)]
-    display_enable_on_start: bool,
-    #[serde(skip, default)]
-    display_enable_on_end: bool,
+    phase_on_leave: bool,
 }
 
 impl FdcDebugWindow {
@@ -231,38 +211,87 @@ impl FdcDebugWindow {
     }
 
     fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
-        ui.heading("CRTC Breakpoints");
+        ui.heading("FDC Breakpoints");
 
-        egui::Grid::new("crtc_breakpoint_grid")
+        egui::Grid::new("fdc_breakpoint_grid")
             .num_columns(2)
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
+                // Register read breakpoint
+                ui.label("Register read:");
+                ui.horizontal(|ui| {
+                    ui.add_enabled_ui(!self.register_read_any_register, |ui| {
+                        egui::ComboBox::from_id_salt("fdc_register_read_selector")
+                            .width(180.0)
+                            .selected_text(match self.register_read_register {
+                                Some(ref reg) => format!("{}", reg),
+                                None => "Select register...".to_string(),
+                            })
+                            .show_ui(ui, |ui| {
+                                let reg = Register::Data;
+                                ui.selectable_value(
+                                    &mut self.register_read_register,
+                                    Some(reg),
+                                    format!("{}", reg),
+                                );
+                                let reg = Register::MainStatus;
+                                ui.selectable_value(
+                                    &mut self.register_read_register,
+                                    Some(reg),
+                                    format!("{}", reg),
+                                );
+                            });
+                    });
+
+                    if ui
+                        .checkbox(&mut self.register_read_any_register, "Any")
+                        .changed()
+                        && self.register_read_any_register
+                    {
+                        self.register_read_register = None;
+                    }
+
+                    let label = ui.label("Value:");
+                    ui.add_enabled(
+                        !self.register_read_any_value,
+                        egui::TextEdit::singleline(&mut self.register_read_value_input)
+                            .desired_width(40.0),
+                    )
+                    .labelled_by(label.id)
+                    .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
+
+                    if ui
+                        .checkbox(&mut self.register_read_any_value, "Any")
+                        .changed()
+                        && self.register_read_any_value
+                    {
+                        self.register_read_value_input.clear();
+                    }
+
+                    if ui.button("Add").clicked() {
+                        self.add_register_read_breakpoint(debugger);
+                    }
+                });
+                ui.end_row();
+
                 // Register write breakpoint
                 ui.label("Register write:");
                 ui.horizontal(|ui| {
                     ui.add_enabled_ui(!self.register_write_any_register, |ui| {
-                        egui::ComboBox::from_id_salt("crtc_register_selector")
+                        egui::ComboBox::from_id_salt("fdc_register_write_selector")
                             .width(180.0)
                             .selected_text(match self.register_write_register {
                                 Some(ref reg) => format!("{}", reg),
                                 None => "Select register...".to_string(),
                             })
                             .show_ui(ui, |ui| {
-                                for i in 0..18 {
-                                    let reg = CrtcRegister::try_from(i).unwrap();
-                                    ui.selectable_value(
-                                        &mut self.register_write_register,
-                                        Some(reg),
-                                        format!("{}", reg),
-                                    );
-                                }
-                                let reg = CrtcRegister::Unused;
+                                let reg = Register::Data;
                                 ui.selectable_value(
                                     &mut self.register_write_register,
                                     Some(reg),
                                     format!("{}", reg),
                                 );
-                                let reg = CrtcRegister::Dummy;
+                                let reg = Register::MotorControl;
                                 ui.selectable_value(
                                     &mut self.register_write_register,
                                     Some(reg),
@@ -302,115 +331,28 @@ impl FdcDebugWindow {
                 });
                 ui.end_row();
 
-                // Counters breakpoint
-                ui.label("Counters:");
+                // Phase change breakpoint
+                ui.label("Phase change:");
                 ui.horizontal(|ui| {
-                    let label = ui.label("Char. row:");
-                    ui.add_enabled(
-                        !self.character_row_any_value,
-                        egui::TextEdit::singleline(&mut self.character_row_value_input)
-                            .desired_width(40.0),
-                    )
-                    .labelled_by(label.id)
-                    .on_hover_text("Hex value (e.g., 10 or 0x10)");
-
-                    if ui
-                        .checkbox(&mut self.character_row_any_value, "Any")
-                        .changed()
-                        && self.character_row_any_value
-                    {
-                        self.character_row_value_input.clear();
-                    }
-
-                    let label = ui.label("Scan line:");
-                    ui.add_enabled(
-                        !self.scan_line_any_value,
-                        egui::TextEdit::singleline(&mut self.scan_line_value_input)
-                            .desired_width(40.0),
-                    )
-                    .labelled_by(label.id)
-                    .on_hover_text("Hex value (e.g., 10 or 0x10)");
-
-                    if ui.checkbox(&mut self.scan_line_any_value, "Any").changed()
-                        && self.scan_line_any_value
-                    {
-                        self.scan_line_value_input.clear();
-                    }
-
-                    let label = ui.label("Horizontal:");
-                    ui.add_enabled(
-                        !self.horizontal_counter_any_value,
-                        egui::TextEdit::singleline(&mut self.horizontal_counter_value_input)
-                            .desired_width(40.0),
-                    )
-                    .labelled_by(label.id)
-                    .on_hover_text("Hex value (e.g., 10 or 0x10)");
-
-                    if ui
-                        .checkbox(&mut self.horizontal_counter_any_value, "Any")
-                        .changed()
-                        && self.horizontal_counter_any_value
-                    {
-                        self.horizontal_counter_value_input.clear();
-                    }
+                    egui::ComboBox::from_id_salt("fdc_phase_change_selector")
+                        .width(180.0)
+                        .selected_text(match self.phase {
+                            Some(ref reg) => format!("{}", reg),
+                            None => "Select phase...".to_string(),
+                        })
+                        .show_ui(ui, |ui| {
+                            let reg = Phase::Command;
+                            ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
+                            let reg = Phase::Execution;
+                            ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
+                            let reg = Phase::Result;
+                            ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
+                        });
+                    ui.checkbox(&mut self.phase_on_enter, "Enter");
+                    ui.checkbox(&mut self.phase_on_leave, "Leave");
 
                     if ui.button("Add").clicked() {
-                        self.add_counters_breakpoint(debugger);
-                    }
-                });
-                ui.end_row();
-
-                // Address breakpoint
-                let label = ui.label("Address:");
-                ui.horizontal(|ui| {
-                    ui.add_enabled(
-                        !self.address_any_value,
-                        egui::TextEdit::singleline(&mut self.address_value_input)
-                            .desired_width(60.0),
-                    )
-                    .labelled_by(label.id)
-                    .on_hover_text("Hex value (e.g., 1000 or 0x1000)");
-
-                    ui.checkbox(&mut self.address_any_value, "Any");
-
-                    if ui.button("Add").clicked() {
-                        self.add_address_breakpoint(debugger);
-                    }
-                });
-                ui.end_row();
-
-                // Horizontal sync breakpoint
-                ui.label("Horizontal sync:");
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.hsync_on_start, "Start");
-                    ui.checkbox(&mut self.hsync_on_end, "End");
-
-                    if ui.button("Add").clicked() {
-                        self.add_horizontal_sync_breakpoint(debugger);
-                    }
-                });
-                ui.end_row();
-
-                // Vertical sync breakpoint
-                ui.label("Vertical sync:");
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.vsync_on_start, "Start");
-                    ui.checkbox(&mut self.vsync_on_end, "End");
-
-                    if ui.button("Add").clicked() {
-                        self.add_vertical_sync_breakpoint(debugger);
-                    }
-                });
-                ui.end_row();
-
-                // Display enable breakpoint
-                ui.label("Display enable:");
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.display_enable_on_start, "Start");
-                    ui.checkbox(&mut self.display_enable_on_end, "End");
-
-                    if ui.button("Add").clicked() {
-                        self.add_display_enable_breakpoint(debugger);
+                        self.add_phase_breakpoint(debugger);
                     }
                 });
                 ui.end_row();
@@ -418,7 +360,7 @@ impl FdcDebugWindow {
 
         // List active CRTC breakpoints
         ui.separator();
-        ui.label("Active CRTC Breakpoints:");
+        ui.label("Active FDC Breakpoints:");
 
         let mut breakpoint_found = false;
         let mut to_remove = None;
@@ -429,12 +371,7 @@ impl FdcDebugWindow {
             if breakpoint.one_shot()
                 || !matches!(
                     breakpoint,
-                    AnyBreakpoint::CrtcRegisterWrite(_)
-                        | AnyBreakpoint::CrtcCounters(_)
-                        | AnyBreakpoint::CrtcAddress(_)
-                        | AnyBreakpoint::CrtcHorizontalSync(_)
-                        | AnyBreakpoint::CrtcVerticalSync(_)
-                        | AnyBreakpoint::CrtcDisplayEnable(_)
+                    AnyBreakpoint::FdcRegister(_) | AnyBreakpoint::FdcPhase(_)
                 )
             {
                 continue;
@@ -462,7 +399,7 @@ impl FdcDebugWindow {
         }
 
         if !breakpoint_found {
-            ui.label("No CRTC breakpoints set");
+            ui.label("No FDC breakpoints set");
         }
 
         // Apply changes
@@ -472,6 +409,35 @@ impl FdcDebugWindow {
         if let Some(id) = to_remove {
             breakpoint_manager.remove_breakpoint(id);
         }
+    }
+
+    fn add_register_read_breakpoint(&mut self, debugger: &mut impl Debugger) {
+        let register = if self.register_read_any_register {
+            None
+        } else {
+            match self.register_read_register {
+                Some(reg) => Some(reg),
+                None => return, // No register selected, don't add breakpoint
+            }
+        };
+
+        let value = if self.register_read_any_value {
+            None
+        } else {
+            match usize::from_str_radix(self.register_read_value_input.trim_start_matches("0x"), 16)
+            {
+                Ok(val) => Some((val & 0xFF) as u8),
+                Err(_) => return, // Invalid input, don't add breakpoint
+            }
+        };
+
+        let breakpoint = AnyBreakpoint::fdc_register_breakpoint(register, value, true, false);
+        debugger.breakpoint_manager().add_breakpoint(breakpoint);
+
+        self.register_read_register = None;
+        self.register_read_any_register = false;
+        self.register_read_value_input.clear();
+        self.register_read_any_value = false;
     }
 
     fn add_register_write_breakpoint(&mut self, debugger: &mut impl Debugger) {
@@ -496,7 +462,7 @@ impl FdcDebugWindow {
             }
         };
 
-        let breakpoint = AnyBreakpoint::crtc_register_write_breakpoint(register, value);
+        let breakpoint = AnyBreakpoint::fdc_register_breakpoint(register, value, false, true);
         debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.register_write_register = None;
@@ -505,106 +471,21 @@ impl FdcDebugWindow {
         self.register_write_any_value = false;
     }
 
-    fn add_counters_breakpoint(&mut self, debugger: &mut impl Debugger) {
-        let character_row = if self.character_row_any_value {
-            None
-        } else {
-            match usize::from_str_radix(self.character_row_value_input.trim_start_matches("0x"), 16)
-            {
-                Ok(val) => Some((val & 0xFF) as u8),
-                Err(_) => return, // Invalid input, don't add breakpoint
-            }
-        };
-
-        let scan_line = if self.scan_line_any_value {
-            None
-        } else {
-            match usize::from_str_radix(self.scan_line_value_input.trim_start_matches("0x"), 16) {
-                Ok(val) => Some((val & 0xFF) as u8),
-                Err(_) => return, // Invalid input, don't add breakpoint
-            }
-        };
-
-        let horizontal_counter = if self.horizontal_counter_any_value {
-            None
-        } else {
-            match usize::from_str_radix(
-                self.horizontal_counter_value_input.trim_start_matches("0x"),
-                16,
-            ) {
-                Ok(val) => Some((val & 0xFF) as u8),
-                Err(_) => return, // Invalid input, don't add breakpoint
-            }
-        };
-
-        let breakpoint =
-            AnyBreakpoint::crtc_counters_breakpoint(character_row, scan_line, horizontal_counter);
-        debugger.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.character_row_value_input.clear();
-        self.character_row_any_value = false;
-        self.scan_line_value_input.clear();
-        self.scan_line_any_value = false;
-        self.horizontal_counter_value_input.clear();
-        self.horizontal_counter_any_value = false;
-    }
-
-    fn add_address_breakpoint(&mut self, debugger: &mut impl Debugger) {
-        let address = if self.address_any_value {
-            None
-        } else {
-            match usize::from_str_radix(self.address_value_input.trim_start_matches("0x"), 16) {
-                Ok(val) => Some(val & 0xFFFF),
-                Err(_) => return, // Invalid input, don't add breakpoint
-            }
-        };
-
-        let breakpoint = AnyBreakpoint::crtc_address_breakpoint(address);
-        debugger.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.address_value_input.clear();
-        self.address_any_value = false;
-    }
-
-    fn add_horizontal_sync_breakpoint(&mut self, debugger: &mut impl Debugger) {
-        if !self.hsync_on_start && !self.hsync_on_end {
+    fn add_phase_breakpoint(&mut self, debugger: &mut impl Debugger) {
+        if !self.phase_on_enter && !self.phase_on_leave {
             return;
         }
 
-        let breakpoint =
-            AnyBreakpoint::crtc_horizontal_sync_breakpoint(self.hsync_on_start, self.hsync_on_end);
-        debugger.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.hsync_on_start = false;
-        self.hsync_on_end = false;
-    }
-
-    fn add_vertical_sync_breakpoint(&mut self, debugger: &mut impl Debugger) {
-        if !self.vsync_on_start && !self.vsync_on_end {
-            return;
-        }
-
-        let breakpoint =
-            AnyBreakpoint::crtc_vertical_sync_breakpoint(self.vsync_on_start, self.vsync_on_end);
-        debugger.breakpoint_manager().add_breakpoint(breakpoint);
-
-        self.vsync_on_start = false;
-        self.vsync_on_end = false;
-    }
-
-    fn add_display_enable_breakpoint(&mut self, debugger: &mut impl Debugger) {
-        if !self.display_enable_on_start && !self.display_enable_on_end {
-            return;
-        }
-
-        let breakpoint = AnyBreakpoint::crtc_dispaly_enable_breakpoint(
-            self.display_enable_on_start,
-            self.display_enable_on_end,
+        let breakpoint = AnyBreakpoint::fdc_phase_breakpoint(
+            self.phase,
+            self.phase_on_enter,
+            self.phase_on_leave,
         );
         debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
-        self.display_enable_on_start = false;
-        self.display_enable_on_end = false;
+        self.phase = None;
+        self.phase_on_enter = false;
+        self.phase_on_leave = false;
     }
 }
 
