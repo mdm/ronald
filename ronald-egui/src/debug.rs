@@ -1,5 +1,6 @@
 mod cpu;
 mod crtc;
+mod fdc;
 mod gate_array;
 mod memory;
 
@@ -10,6 +11,7 @@ use ronald_core::{
 
 pub use cpu::CpuDebugWindow;
 pub use crtc::CrtcDebugWindow;
+pub use fdc::FdcDebugWindow;
 pub use gate_array::GateArrayDebugWindow;
 pub use memory::MemoryDebugWindow;
 
