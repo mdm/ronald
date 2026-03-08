@@ -9,7 +9,7 @@ games that I remember fondly from my childhood.
 
 ## Features
 
-* Supports the CPC 464 model. The 664 and 6128 models are work in progress
+* Supports the CPC 464 and 664 models. The 6128 model is work in progress
 * Can load DSK disk images. Tape image loading is not yet supported
 * Workbench mode with extensive debugging capabilities
 * Accurate audio support (thanks to the excellent [psg](https://github.com/thedjinn/psg-rs) crate)
@@ -18,8 +18,6 @@ games that I remember fondly from my childhood.
 
 Running The Emulator
 --------------------
-
-You can try out the WebAssembly version at https://ronald.int82.dev without installing anything.
 
 If you have Rust installed you can easily run the emulator from the command line
 using
