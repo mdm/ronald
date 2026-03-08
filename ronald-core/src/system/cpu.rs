@@ -1762,7 +1762,7 @@ where
                 unreachable!();
             }
             Instruction::Push(Operand::Register16(source)) => {
-                let new_sp = self.registers.read_word(&Register16::SP) - 2;
+                let new_sp = self.registers.read_word(&Register16::SP).wrapping_sub(2);
                 self.registers.write_word(&Register16::SP, new_sp);
                 memory.write_word(new_sp as usize, self.registers.read_word(source));
                 self.registers
