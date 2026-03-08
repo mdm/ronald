@@ -32,6 +32,10 @@ impl SoundGenerator {
                     self.buffer
                 );
 
+                if self.selected_register >= self.registers.len() {
+                    return;
+                }
+
                 self.registers[self.selected_register] = self.buffer;
 
                 if let Some(psg) = &mut self.psg {
@@ -106,7 +110,8 @@ impl SoundGenerator {
                 }
             }
             3 => {
-                self.selected_register = self.buffer as usize; // TODO: check bounds
+                // TODO: check bounds properly
+                self.selected_register = (self.buffer & 0xf) as usize;
             }
             _ => unimplemented!(),
         }
