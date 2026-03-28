@@ -1145,7 +1145,7 @@ impl fmt::Display for FdcRegisterBreakpoint {
 
 #[derive(Debug, Clone)]
 pub struct FdcPhaseBreakpoint {
-    pub value: Option<FdcPhase>,
+    pub phase: Option<FdcPhase>,
     pub on_enter: bool,
     pub on_leave: bool,
     enabled: bool,
@@ -1154,9 +1154,9 @@ pub struct FdcPhaseBreakpoint {
 }
 
 impl FdcPhaseBreakpoint {
-    pub fn new(value: Option<FdcPhase>, on_enter: bool, on_leave: bool) -> Self {
+    pub fn new(phase: Option<FdcPhase>, on_enter: bool, on_leave: bool) -> Self {
         Self {
-            value,
+            phase,
             on_enter,
             on_leave,
             enabled: true,
@@ -1174,10 +1174,10 @@ impl Breakpoint for FdcPhaseBreakpoint {
 
         match event {
             DebugEvent::Fdc(FdcDebugEvent::PhaseChanged { is, .. }) if self.on_enter => {
-                self.value.is_none_or(|v| v == *is)
+                self.phase.is_none_or(|v| v == *is)
             }
             DebugEvent::Fdc(FdcDebugEvent::PhaseChanged { was, .. }) if self.on_leave => {
-                self.value.is_none_or(|v| v == *was)
+                self.phase.is_none_or(|v| v == *was)
             }
             _ => false,
         }
@@ -1210,11 +1210,21 @@ impl Breakpoint for FdcPhaseBreakpoint {
 
 impl fmt::Display for FdcPhaseBreakpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.value {
-            Some(FdcPhase::Command) => write!(f, "Command (idle) phase entered"),
-            Some(FdcPhase::Execution) => write!(f, "Execution phase entered"),
-            Some(FdcPhase::Result) => write!(f, "Result phase entered"),
-            None => write!(f, "Phase changed"),
+        match self.phase {
+            Some(FdcPhase::Command) => write!(f, "Command (idle) phase ")?,
+            Some(FdcPhase::Execution) => write!(f, "Execution phase ")?,
+            Some(FdcPhase::Result) => write!(f, "Result phase ")?,
+            None => write!(f, "Phase ")?,
+        }
+
+        match (self.on_enter, self.on_leave) {
+            (true, false) => write!(f, "entered"),
+            (false, true) => write!(f, "left"),
+            (true, true) => write!(f, "changed"),
+            (false, false) => {
+                debug_assert!(false, "invalid fdc phase change breakpoint");
+                write!(f, "(never)")
+            }
         }
     }
 }

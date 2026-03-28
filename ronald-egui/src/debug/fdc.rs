@@ -36,6 +36,8 @@ pub struct FdcDebugWindow {
     #[serde(skip, default)]
     phase: Option<Phase>,
     #[serde(skip, default)]
+    phase_any: bool,
+    #[serde(skip, default)]
     phase_on_enter: bool,
     #[serde(skip, default)]
     phase_on_leave: bool,
@@ -77,122 +79,7 @@ impl FdcDebugWindow {
                 ui.label("Result Buffer:");
                 self.render_buffer(ui, &fdc.result_buffer);
                 ui.end_row();
-
-                // for (i, value) in crtc.registers.iter().enumerate() {
-                //     let register = CrtcRegister::try_from(i).unwrap();
-                //     let is_selected = register == crtc.selected_register;
-                //
-                //     let label = format!("{}:", register);
-                //     if is_selected {
-                //         ui.colored_label(colors::DARK_YELLOW_GOLD, label);
-                //     } else {
-                //         ui.label(label);
-                //     }
-                //
-                //     ui.monospace(format!("{:02X}", value));
-                //
-                //     if (i + 1) % 2 == 0 {
-                //         ui.end_row();
-                //     } else {
-                //         ui.separator();
-                //     }
-                // }
-                //
-                // let register = CrtcRegister::Unused;
-                // let is_selected = register == crtc.selected_register;
-                //
-                // let label = format!("{}:", register);
-                // if is_selected {
-                //     ui.colored_label(colors::DARK_YELLOW_GOLD, label);
-                // } else {
-                //     ui.label(label);
-                // }
-                //
-                // ui.monospace("-");
-                // ui.separator();
-                //
-                // let register = CrtcRegister::Dummy;
-                // let is_selected = register == crtc.selected_register;
-                //
-                // let label = format!("{}:", register);
-                // if is_selected {
-                //     ui.colored_label(colors::DARK_YELLOW_GOLD, label);
-                // } else {
-                //     ui.label(label);
-                // }
-                //
-                // ui.monospace("-");
-                // ui.end_row();
             });
-
-        // ui.add_space(8.0);
-        //
-        // // Counters Section
-        // ui.heading("Counters");
-        // egui::Grid::new("crtc_counters_grid")
-        //     .num_columns(2)
-        //     .spacing([10.0, 4.0])
-        //     .show(ui, |ui| {
-        //         ui.label("Horizontal Counter:");
-        //         ui.label(format!("{:02X}", crtc.horizontal_counter));
-        //         ui.end_row();
-        //
-        //         ui.label("Character Row Counter:");
-        //         ui.label(format!("{:02X}", crtc.character_row_counter));
-        //         ui.end_row();
-        //
-        //         ui.label("Scan Line Counter:");
-        //         ui.label(format!("{:02X}", crtc.scan_line_counter));
-        //         ui.end_row();
-        //     });
-        //
-        // ui.add_space(8.0);
-        //
-        // // Address Section
-        // ui.heading("Addresses");
-        // egui::Grid::new("crtc_addresses_grid")
-        //     .num_columns(2)
-        //     .spacing([10.0, 4.0])
-        //     .show(ui, |ui| {
-        //         ui.label("Display Start Address:");
-        //         ui.monospace(format!("{:04X}", crtc.display_start_address));
-        //         ui.end_row();
-        //
-        //         ui.label("Current Address:");
-        //         ui.monospace(format!("{:04X}", crtc.current_address));
-        //         ui.end_row();
-        //     });
-        //
-        // ui.add_space(8.0);
-        //
-        // // Status Section
-        // ui.heading("Status");
-        // ui.horizontal(|ui| {
-        //     let hsync_color = if crtc.hsync_active {
-        //         colors::FORREST_GREEN
-        //     } else {
-        //         colors::MEDIUM_GRAY
-        //     };
-        //     ui.colored_label(hsync_color, "HSYNC");
-        //
-        //     ui.separator();
-        //
-        //     let vsync_color = if crtc.vsync_active {
-        //         colors::FORREST_GREEN
-        //     } else {
-        //         colors::MEDIUM_GRAY
-        //     };
-        //     ui.colored_label(vsync_color, "VSYNC");
-        //
-        //     ui.separator();
-        //
-        //     let display_color = if crtc.display_enabled {
-        //         colors::FORREST_GREEN
-        //     } else {
-        //         colors::MEDIUM_GRAY
-        //     };
-        //     ui.colored_label(display_color, "DISPLAY");
-        // });
     }
 
     fn render_buffer(&self, ui: &mut egui::Ui, buffer: &[u8]) {
@@ -334,20 +221,23 @@ impl FdcDebugWindow {
                 // Phase change breakpoint
                 ui.label("Phase change:");
                 ui.horizontal(|ui| {
-                    egui::ComboBox::from_id_salt("fdc_phase_change_selector")
-                        .width(180.0)
-                        .selected_text(match self.phase {
-                            Some(ref reg) => format!("{}", reg),
-                            None => "Select phase...".to_string(),
-                        })
-                        .show_ui(ui, |ui| {
-                            let reg = Phase::Command;
-                            ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
-                            let reg = Phase::Execution;
-                            ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
-                            let reg = Phase::Result;
-                            ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
-                        });
+                    ui.add_enabled_ui(!self.phase_any, |ui| {
+                        egui::ComboBox::from_id_salt("fdc_phase_change_selector")
+                            .width(180.0)
+                            .selected_text(match self.phase {
+                                Some(ref reg) => format!("{}", reg),
+                                None => "Select phase...".to_string(),
+                            })
+                            .show_ui(ui, |ui| {
+                                let reg = Phase::Command;
+                                ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
+                                let reg = Phase::Execution;
+                                ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
+                                let reg = Phase::Result;
+                                ui.selectable_value(&mut self.phase, Some(reg), format!("{}", reg));
+                            });
+                    });
+                    ui.checkbox(&mut self.phase_any, "Any");
                     ui.checkbox(&mut self.phase_on_enter, "Enter");
                     ui.checkbox(&mut self.phase_on_leave, "Leave");
 
@@ -476,11 +366,17 @@ impl FdcDebugWindow {
             return;
         }
 
-        let breakpoint = AnyBreakpoint::fdc_phase_breakpoint(
-            self.phase,
-            self.phase_on_enter,
-            self.phase_on_leave,
-        );
+        let phase = if self.phase_any {
+            None
+        } else {
+            match self.phase {
+                phase @ Some(_) => phase,
+                None => return, // Invalid input, don't add breakpoint
+            }
+        };
+
+        let breakpoint =
+            AnyBreakpoint::fdc_phase_breakpoint(phase, self.phase_on_enter, self.phase_on_leave);
         debugger.breakpoint_manager().add_breakpoint(breakpoint);
 
         self.phase = None;
