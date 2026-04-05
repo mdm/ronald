@@ -2,7 +2,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
-use ronald_core::system::bus::fdc::{Phase, Register};
+use ronald_core::system::bus::fdc::{Command, Phase, Register};
 
 use crate::colors;
 use crate::debug::Debugger;
@@ -47,7 +47,6 @@ impl FdcDebugWindow {
     pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
         let mut open = self.show;
         egui::Window::new("FDC Internals")
-            .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
                 self.render_fdc_state(ui, debugger);
@@ -61,19 +60,72 @@ impl FdcDebugWindow {
         let debug_view = debugger.debug_view();
         let fdc = &debug_view.fdc;
 
-        // Registers Section
+        ui.heading("FDC State");
+        egui::Grid::new("fdc_state_grid")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("FDC Phase:");
+                ui.label(fdc.phase.to_string());
+                ui.end_row();
+            });
+        ui.separator();
+
+        ui.heading("Command Details");
+        egui::Grid::new("fdc_command_grid")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("Command:");
+                match fdc.current_command {
+                    Some(Command::ReadData { .. }) => ui.label("Read Data"),
+                    Some(Command::ReadDeletedData { .. }) => ui.label("Read Deleted Data"),
+                    Some(Command::WriteData { .. }) => ui.label("Write Data"),
+                    Some(Command::WriteDeletedData { .. }) => ui.label("Write Deleted Data"),
+                    Some(Command::ReadTrack { .. }) => ui.label("Read Track"),
+                    Some(Command::ReadId { .. }) => ui.label("Read ID"),
+                    Some(Command::FormatTrack { .. }) => ui.label("Format Track"),
+                    Some(Command::ScanEqual { .. }) => ui.label("Scan Equal"),
+                    Some(Command::ScanLowOrEqual { .. }) => ui.label("Scan Low or Equal"),
+                    Some(Command::ScanHighOrEqual { .. }) => ui.label("Scan High or Equal"),
+                    Some(Command::Recalibrate { .. }) => ui.label("Recalibrate"),
+                    Some(Command::SenseInterruptStatus) => ui.label("Sense Interrupt Status"),
+                    Some(Command::Specify { .. }) => ui.label("Specify"),
+                    Some(Command::SenseDriveStatus { .. }) => ui.label("Sense Drive Status"),
+                    Some(Command::Seek { .. }) => ui.label("Seek"),
+                    Some(Command::Invalid) => ui.label("Invalid"),
+                    None => ui.label("None"),
+                };
+                ui.end_row();
+
+                ui.label("Result:");
+                ui.label("-");
+                ui.end_row();
+            });
+        ui.separator();
+
         ui.heading("Buffers");
+
+        let max_height = ui
+            .ctx()
+            .available_rect()
+            .height()
+            .min(ui.max_rect().height());
 
         egui::Grid::new("fdc_buffers_grid")
             .num_columns(2)
-            .spacing([10.0, 4.0])
             .show(ui, |ui| {
                 ui.label("Command Buffer:");
                 self.render_buffer(ui, &fdc.command_buffer);
                 ui.end_row();
 
-                ui.label("Data Buffer:");
-                self.render_buffer(ui, &fdc.data_buffer);
+                ui.with_layout(egui::Layout::top_down(egui::Align::TOP), |ui| {
+                    ui.label("Data Buffer:");
+                });
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, true])
+                    .max_height(max_height)
+                    .show(ui, |ui| {
+                        self.render_buffer(ui, &fdc.data_buffer);
+                    });
                 ui.end_row();
 
                 ui.label("Result Buffer:");

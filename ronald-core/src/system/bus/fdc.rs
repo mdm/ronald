@@ -31,7 +31,7 @@ pub enum Phase {
 impl Display for Phase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Command => write!(f, "Command"),
+            Self::Command => write!(f, "Command (idle)"),
             Self::Execution => write!(f, "Execution"),
             Self::Result => write!(f, "Result"),
         }
