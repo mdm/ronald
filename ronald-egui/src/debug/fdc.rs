@@ -49,9 +49,11 @@ impl FdcDebugWindow {
         egui::Window::new("FDC Internals")
             .open(&mut open)
             .show(ctx, |ui| {
-                self.render_fdc_state(ui, debugger);
-                ui.separator();
-                self.render_breakpoints_section(ui, debugger);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    self.render_fdc_state(ui, debugger);
+                    ui.separator();
+                    self.render_breakpoints_section(ui, debugger);
+                });
             });
         self.show = open;
     }
@@ -104,12 +106,6 @@ impl FdcDebugWindow {
 
         ui.heading("Buffers");
 
-        let max_height = ui
-            .ctx()
-            .available_rect()
-            .height()
-            .min(ui.max_rect().height());
-
         egui::Grid::new("fdc_buffers_grid")
             .num_columns(2)
             .show(ui, |ui| {
@@ -120,12 +116,7 @@ impl FdcDebugWindow {
                 ui.with_layout(egui::Layout::top_down(egui::Align::TOP), |ui| {
                     ui.label("Data Buffer:");
                 });
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, true])
-                    .max_height(max_height)
-                    .show(ui, |ui| {
-                        self.render_buffer(ui, &fdc.data_buffer);
-                    });
+                self.render_buffer(ui, &fdc.data_buffer);
                 ui.end_row();
 
                 ui.label("Result Buffer:");
