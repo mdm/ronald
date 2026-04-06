@@ -2,7 +2,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
-use ronald_core::system::bus::fdc::{Command, Phase, Register};
+use ronald_core::system::bus::fdc::{Chrn, Command, Mode, Phase, Register};
 
 use crate::colors;
 use crate::debug::Debugger;
@@ -73,35 +73,7 @@ impl FdcDebugWindow {
         ui.separator();
 
         ui.heading("Command Details");
-        egui::Grid::new("fdc_command_grid")
-            .num_columns(2)
-            .show(ui, |ui| {
-                ui.label("Command:");
-                match fdc.current_command {
-                    Some(Command::ReadData { .. }) => ui.label("Read Data"),
-                    Some(Command::ReadDeletedData { .. }) => ui.label("Read Deleted Data"),
-                    Some(Command::WriteData { .. }) => ui.label("Write Data"),
-                    Some(Command::WriteDeletedData { .. }) => ui.label("Write Deleted Data"),
-                    Some(Command::ReadTrack { .. }) => ui.label("Read Track"),
-                    Some(Command::ReadId { .. }) => ui.label("Read ID"),
-                    Some(Command::FormatTrack { .. }) => ui.label("Format Track"),
-                    Some(Command::ScanEqual { .. }) => ui.label("Scan Equal"),
-                    Some(Command::ScanLowOrEqual { .. }) => ui.label("Scan Low or Equal"),
-                    Some(Command::ScanHighOrEqual { .. }) => ui.label("Scan High or Equal"),
-                    Some(Command::Recalibrate { .. }) => ui.label("Recalibrate"),
-                    Some(Command::SenseInterruptStatus) => ui.label("Sense Interrupt Status"),
-                    Some(Command::Specify { .. }) => ui.label("Specify"),
-                    Some(Command::SenseDriveStatus { .. }) => ui.label("Sense Drive Status"),
-                    Some(Command::Seek { .. }) => ui.label("Seek"),
-                    Some(Command::Invalid) => ui.label("Invalid"),
-                    None => ui.label("None"),
-                };
-                ui.end_row();
-
-                ui.label("Result:");
-                ui.label("-");
-                ui.end_row();
-            });
+        self.render_command(ui, &fdc.current_command);
         ui.separator();
 
         ui.heading("Buffers");
@@ -123,6 +95,513 @@ impl FdcDebugWindow {
                 self.render_buffer(ui, &fdc.result_buffer);
                 ui.end_row();
             });
+    }
+
+    fn render_command(&self, ui: &mut egui::Ui, command: &Option<Command>) {
+        egui::Grid::new("fdc_command_grid")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("Command:");
+                match *command {
+                    Some(Command::ReadData {
+                        multi_track,
+                        mode,
+                        skip,
+                        head,
+                        unit_select,
+                        chrn,
+                        end_of_track,
+                        gap_length,
+                        data_length,
+                    }) => {
+                        ui.label("Read Data");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            Some(multi_track),
+                            Some(mode),
+                            Some(skip),
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        self.render_command_parameters(
+                            ui,
+                            Some(chrn),
+                            Some(end_of_track),
+                            Some(gap_length),
+                            Some(data_length),
+                        );
+                    }
+                    Some(Command::ReadDeletedData {
+                        multi_track,
+                        mode,
+                        skip,
+                        head,
+                        unit_select,
+                        chrn,
+                        end_of_track,
+                        gap_length,
+                        data_length,
+                    }) => {
+                        ui.label("Read Deleted Data");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            Some(multi_track),
+                            Some(mode),
+                            Some(skip),
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        self.render_command_parameters(
+                            ui,
+                            Some(chrn),
+                            Some(end_of_track),
+                            Some(gap_length),
+                            Some(data_length),
+                        );
+                    }
+                    Some(Command::WriteData {
+                        multi_track,
+                        mode,
+                        head,
+                        unit_select,
+                        chrn,
+                        end_of_track,
+                        gap_length,
+                        data_length,
+                    }) => {
+                        ui.label("Write Data");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            Some(multi_track),
+                            Some(mode),
+                            None,
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        self.render_command_parameters(
+                            ui,
+                            Some(chrn),
+                            Some(end_of_track),
+                            Some(gap_length),
+                            Some(data_length),
+                        );
+                    }
+                    Some(Command::WriteDeletedData {
+                        multi_track,
+                        mode,
+                        head,
+                        unit_select,
+                        chrn,
+                        end_of_track,
+                        gap_length,
+                        data_length,
+                    }) => {
+                        ui.label("Write Deleted Data");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            Some(multi_track),
+                            Some(mode),
+                            None,
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        self.render_command_parameters(
+                            ui,
+                            Some(chrn),
+                            Some(end_of_track),
+                            Some(gap_length),
+                            Some(data_length),
+                        );
+                    }
+                    Some(Command::ReadTrack {
+                        mode,
+                        skip,
+                        head,
+                        unit_select,
+                        chrn,
+                        end_of_track,
+                        gap_length,
+                        data_length,
+                    }) => {
+                        ui.label("Read Track");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            None,
+                            Some(mode),
+                            Some(skip),
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        self.render_command_parameters(
+                            ui,
+                            Some(chrn),
+                            Some(end_of_track),
+                            Some(gap_length),
+                            Some(data_length),
+                        );
+                    }
+                    Some(Command::ReadId {
+                        mode,
+                        head,
+                        unit_select,
+                    }) => {
+                        ui.label("Read ID");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            None,
+                            Some(mode),
+                            None,
+                            Some(head),
+                            Some(unit_select),
+                        );
+                    }
+                    Some(Command::FormatTrack {
+                        mode,
+                        head,
+                        unit_select,
+                        number,
+                        sector,
+                        gap_length,
+                        data,
+                    }) => {
+                        ui.label("Format Track");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            None,
+                            Some(mode),
+                            None,
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        ui.label("Number:");
+                        ui.label(format!("{number}"));
+                        ui.end_row();
+
+                        ui.label("Sector:");
+                        ui.label(format!("{sector}"));
+                        ui.end_row();
+
+                        ui.label("Gap Length:");
+                        ui.label(format!("{gap_length}"));
+                        ui.end_row();
+
+                        ui.label("Data:");
+                        ui.label(format!("{data}"));
+                        ui.end_row();
+                    }
+                    Some(Command::ScanEqual {
+                        multi_track,
+                        mode,
+                        skip,
+                        head,
+                        unit_select,
+                        chrn,
+                        end_of_track,
+                        gap_length,
+                        scan_type,
+                    }) => {
+                        ui.label("Scan Equal");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            Some(multi_track),
+                            Some(mode),
+                            Some(skip),
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        self.render_command_parameters(
+                            ui,
+                            Some(chrn),
+                            Some(end_of_track),
+                            Some(gap_length),
+                            None,
+                        );
+
+                        ui.label("Scan Type:");
+                        ui.label(format!("{scan_type}"));
+                        ui.end_row();
+                    }
+                    Some(Command::ScanLowOrEqual {
+                        multi_track,
+                        mode,
+                        skip,
+                        head,
+                        unit_select,
+                        chrn,
+                        end_of_track,
+                        gap_length,
+                        scan_type,
+                    }) => {
+                        ui.label("Scan Low or Equal");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            Some(multi_track),
+                            Some(mode),
+                            Some(skip),
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        self.render_command_parameters(
+                            ui,
+                            Some(chrn),
+                            Some(end_of_track),
+                            Some(gap_length),
+                            None,
+                        );
+
+                        ui.label("Scan Type:");
+                        ui.label(format!("{scan_type}"));
+                        ui.end_row();
+                    }
+                    Some(Command::ScanHighOrEqual {
+                        multi_track,
+                        mode,
+                        skip,
+                        head,
+                        unit_select,
+                        chrn,
+                        end_of_track,
+                        gap_length,
+                        scan_type,
+                    }) => {
+                        ui.label("Scan High or Equal");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            Some(multi_track),
+                            Some(mode),
+                            Some(skip),
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        self.render_command_parameters(
+                            ui,
+                            Some(chrn),
+                            Some(end_of_track),
+                            Some(gap_length),
+                            None,
+                        );
+
+                        ui.label("Scan Type:");
+                        ui.label(format!("{scan_type}"));
+                        ui.end_row();
+                    }
+                    Some(Command::Recalibrate { unit_select }) => {
+                        ui.label("Recalibrate");
+                        ui.end_row();
+
+                        self.render_command_flags(ui, None, None, None, None, Some(unit_select));
+                    }
+                    Some(Command::SenseInterruptStatus) => {
+                        ui.label("Sense Interrupt Status");
+                        ui.end_row();
+                    }
+                    Some(Command::Specify {
+                        step_rate_time,
+                        head_unload_time,
+                        head_load_time,
+                        non_dma_mode,
+                    }) => {
+                        ui.label("Specify");
+                        ui.end_row();
+
+                        ui.label("Step Rate Time:");
+                        ui.label(format!("{step_rate_time}"));
+                        ui.end_row();
+
+                        ui.label("Head Unload Time:");
+                        ui.label(format!("{head_unload_time}"));
+                        ui.end_row();
+
+                        ui.label("Head Load Time:");
+                        ui.label(format!("{head_load_time}"));
+                        ui.end_row();
+
+                        ui.label("Non-DMA Mode:");
+                        match non_dma_mode {
+                            true => ui.colored_label(colors::FORREST_GREEN, "YES"),
+                            false => ui.colored_label(colors::DARK_RED, "NO"),
+                        };
+                        ui.end_row();
+                    }
+                    Some(Command::SenseDriveStatus { head, unit_select }) => {
+                        ui.label("Sense Drive Status");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            None,
+                            None,
+                            None,
+                            Some(head),
+                            Some(unit_select),
+                        );
+                    }
+                    Some(Command::Seek {
+                        head,
+                        unit_select,
+                        new_cylinder_number,
+                    }) => {
+                        ui.label("Seek");
+                        ui.end_row();
+
+                        self.render_command_flags(
+                            ui,
+                            None,
+                            None,
+                            None,
+                            Some(head),
+                            Some(unit_select),
+                        );
+
+                        ui.label("New Cylinder Number:");
+                        ui.label(format!("{new_cylinder_number}"));
+                        ui.end_row();
+                    }
+                    Some(Command::Invalid) => {
+                        ui.label("Invalid");
+                        ui.end_row();
+                    }
+                    None => {
+                        ui.label("-");
+                        ui.end_row();
+                    }
+                };
+            });
+    }
+
+    fn render_command_flags(
+        &self,
+        ui: &mut egui::Ui,
+        multi_track: Option<bool>,
+        mode: Option<Mode>,
+        skip: Option<bool>,
+        head: Option<u8>,
+        unit_select: Option<u8>,
+    ) {
+        match multi_track {
+            Some(true) => {
+                ui.label("Multi-Track:");
+                ui.colored_label(colors::FORREST_GREEN, "YES");
+                ui.end_row();
+            }
+            Some(false) => {
+                ui.label("Multi-Track:");
+                ui.colored_label(colors::DARK_RED, "NO");
+                ui.end_row();
+            }
+            None => {}
+        }
+
+        match mode {
+            Some(Mode::ModifiedFrequencyModulation) => {
+                ui.label("Mode:");
+                ui.label("Modified Frequency Modulation (MFM)");
+                ui.end_row();
+            }
+            Some(Mode::FrequencyModulation) => {
+                ui.label("Mode:");
+                ui.label("Frequency Modulation (FM)");
+                ui.end_row();
+            }
+            None => {}
+        }
+
+        match skip {
+            Some(true) => {
+                ui.label("Skip Deleted DAM:");
+                ui.colored_label(colors::FORREST_GREEN, "YES");
+                ui.end_row();
+            }
+            Some(false) => {
+                ui.label("Skip Deleted DAM:");
+                ui.colored_label(colors::DARK_RED, "NO");
+                ui.end_row();
+            }
+            None => {}
+        }
+
+        if let Some(head) = head {
+            ui.label("Head:");
+            ui.label(format!("{head}"));
+            ui.end_row();
+        }
+
+        if let Some(unit) = unit_select {
+            ui.label("Unit Select:");
+            ui.label(format!("{unit}"));
+            ui.end_row();
+        }
+    }
+
+    fn render_command_parameters(
+        &self,
+        ui: &mut egui::Ui,
+        chrn: Option<Chrn>,
+        end_of_track: Option<u8>,
+        gap_length: Option<u8>,
+        data_length: Option<u8>,
+    ) {
+        if let Some(Chrn {
+            cylinder_number,
+            head_address,
+            record,
+            number,
+        }) = chrn
+        {
+            ui.label("CHRN:");
+            ui.label(format!(
+                "Cylinder = {}, Head = {}, Record = {},  Number = {}",
+                cylinder_number, head_address, record, number
+            ));
+            ui.end_row();
+        };
+
+        if let Some(end_of_track) = end_of_track {
+            ui.label("End of Track:");
+            ui.label(format!("{end_of_track}"));
+            ui.end_row();
+        }
+
+        if let Some(gap_length) = gap_length {
+            ui.label("Gap Length:");
+            ui.label(format!("{gap_length}"));
+            ui.end_row();
+        }
+
+        if let Some(data_length) = data_length {
+            ui.label("Data Length:");
+            ui.label(format!("{data_length}"));
+            ui.end_row();
+        }
     }
 
     fn render_buffer(&self, ui: &mut egui::Ui, buffer: &[u8]) {

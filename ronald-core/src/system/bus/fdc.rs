@@ -113,10 +113,10 @@ impl From<u8> for CommandType {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Chrn {
-    cylinder_number: u8,
-    head_address: u8,
-    record: u8,
-    number: u8,
+    pub cylinder_number: u8,
+    pub head_address: u8,
+    pub record: u8,
+    pub number: u8,
 }
 
 impl Display for Chrn {
