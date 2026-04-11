@@ -489,7 +489,7 @@ impl From<&[u8]> for Command {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-enum InterruptCode {
+pub enum InterruptCode {
     #[default]
     NormalTermination,
     AbnormalTermination,
@@ -499,12 +499,12 @@ enum InterruptCode {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatusRegister0 {
-    interrupt_code: InterruptCode,
-    seek_end: bool,
-    equipment_check: bool,
-    not_ready: bool,
-    head_address: u8,
-    unit_select: u8,
+    pub interrupt_code: InterruptCode,
+    pub seek_end: bool,
+    pub equipment_check: bool,
+    pub not_ready: bool,
+    pub head_address: u8,
+    pub unit_select: u8,
 }
 
 impl From<StatusRegister0> for u8 {
@@ -539,13 +539,13 @@ impl From<StatusRegister0> for u8 {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct StatusRegister1 {
-    end_of_cylinder: bool,
-    data_error: bool,
-    over_run: bool,
-    no_data: bool,
-    not_writeable: bool,
-    missing_address_mark: bool,
+pub struct StatusRegister1 {
+    pub end_of_cylinder: bool,
+    pub data_error: bool,
+    pub over_run: bool,
+    pub no_data: bool,
+    pub not_writeable: bool,
+    pub missing_address_mark: bool,
 }
 
 impl From<StatusRegister1> for u8 {
@@ -581,14 +581,14 @@ impl From<StatusRegister1> for u8 {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct StatusRegister2 {
-    control_mark: bool,
-    data_error_in_data_field: bool,
-    wrong_cylinder: bool,
-    scan_equal_hit: bool,
-    scan_not_satisfied: bool,
-    bad_cylinder: bool,
-    missing_address_mark_in_data_field: bool,
+pub struct StatusRegister2 {
+    pub control_mark: bool,
+    pub data_error_in_data_field: bool,
+    pub wrong_cylinder: bool,
+    pub scan_equal_hit: bool,
+    pub scan_not_satisfied: bool,
+    pub bad_cylinder: bool,
+    pub missing_address_mark_in_data_field: bool,
 }
 
 impl From<StatusRegister2> for u8 {
@@ -629,13 +629,13 @@ impl From<StatusRegister2> for u8 {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StatusRegister3 {
-    fault: bool,
-    write_protected: bool,
-    ready: bool,
-    track_zero: bool,
-    two_side: bool,
-    head_address: u8,
-    unit_select: u8,
+    pub fault: bool,
+    pub write_protected: bool,
+    pub ready: bool,
+    pub track_zero: bool,
+    pub two_side: bool,
+    pub head_address: u8,
+    pub unit_select: u8,
 }
 
 impl From<StatusRegister3> for u8 {
@@ -672,10 +672,10 @@ impl From<StatusRegister3> for u8 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StandardResult {
-    st0: StatusRegister0,
-    st1: StatusRegister1,
-    st2: StatusRegister2,
-    chrn: Chrn,
+    pub st0: StatusRegister0,
+    pub st1: StatusRegister1,
+    pub st2: StatusRegister2,
+    pub chrn: Chrn,
 }
 
 impl StandardResult {

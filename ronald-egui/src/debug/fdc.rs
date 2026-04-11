@@ -2,7 +2,10 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
-use ronald_core::system::bus::fdc::{Chrn, Command, Mode, Phase, Register};
+use ronald_core::system::bus::fdc::{
+    Chrn, Command, CommandResult, InterruptCode, Mode, Phase, Register, StandardResult,
+    StatusRegister0, StatusRegister1, StatusRegister2,
+};
 
 use crate::colors;
 use crate::debug::Debugger;
@@ -74,6 +77,10 @@ impl FdcDebugWindow {
 
         ui.heading("Command Details");
         self.render_command(ui, &fdc.current_command);
+        ui.separator();
+
+        ui.heading("Command Result");
+        self.render_result(ui, &fdc.current_result);
         ui.separator();
 
         ui.heading("Buffers");
@@ -602,6 +609,248 @@ impl FdcDebugWindow {
             ui.label(format!("{data_length}"));
             ui.end_row();
         }
+    }
+
+    fn render_result(&self, ui: &mut egui::Ui, current_result: &Option<CommandResult>) {
+        egui::Grid::new("fdc_result_grid")
+            .num_columns(2)
+            .show(ui, |ui| match current_result {
+                Some(CommandResult::ReadData(standard_result))
+                | Some(CommandResult::ReadDeletedData(standard_result))
+                | Some(CommandResult::WriteData(standard_result))
+                | Some(CommandResult::WriteDeletedData(standard_result))
+                | Some(CommandResult::ReadTrack(standard_result))
+                | Some(CommandResult::ReadId(standard_result))
+                | Some(CommandResult::FormatTrack(standard_result))
+                | Some(CommandResult::ScanEqual(standard_result))
+                | Some(CommandResult::ScanLowOrEqual(standard_result))
+                | Some(CommandResult::ScanHighOrEqual(standard_result)) => {
+                    let StandardResult {
+                        st0,
+                        st1,
+                        st2,
+                        chrn,
+                    } = standard_result;
+
+                    self.render_status_register0(ui, st0);
+                    self.render_status_register1(ui, st1);
+                    self.render_status_register2(ui, st2);
+
+                    let Chrn {
+                        cylinder_number,
+                        head_address,
+                        record,
+                        number,
+                    } = chrn;
+
+                    ui.label("CHRN:");
+                    ui.label(format!(
+                        "Cylinder = {}, Head = {}, Record = {},  Number = {}",
+                        cylinder_number, head_address, record, number
+                    ));
+                    ui.end_row();
+                }
+                Some(CommandResult::Recalibrate)
+                | Some(CommandResult::Specify)
+                | Some(CommandResult::Seek) => {
+                    ui.label("Command has no result");
+                }
+                Some(CommandResult::SenseInterruptStatus { st0, pcn }) => {
+                    self.render_status_register0(ui, st0);
+
+                    ui.label("Present Cylinder Number:");
+                    ui.label(format!("{pcn}"));
+                    ui.end_row();
+                }
+                Some(CommandResult::SenseDriveStatus { st3 }) => {
+                    todo!()
+                }
+                Some(CommandResult::Invalid { st0 }) => {
+                    self.render_status_register0(ui, st0);
+                }
+                None => {}
+            });
+    }
+
+    fn render_status_register0(&self, ui: &mut egui::Ui, st0: &StatusRegister0) {
+        ui.label("Status Register 0:");
+        ui.horizontal(|ui| {
+            match st0.interrupt_code {
+                InterruptCode::NormalTermination => {
+                    ui.label("NT");
+                }
+                InterruptCode::AbnormalTermination => {
+                    ui.label("AT");
+                }
+                InterruptCode::InvalidCommand => {
+                    ui.label("IC");
+                }
+                InterruptCode::ReadyChanged => {
+                    ui.label("RC");
+                }
+            }
+
+            ui.colored_label(
+                if st0.seek_end {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "SE",
+            );
+
+            ui.colored_label(
+                if st0.equipment_check {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "EC",
+            );
+
+            ui.colored_label(
+                if st0.not_ready {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "NR",
+            );
+
+            ui.label(format!("H{}", st0.head_address));
+
+            ui.label(format!("US{:02b}", st0.head_address));
+        });
+        ui.end_row();
+    }
+
+    fn render_status_register1(&self, ui: &mut egui::Ui, st1: &StatusRegister1) {
+        ui.label("Status Register 1:");
+        ui.horizontal(|ui| {
+            ui.colored_label(
+                if st1.end_of_cylinder {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "EN",
+            );
+
+            ui.colored_label(
+                if st1.data_error {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "DE",
+            );
+
+            ui.colored_label(
+                if st1.over_run {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "OR",
+            );
+
+            ui.colored_label(
+                if st1.no_data {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "ND",
+            );
+
+            ui.colored_label(
+                if st1.not_writeable {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "NW",
+            );
+
+            ui.colored_label(
+                if st1.missing_address_mark {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "MA",
+            );
+        });
+        ui.end_row();
+    }
+
+    fn render_status_register2(&self, ui: &mut egui::Ui, st2: &StatusRegister2) {
+        ui.label("Status Register 0:");
+        ui.horizontal(|ui| {
+            ui.colored_label(
+                if st2.control_mark {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "CM",
+            );
+
+            ui.colored_label(
+                if st2.data_error_in_data_field {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "DD",
+            );
+
+            ui.colored_label(
+                if st2.wrong_cylinder {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "WC",
+            );
+
+            ui.colored_label(
+                if st2.scan_equal_hit {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "SH",
+            );
+
+            ui.colored_label(
+                if st2.scan_not_satisfied {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "SN",
+            );
+
+            ui.colored_label(
+                if st2.bad_cylinder {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "BC",
+            );
+
+            ui.colored_label(
+                if st2.missing_address_mark_in_data_field {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "MD",
+            );
+        });
+        ui.end_row();
     }
 
     fn render_buffer(&self, ui: &mut egui::Ui, buffer: &[u8]) {
