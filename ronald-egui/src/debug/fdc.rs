@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
 use ronald_core::system::bus::fdc::{
     Chrn, Command, CommandResult, InterruptCode, Mode, Phase, Register, StandardResult,
-    StatusRegister0, StatusRegister1, StatusRegister2,
+    StatusRegister0, StatusRegister1, StatusRegister2, StatusRegister3,
 };
 
 use crate::colors;
@@ -663,7 +663,7 @@ impl FdcDebugWindow {
                     ui.end_row();
                 }
                 Some(CommandResult::SenseDriveStatus { st3 }) => {
-                    todo!()
+                    self.render_status_register3(ui, st3);
                 }
                 Some(CommandResult::Invalid { st0 }) => {
                     self.render_status_register0(ui, st0);
@@ -719,7 +719,7 @@ impl FdcDebugWindow {
 
             ui.label(format!("H{}", st0.head_address));
 
-            ui.label(format!("US{:02b}", st0.head_address));
+            ui.label(format!("US{:02b}", st0.unit_select));
         });
         ui.end_row();
     }
@@ -785,7 +785,7 @@ impl FdcDebugWindow {
     }
 
     fn render_status_register2(&self, ui: &mut egui::Ui, st2: &StatusRegister2) {
-        ui.label("Status Register 0:");
+        ui.label("Status Register 2:");
         ui.horizontal(|ui| {
             ui.colored_label(
                 if st2.control_mark {
@@ -849,6 +849,61 @@ impl FdcDebugWindow {
                 },
                 "MD",
             );
+        });
+        ui.end_row();
+    }
+
+    fn render_status_register3(&self, ui: &mut egui::Ui, st3: &StatusRegister3) {
+        ui.label("Status Register 3:");
+        ui.horizontal(|ui| {
+            ui.colored_label(
+                if st3.fault {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "FT",
+            );
+
+            ui.colored_label(
+                if st3.write_protected {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "WP",
+            );
+
+            ui.colored_label(
+                if st3.ready {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "RY",
+            );
+
+            ui.colored_label(
+                if st3.track_zero {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "T0",
+            );
+
+            ui.colored_label(
+                if st3.two_side {
+                    colors::FORREST_GREEN
+                } else {
+                    colors::MEDIUM_GRAY
+                },
+                "TS",
+            );
+
+            ui.label(format!("H{}", st3.head_address));
+
+            ui.label(format!("US{:02b}", st3.unit_select));
         });
         ui.end_row();
     }
