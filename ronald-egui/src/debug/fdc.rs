@@ -1,4 +1,7 @@
+use std::fmt::format;
+
 use eframe::egui;
+use ronald_core::debug::view::FdcDebugView;
 use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
@@ -52,11 +55,11 @@ impl FdcDebugWindow {
         egui::Window::new("FDC Internals")
             .open(&mut open)
             .show(ctx, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    self.render_fdc_state(ui, debugger);
-                    ui.separator();
-                    self.render_breakpoints_section(ui, debugger);
-                });
+                self.render_fdc_state(ui, debugger);
+                ui.separator();
+                self.render_breakpoints_section(ui, debugger);
+                ui.separator();
+                self.render_fdc_buffers(ui, debugger);
             });
         self.show = open;
     }
@@ -69,39 +72,23 @@ impl FdcDebugWindow {
         egui::Grid::new("fdc_state_grid")
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("FDC Phase:");
+                ui.label("Current Phase:");
                 ui.label(fdc.phase.to_string());
                 ui.end_row();
             });
         ui.separator();
 
-        ui.heading("Command Details");
+        let age = match fdc.phase {
+            Phase::Command => "Last",
+            _ => "Current",
+        };
+
+        ui.heading(format!("{} Command Details", age));
         self.render_command(ui, &fdc.current_command);
         ui.separator();
 
-        ui.heading("Command Result");
+        ui.heading(format!("{} Command Result", age));
         self.render_result(ui, &fdc.current_result);
-        ui.separator();
-
-        ui.heading("Buffers");
-
-        egui::Grid::new("fdc_buffers_grid")
-            .num_columns(2)
-            .show(ui, |ui| {
-                ui.label("Command Buffer:");
-                self.render_buffer(ui, &fdc.command_buffer);
-                ui.end_row();
-
-                ui.with_layout(egui::Layout::top_down(egui::Align::TOP), |ui| {
-                    ui.label("Data Buffer:");
-                });
-                self.render_buffer(ui, &fdc.data_buffer);
-                ui.end_row();
-
-                ui.label("Result Buffer:");
-                self.render_buffer(ui, &fdc.result_buffer);
-                ui.end_row();
-            });
     }
 
     fn render_command(&self, ui: &mut egui::Ui, command: &Option<Command>) {
@@ -829,6 +816,33 @@ impl FdcDebugWindow {
         ui.label(bits.join(", "));
 
         ui.end_row();
+    }
+
+    fn render_fdc_buffers(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
+        let debug_view = debugger.debug_view();
+        let fdc = &debug_view.fdc;
+
+        ui.heading("Buffers");
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            egui::Grid::new("fdc_buffers_grid")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    ui.label("Command Buffer:");
+                    self.render_buffer(ui, &fdc.command_buffer);
+                    ui.end_row();
+
+                    ui.with_layout(egui::Layout::top_down(egui::Align::TOP), |ui| {
+                        ui.label("Data Buffer:");
+                    });
+                    self.render_buffer(ui, &fdc.data_buffer);
+                    ui.end_row();
+
+                    ui.label("Result Buffer:");
+                    self.render_buffer(ui, &fdc.result_buffer);
+                    ui.end_row();
+                });
+        });
     }
 
     fn render_buffer(&self, ui: &mut egui::Ui, buffer: &[u8]) {
