@@ -673,7 +673,9 @@ impl FdcDebugWindow {
     }
 
     fn render_status_register0(&self, ui: &mut egui::Ui, st0: &StatusRegister0) {
-        ui.label("Status Register 0:");
+        ui.with_layout(egui::Layout::top_down(egui::Align::TOP), |ui| {
+            ui.label("Status Register 0:");
+        });
 
         let mut bits = Vec::new();
 
@@ -704,19 +706,21 @@ impl FdcDebugWindow {
             bits.push("Not Ready");
         }
 
-        let head_address = format!("Head Address = {}", st0.head_address);
+        let head_address = format!("Head Address\u{00A0}=\u{00A0}{}", st0.head_address);
         bits.push(&head_address);
 
-        let unit_select = format!("Unit Select = {}", st0.unit_select);
+        let unit_select = format!("Unit Select\u{00A0}=\u{00A0}{}", st0.unit_select);
         bits.push(&unit_select);
 
-        ui.label(bits.join(", "));
+        ui.add(egui::Label::new(bits.join(", ")).wrap());
 
         ui.end_row();
     }
 
     fn render_status_register1(&self, ui: &mut egui::Ui, st1: &StatusRegister1) {
-        ui.label("Status Register 1:");
+        ui.with_layout(egui::Layout::top_down(egui::Align::TOP), |ui| {
+            ui.label("Status Register 1:");
+        });
 
         let mut bits = Vec::new();
 
@@ -750,7 +754,9 @@ impl FdcDebugWindow {
     }
 
     fn render_status_register2(&self, ui: &mut egui::Ui, st2: &StatusRegister2) {
-        ui.label("Status Register 2:");
+        ui.with_layout(egui::Layout::top_down(egui::Align::TOP), |ui| {
+            ui.label("Status Register 2:");
+        });
 
         let mut bits = Vec::new();
 
@@ -788,7 +794,9 @@ impl FdcDebugWindow {
     }
 
     fn render_status_register3(&self, ui: &mut egui::Ui, st3: &StatusRegister3) {
-        ui.label("Status Register 3:");
+        ui.with_layout(egui::Layout::top_down(egui::Align::TOP), |ui| {
+            ui.label("Status Register 3:");
+        });
 
         let mut bits = Vec::new();
 
@@ -812,10 +820,10 @@ impl FdcDebugWindow {
             bits.push("Two Side");
         }
 
-        let head_address = format!("Head Address = {}", st3.head_address);
+        let head_address = format!("Head Address\u{00A0}=\u{00A0}{}", st3.head_address);
         bits.push(&head_address);
 
-        let unit_select = format!("Unit Select = {:02b}", st3.unit_select);
+        let unit_select = format!("Unit Select\u{00A0}=\u{00A0}{}", st3.unit_select);
         bits.push(&unit_select);
 
         ui.label(bits.join(", "));
