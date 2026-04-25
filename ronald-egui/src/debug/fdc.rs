@@ -674,237 +674,152 @@ impl FdcDebugWindow {
 
     fn render_status_register0(&self, ui: &mut egui::Ui, st0: &StatusRegister0) {
         ui.label("Status Register 0:");
-        ui.horizontal(|ui| {
-            match st0.interrupt_code {
-                InterruptCode::NormalTermination => {
-                    ui.label("NT");
-                }
-                InterruptCode::AbnormalTermination => {
-                    ui.label("AT");
-                }
-                InterruptCode::InvalidCommand => {
-                    ui.label("IC");
-                }
-                InterruptCode::ReadyChanged => {
-                    ui.label("RC");
-                }
+
+        let mut bits = Vec::new();
+
+        match st0.interrupt_code {
+            InterruptCode::NormalTermination => {
+                bits.push("Normal Termination");
             }
+            InterruptCode::AbnormalTermination => {
+                bits.push("Abnormal Termination");
+            }
+            InterruptCode::InvalidCommand => {
+                bits.push("Invalid Command");
+            }
+            InterruptCode::ReadyChanged => {
+                bits.push("Ready Changed");
+            }
+        }
 
-            ui.colored_label(
-                if st0.seek_end {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "SE",
-            );
+        if st0.seek_end {
+            bits.push("Seek End");
+        }
 
-            ui.colored_label(
-                if st0.equipment_check {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "EC",
-            );
+        if st0.equipment_check {
+            bits.push("Equipment Check");
+        }
 
-            ui.colored_label(
-                if st0.not_ready {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "NR",
-            );
+        if st0.not_ready {
+            bits.push("Not Ready");
+        }
 
-            ui.label(format!("H{}", st0.head_address));
+        let head_address = format!("Head Address = {}", st0.head_address);
+        bits.push(&head_address);
 
-            ui.label(format!("US{:02b}", st0.unit_select));
-        });
+        let unit_select = format!("Unit Select = {}", st0.unit_select);
+        bits.push(&unit_select);
+
+        ui.label(bits.join(", "));
+
         ui.end_row();
     }
 
     fn render_status_register1(&self, ui: &mut egui::Ui, st1: &StatusRegister1) {
         ui.label("Status Register 1:");
-        ui.horizontal(|ui| {
-            ui.colored_label(
-                if st1.end_of_cylinder {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "EN",
-            );
 
-            ui.colored_label(
-                if st1.data_error {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "DE",
-            );
+        let mut bits = Vec::new();
 
-            ui.colored_label(
-                if st1.over_run {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "OR",
-            );
+        if st1.end_of_cylinder {
+            bits.push("End of Cylinder");
+        }
 
-            ui.colored_label(
-                if st1.no_data {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "ND",
-            );
+        if st1.data_error {
+            bits.push("Data Error");
+        }
 
-            ui.colored_label(
-                if st1.not_writeable {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "NW",
-            );
+        if st1.over_run {
+            bits.push("Over Run");
+        }
 
-            ui.colored_label(
-                if st1.missing_address_mark {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "MA",
-            );
-        });
+        if st1.no_data {
+            bits.push("No Data");
+        }
+
+        if st1.not_writeable {
+            bits.push("Not Writeable");
+        }
+
+        if st1.missing_address_mark {
+            bits.push("Missing Address Mark");
+        }
+
+        ui.label(bits.join(", "));
+
         ui.end_row();
     }
 
     fn render_status_register2(&self, ui: &mut egui::Ui, st2: &StatusRegister2) {
         ui.label("Status Register 2:");
-        ui.horizontal(|ui| {
-            ui.colored_label(
-                if st2.control_mark {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "CM",
-            );
 
-            ui.colored_label(
-                if st2.data_error_in_data_field {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "DD",
-            );
+        let mut bits = Vec::new();
 
-            ui.colored_label(
-                if st2.wrong_cylinder {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "WC",
-            );
+        if st2.control_mark {
+            bits.push("Control Mark");
+        }
 
-            ui.colored_label(
-                if st2.scan_equal_hit {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "SH",
-            );
+        if st2.data_error_in_data_field {
+            bits.push("Data Error in Data Field");
+        }
 
-            ui.colored_label(
-                if st2.scan_not_satisfied {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "SN",
-            );
+        if st2.wrong_cylinder {
+            bits.push("Wrong Cylinder");
+        }
 
-            ui.colored_label(
-                if st2.bad_cylinder {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "BC",
-            );
+        if st2.scan_equal_hit {
+            bits.push("Scan Equal Hit");
+        }
 
-            ui.colored_label(
-                if st2.missing_address_mark_in_data_field {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "MD",
-            );
-        });
+        if st2.scan_not_satisfied {
+            bits.push("Scan Not Satisfied");
+        }
+
+        if st2.bad_cylinder {
+            bits.push("Bad Cylinder");
+        }
+
+        if st2.missing_address_mark_in_data_field {
+            bits.push("Missing Address Mark in Data Field");
+        }
+
+        ui.label(bits.join(", "));
+
         ui.end_row();
     }
 
     fn render_status_register3(&self, ui: &mut egui::Ui, st3: &StatusRegister3) {
         ui.label("Status Register 3:");
-        ui.horizontal(|ui| {
-            ui.colored_label(
-                if st3.fault {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "FT",
-            );
 
-            ui.colored_label(
-                if st3.write_protected {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "WP",
-            );
+        let mut bits = Vec::new();
 
-            ui.colored_label(
-                if st3.ready {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "RY",
-            );
+        if st3.fault {
+            bits.push("Fault");
+        }
 
-            ui.colored_label(
-                if st3.track_zero {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "T0",
-            );
+        if st3.write_protected {
+            bits.push("Write Protected");
+        }
 
-            ui.colored_label(
-                if st3.two_side {
-                    colors::FORREST_GREEN
-                } else {
-                    colors::MEDIUM_GRAY
-                },
-                "TS",
-            );
+        if st3.ready {
+            bits.push("Ready");
+        }
 
-            ui.label(format!("H{}", st3.head_address));
+        if st3.track_zero {
+            bits.push("Track Zero");
+        }
 
-            ui.label(format!("US{:02b}", st3.unit_select));
-        });
+        if st3.two_side {
+            bits.push("Two Side");
+        }
+
+        let head_address = format!("Head Address = {}", st3.head_address);
+        bits.push(&head_address);
+
+        let unit_select = format!("Unit Select = {:02b}", st3.unit_select);
+        bits.push(&unit_select);
+
+        ui.label(bits.join(", "));
+
         ui.end_row();
     }
 
