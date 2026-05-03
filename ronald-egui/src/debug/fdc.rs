@@ -75,6 +75,58 @@ impl FdcDebugWindow {
                 ui.label("Current Phase:");
                 ui.label(fdc.phase.to_string());
                 ui.end_row();
+
+                let mut bits = Vec::new();
+
+                if fdc.main_status_register & (1 << 7) != 0 {
+                    bits.push("Request for Master");
+                }
+
+                if fdc.main_status_register & (1 << 6) != 0 {
+                    bits.push("Data Input");
+                } else {
+                    bits.push("Data Output");
+                }
+
+                if fdc.main_status_register & (1 << 5) != 0 {
+                    bits.push("Execution Mode");
+                }
+
+                if fdc.main_status_register & (1 << 4) != 0 {
+                    bits.push("FDC Busy");
+                }
+
+                if fdc.main_status_register & (1 << 1) != 0 {
+                    bits.push("Drive B Busy");
+                }
+
+                if fdc.main_status_register & (1 << 0) != 0 {
+                    bits.push("Drive A Busy");
+                }
+
+                ui.label("Main Status:");
+                ui.add(egui::Label::new(bits.join(", ")).wrap());
+                ui.end_row();
+
+                ui.label("Drive A Track:");
+                let track = match fdc.drive_a_track {
+                    Some(track) => track.to_string(),
+                    None => "No drive connected".to_string(),
+                };
+                ui.label(track);
+                ui.end_row();
+
+                ui.label("Drive B Track:");
+                let track = match fdc.drive_b_track {
+                    Some(track) => track.to_string(),
+                    None => "No drive connected".to_string(),
+                };
+                ui.label(track);
+                ui.end_row();
+
+                ui.label("Motors:");
+                ui.label(if fdc.motors_on { "On" } else { "Off" });
+                ui.end_row();
             });
         ui.separator();
 
@@ -735,7 +787,7 @@ impl FdcDebugWindow {
             bits.push("Missing Address Mark");
         }
 
-        ui.label(bits.join(", "));
+        ui.add(egui::Label::new(bits.join(", ")).wrap());
 
         ui.end_row();
     }
@@ -775,7 +827,7 @@ impl FdcDebugWindow {
             bits.push("Missing Address Mark in Data Field");
         }
 
-        ui.label(bits.join(", "));
+        ui.add(egui::Label::new(bits.join(", ")).wrap());
 
         ui.end_row();
     }
@@ -813,7 +865,7 @@ impl FdcDebugWindow {
         let unit_select = format!("Unit Select\u{00A0}=\u{00A0}{}", st3.unit_select);
         bits.push(&unit_select);
 
-        ui.label(bits.join(", "));
+        ui.add(egui::Label::new(bits.join(", ")).wrap());
 
         ui.end_row();
     }
