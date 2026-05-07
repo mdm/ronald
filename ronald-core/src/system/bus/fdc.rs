@@ -859,7 +859,7 @@ impl FloppyDiskController {
             Ok(Register::Data) => {
                 let value = match self.phase {
                     Phase::Execution => {
-                        // TODO: handle over run here (modify result if last poll more than 26us ago)
+                        // Design decision: Never report Over Run, since we don't have the constraints of the original hardware.
 
                         let data = if let Some(data) = self.data_buffer.pop_front() {
                             log::trace!("Reading data from FDC: {data:#04X}");
@@ -958,6 +958,8 @@ impl FloppyDiskController {
                         }
                     }
                     Phase::Execution => {
+                        // Design decision: Never report Over Run, since we don't have the constraints of the original hardware.
+
                         if let Some(command) = &self.current_command
                             && self.data_buffer.len() < command.write_len()
                         {
