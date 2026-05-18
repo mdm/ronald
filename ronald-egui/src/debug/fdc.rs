@@ -1,7 +1,4 @@
-use std::fmt::format;
-
 use eframe::egui;
-use ronald_core::debug::view::FdcDebugView;
 use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
@@ -1207,14 +1204,12 @@ mod gui_tests {
     use egui::accesskit;
     use egui_kittest::{Harness, kittest::Queryable};
 
-    use ronald_core::debug::breakpoint::{
-        CrtcAddressBreakpoint, CrtcCountersBreakpoint, CrtcRegisterWriteBreakpoint,
-    };
+    use ronald_core::debug::breakpoint::FdcRegisterBreakpoint;
 
     use crate::debug::mock::TestDebugger;
 
     #[test]
-    fn test_crtc_debug_window_opens_and_closes() {
+    fn test_fdc_debug_window_opens_and_closes() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1229,18 +1224,18 @@ mod gui_tests {
         harness.run();
 
         // Check that the window title is rendered
-        harness.get_by_label("CRTC Internals");
+        harness.get_by_label("FDC Internals");
 
         // Click close button
         harness.get_by_label("Close window").click();
         harness.run();
 
         // Window should no longer be visible
-        assert!(harness.query_by_label("CRTC Internals").is_none());
+        assert!(harness.query_by_label("FDC Internals").is_none());
     }
 
     #[test]
-    fn test_crtc_debug_window_register_breakpoint_with_register_and_value() {
+    fn test_fdc_debug_window_register_read_breakpoint_with_register_and_value() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1256,14 +1251,14 @@ mod gui_tests {
 
         let i = 0;
 
-        // Select register "Vertical Total"
+        // Select register "Data"
         harness
             .get_all_by_role(accesskit::Role::ComboBox)
             .nth(i)
             .unwrap()
             .click();
         harness.run();
-        harness.get_by_label("R4 (Vertical Total)").click();
+        harness.get_by_label("Data").click();
         harness.run();
 
         // Enter value "0x42"
@@ -1282,11 +1277,7 @@ mod gui_tests {
             .click();
         harness.run();
 
-        assert!(
-            harness
-                .query_by_label("R4 (Vertical Total) = 0x42")
-                .is_some()
-        );
+        assert!(harness.query_by_label("Data read = 0x42").is_some());
 
         // Remove breakpoint
         harness
@@ -1294,15 +1285,11 @@ mod gui_tests {
             .click();
         harness.run();
 
-        assert!(
-            harness
-                .query_by_label("R4 (Vertical Total) = 0x42")
-                .is_none()
-        );
+        assert!(harness.query_by_label("Data read = 0x42").is_none());
     }
 
     #[test]
-    fn test_crtc_debug_window_register_breakpoint_any_register() {
+    fn test_fdc_debug_window_register_read_breakpoint_any_register() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1342,7 +1329,7 @@ mod gui_tests {
             .click();
         harness.run();
 
-        harness.get_by_label("Any register = 0x42").click();
+        harness.get_by_label("Any register read = 0x42").click();
         harness.run();
         drop(harness);
 
@@ -1354,9 +1341,11 @@ mod gui_tests {
                 .any(|(_, bp)| {
                     matches!(
                         bp,
-                        AnyBreakpoint::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint {
+                        AnyBreakpoint::FdcRegister(FdcRegisterBreakpoint {
                             register: None,
                             value: Some(0x42),
+                            on_read: true,
+                            on_write: false,
                             ..
                         })
                     ) && !bp.enabled()
@@ -1365,7 +1354,7 @@ mod gui_tests {
     }
 
     #[test]
-    fn test_crtc_debug_window_register_breakpoint_any_value() {
+    fn test_fdc_debug_window_register_read_breakpoint_any_value() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1381,14 +1370,14 @@ mod gui_tests {
 
         let i = 0;
 
-        // Select register "Vertical Total"
+        // Select register "Data"
         harness
             .get_all_by_role(accesskit::Role::ComboBox)
             .nth(i)
             .unwrap()
             .click();
         harness.run();
-        harness.get_by_label("R4 (Vertical Total)").click();
+        harness.get_by_label("Data").click();
         harness.run();
 
         // Check any value
@@ -1408,7 +1397,7 @@ mod gui_tests {
         harness.run();
 
         // Disable breakpoint
-        harness.get_by_label("R4 (Vertical Total) written").click();
+        harness.get_by_label("Data read = Any value").click();
         harness.run();
         drop(harness);
 
@@ -1420,9 +1409,11 @@ mod gui_tests {
                 .any(|(_, bp)| {
                     matches!(
                         bp,
-                        AnyBreakpoint::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint {
-                            register: Some(CrtcRegister::VerticalTotal),
+                        AnyBreakpoint::FdcRegister(FdcRegisterBreakpoint {
+                            register: Some(Register::Data),
                             value: None,
+                            on_read: true,
+                            on_write: false,
                             ..
                         })
                     ) && !bp.enabled()
@@ -1431,7 +1422,7 @@ mod gui_tests {
     }
 
     #[test]
-    fn test_crtc_debug_window_register_breakpoint_invalid_value() {
+    fn test_fdc_debug_window_register_read_breakpoint_invalid_value() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1447,14 +1438,14 @@ mod gui_tests {
 
         let i = 0;
 
-        // Select register "Vertical Total"
+        // Select register "Data"
         harness
             .get_all_by_role(accesskit::Role::ComboBox)
             .nth(i)
             .unwrap()
             .click();
         harness.run();
-        harness.get_by_label("R4 (Vertical Total)").click();
+        harness.get_by_label("Data").click();
         harness.run();
 
         // Enter value "invalid"
@@ -1478,7 +1469,7 @@ mod gui_tests {
     }
 
     #[test]
-    fn test_crtc_debug_window_counters_breakpoint_with_values() {
+    fn test_fdc_debug_window_register_write_breakpoint_with_register_and_value() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1492,37 +1483,35 @@ mod gui_tests {
         let mut harness = Harness::new(app);
         harness.run();
 
-        // Enter character row value "0x42"
+        let i = 1;
+
+        // Select register "Data"
         harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Char. row:")
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Data").click();
+        harness.run();
+
+        // Enter value "0x42"
+        harness
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
             .type_text("0x42");
-        harness.run();
-
-        // Enter scan line value "0x08"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Scan line:")
-            .type_text("0x08");
-        harness.run();
-
-        // Enter horizontal value "0xaf"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Horizontal:")
-            .type_text("0xaf");
         harness.run();
 
         // Add breakpoint
         harness
             .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(1)
+            .nth(i)
             .unwrap()
             .click();
         harness.run();
 
-        assert!(
-            harness
-                .query_by_label("Counters = 0x42/0x08/0xAF")
-                .is_some()
-        );
+        assert!(harness.query_by_label("Data write = 0x42").is_some());
 
         // Remove breakpoint
         harness
@@ -1530,15 +1519,11 @@ mod gui_tests {
             .click();
         harness.run();
 
-        assert!(
-            harness
-                .query_by_label("Counters = 0x42/0x08/0xAF")
-                .is_none()
-        );
+        assert!(harness.query_by_label("Data write = 0x42").is_none());
     }
 
     #[test]
-    fn test_crtc_debug_window_counters_breakpoint_invalid_character_row() {
+    fn test_fdc_debug_window_register_write_breakpoint_any_register() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1552,175 +1537,33 @@ mod gui_tests {
         let mut harness = Harness::new(app);
         harness.run();
 
-        // Enter character row value "invalid"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Char. row:")
-            .type_text("invalid");
-        harness.run();
+        let i = 1;
 
-        // Enter scan line value "0x08"
+        // Select any register
         harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Scan line:")
-            .type_text("0x08");
-        harness.run();
-
-        // Enter horizontal value "0xaf"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Horizontal:")
-            .type_text("0xaf");
-        harness.run();
-
-        // Add breakpoint
-        harness
-            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(1)
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(2 * i)
             .unwrap()
             .click();
         harness.run();
-        drop(harness);
 
-        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
-    }
-
-    #[test]
-    fn test_crtc_debug_window_counters_breakpoint_invalid_scan_line() {
-        let mut debugger = TestDebugger::default();
-        let mut window = FdcDebugWindow {
-            show: true,
-            ..Default::default()
-        };
-
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
-        };
-
-        let mut harness = Harness::new(app);
-        harness.run();
-
-        // Enter character row value "0x42"
+        // Enter value "0x42"
         harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Char. row:")
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
+            .unwrap()
             .type_text("0x42");
         harness.run();
 
-        // Enter scan line value "invalid"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Scan line:")
-            .type_text("invalid");
-        harness.run();
-
-        // Enter horizontal value "0xaf"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Horizontal:")
-            .type_text("0xaf");
-        harness.run();
-
         // Add breakpoint
         harness
             .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(1)
-            .unwrap()
-            .click();
-        harness.run();
-        drop(harness);
-
-        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
-    }
-
-    #[test]
-    fn test_crtc_debug_window_counters_breakpoint_invalid_horizontal() {
-        let mut debugger = TestDebugger::default();
-        let mut window = FdcDebugWindow {
-            show: true,
-            ..Default::default()
-        };
-
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
-        };
-
-        let mut harness = Harness::new(app);
-        harness.run();
-
-        // Enter character row value "0x42"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Char. row:")
-            .type_text("0x42");
-        harness.run();
-
-        // Enter scan line value "0x08"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Scan line:")
-            .type_text("0x08");
-        harness.run();
-
-        // Enter horizontal value "invalid"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Horizontal:")
-            .type_text("invalid");
-        harness.run();
-
-        // Add breakpoint
-        harness
-            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(1)
-            .unwrap()
-            .click();
-        harness.run();
-        drop(harness);
-
-        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
-    }
-
-    #[test]
-    fn test_crtc_debug_window_counters_breakpoint_any_values() {
-        let mut debugger = TestDebugger::default();
-        let mut window = FdcDebugWindow {
-            show: true,
-            ..Default::default()
-        };
-
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
-        };
-
-        let mut harness = Harness::new(app);
-        harness.run();
-
-        // Enter character row value "0x42"
-        harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
-            .nth(2)
+            .nth(i)
             .unwrap()
             .click();
         harness.run();
 
-        // Enter scan line value "0x42"
-        harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
-            .nth(3)
-            .unwrap()
-            .click();
-        harness.run();
-
-        // Enter horizontal value "0x42"
-        harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
-            .nth(4)
-            .unwrap()
-            .click();
-        harness.run();
-
-        // Add breakpoint
-        harness
-            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(1)
-            .unwrap()
-            .click();
-        harness.run();
-
-        // Disable breakpoint
-        harness.get_by_label("Counters = Any/Any/Any").click();
+        harness.get_by_label("Any register write = 0x42").click();
         harness.run();
         drop(harness);
 
@@ -1732,10 +1575,11 @@ mod gui_tests {
                 .any(|(_, bp)| {
                     matches!(
                         bp,
-                        AnyBreakpoint::CrtcCounters(CrtcCountersBreakpoint {
-                            character_row: None,
-                            scan_line: None,
-                            horizontal_counter: None,
+                        AnyBreakpoint::FdcRegister(FdcRegisterBreakpoint {
+                            register: None,
+                            value: Some(0x42),
+                            on_read: false,
+                            on_write: true,
                             ..
                         })
                     ) && !bp.enabled()
@@ -1744,7 +1588,7 @@ mod gui_tests {
     }
 
     #[test]
-    fn test_crtc_debug_window_address_breakpoint_with_value() {
+    fn test_fdc_debug_window_register_write_breakpoint_any_value() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1758,50 +1602,22 @@ mod gui_tests {
         let mut harness = Harness::new(app);
         harness.run();
 
-        // Enter character row value "0x42"
-        harness
-            .get_by_role_and_label(accesskit::Role::TextInput, "Address:")
-            .type_text("0xbeef");
-        harness.run();
+        let i = 1;
 
-        // Add breakpoint
+        // Select register "Data"
         harness
-            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(2)
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
             .unwrap()
             .click();
         harness.run();
-
-        assert!(harness.query_by_label("Address = 0xBEEF").is_some());
-
-        // Remove breakpoint
-        harness
-            .get_by_role_and_label(accesskit::Role::Button, "Remove")
-            .click();
+        harness.get_by_label("Data").click();
         harness.run();
 
-        assert!(harness.query_by_label("Address = 0xBEEF").is_none());
-    }
-
-    #[test]
-    fn test_crtc_debug_window_address_breakpoint_any_value() {
-        let mut debugger = TestDebugger::default();
-        let mut window = FdcDebugWindow {
-            show: true,
-            ..Default::default()
-        };
-
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
-        };
-
-        let mut harness = Harness::new(app);
-        harness.run();
-
-        // Enter character row value "0x42"
+        // Check any value
         harness
             .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
-            .nth(5)
+            .nth(2 * i + 1)
             .unwrap()
             .click();
         harness.run();
@@ -1809,13 +1625,13 @@ mod gui_tests {
         // Add breakpoint
         harness
             .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(2)
+            .nth(i)
             .unwrap()
             .click();
         harness.run();
 
         // Disable breakpoint
-        harness.get_by_label("Any address change").click();
+        harness.get_by_label("Data write = Any value").click();
         harness.run();
         drop(harness);
 
@@ -1827,14 +1643,20 @@ mod gui_tests {
                 .any(|(_, bp)| {
                     matches!(
                         bp,
-                        AnyBreakpoint::CrtcAddress(CrtcAddressBreakpoint { value: None, .. })
+                        AnyBreakpoint::FdcRegister(FdcRegisterBreakpoint {
+                            register: Some(Register::Data),
+                            value: None,
+                            on_read: false,
+                            on_write: true,
+                            ..
+                        })
                     ) && !bp.enabled()
                 })
         );
     }
 
     #[test]
-    fn test_crtc_debug_window_hsync_breakpoint() {
+    fn test_fdc_debug_window_register_write_breakpoint_invalid_value() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1848,60 +1670,30 @@ mod gui_tests {
         let mut harness = Harness::new(app);
         harness.run();
 
-        // Check start
+        let i = 1;
+
+        // Select register "Data"
         harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Start")
-            .next()
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
             .unwrap()
             .click();
         harness.run();
+        harness.get_by_label("Data").click();
+        harness.run();
 
-        // Check end
+        // Enter value "invalid"
         harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "End")
-            .next()
+            .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
+            .nth(i)
             .unwrap()
-            .click();
+            .type_text("invalid");
         harness.run();
 
         // Add breakpoint
         harness
             .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(3)
-            .unwrap()
-            .click();
-        harness.run();
-
-        assert!(harness.query_by_label("HSYNC start or end").is_some());
-
-        // Remove breakpoint
-        harness
-            .get_by_role_and_label(accesskit::Role::Button, "Remove")
-            .click();
-        harness.run();
-
-        assert!(harness.query_by_label("HSYNC start or end").is_none());
-    }
-
-    #[test]
-    fn test_crtc_debug_window_hsync_breakpoint_invalid() {
-        let mut debugger = TestDebugger::default();
-        let mut window = FdcDebugWindow {
-            show: true,
-            ..Default::default()
-        };
-
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
-        };
-
-        let mut harness = Harness::new(app);
-        harness.run();
-
-        // Add breakpoint
-        harness
-            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(3)
+            .nth(i)
             .unwrap()
             .click();
         harness.run();
@@ -1911,7 +1703,7 @@ mod gui_tests {
     }
 
     #[test]
-    fn test_crtc_debug_window_vsync_breakpoint() {
+    fn test_fdc_debug_window_phase_breakpoint_entered_or_left() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -1925,18 +1717,30 @@ mod gui_tests {
         let mut harness = Harness::new(app);
         harness.run();
 
+        let i = 2;
+
+        // Select phase "Execution"
+        harness
+            .get_all_by_role(accesskit::Role::ComboBox)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+        harness.get_by_label("Execution").click();
+        harness.run();
+
         // Check start
         harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Start")
-            .nth(1)
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Enter")
+            .next()
             .unwrap()
             .click();
         harness.run();
 
         // Check end
         harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "End")
-            .nth(1)
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Leave")
+            .next()
             .unwrap()
             .click();
         harness.run();
@@ -1944,91 +1748,14 @@ mod gui_tests {
         // Add breakpoint
         harness
             .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(4)
-            .unwrap()
-            .click();
-        harness.run();
-
-        assert!(harness.query_by_label("VSYNC start or end").is_some());
-
-        // Remove breakpoint
-        harness
-            .get_by_role_and_label(accesskit::Role::Button, "Remove")
-            .click();
-        harness.run();
-
-        assert!(harness.query_by_label("VSYNC start or end").is_none());
-    }
-
-    #[test]
-    fn test_crtc_debug_window_vsync_breakpoint_invalid() {
-        let mut debugger = TestDebugger::default();
-        let mut window = FdcDebugWindow {
-            show: true,
-            ..Default::default()
-        };
-
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
-        };
-
-        let mut harness = Harness::new(app);
-        harness.run();
-
-        // Add breakpoint
-        harness
-            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(4)
-            .unwrap()
-            .click();
-        harness.run();
-        drop(harness);
-
-        assert_eq!(debugger.breakpoint_manager().breakpoints_iter().count(), 0);
-    }
-
-    #[test]
-    fn test_crtc_debug_window_display_enable_breakpoint() {
-        let mut debugger = TestDebugger::default();
-        let mut window = FdcDebugWindow {
-            show: true,
-            ..Default::default()
-        };
-
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
-        };
-
-        let mut harness = Harness::new(app);
-        harness.run();
-
-        // Check start
-        harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Start")
-            .nth(2)
-            .unwrap()
-            .click();
-        harness.run();
-
-        // Check end
-        harness
-            .get_all_by_role_and_label(accesskit::Role::CheckBox, "End")
-            .nth(2)
-            .unwrap()
-            .click();
-        harness.run();
-
-        // Add breakpoint
-        harness
-            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(5)
+            .nth(i)
             .unwrap()
             .click();
         harness.run();
 
         assert!(
             harness
-                .query_by_label("DISP. ENABLE start or end")
+                .query_by_label("Execution phase entered or left")
                 .is_some()
         );
 
@@ -2040,13 +1767,13 @@ mod gui_tests {
 
         assert!(
             harness
-                .query_by_label("DISP. ENABLE start or end")
+                .query_by_label("Execution phase entered or left")
                 .is_none()
         );
     }
 
     #[test]
-    fn test_crtc_debug_window_display_enable_breakpoint_invalid() {
+    fn test_fdc_debug_window_phase_breakpoint_any_phase() {
         let mut debugger = TestDebugger::default();
         let mut window = FdcDebugWindow {
             show: true,
@@ -2060,10 +1787,80 @@ mod gui_tests {
         let mut harness = Harness::new(app);
         harness.run();
 
+        let i = 2;
+
+        // Check any phase
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(2 * i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Check start
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Enter")
+            .next()
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Check end
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Leave")
+            .next()
+            .unwrap()
+            .click();
+        harness.run();
+
         // Add breakpoint
         harness
             .get_all_by_role_and_label(accesskit::Role::Button, "Add")
-            .nth(5)
+            .nth(i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Phase entered or left").is_some());
+
+        // Remove breakpoint
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Remove")
+            .click();
+        harness.run();
+
+        assert!(harness.query_by_label("Phase entered or left").is_none());
+    }
+
+    #[test]
+    fn test_fdc_debug_window_phase_breakpoint_invalid() {
+        let mut debugger = TestDebugger::default();
+        let mut window = FdcDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ctx: &egui::Context| {
+            window.ui(ctx, &mut debugger);
+        };
+
+        let mut harness = Harness::new(app);
+        harness.run();
+
+        let i = 2;
+
+        // Check any phase
+        harness
+            .get_all_by_role_and_label(accesskit::Role::CheckBox, "Any")
+            .nth(2 * i)
+            .unwrap()
+            .click();
+        harness.run();
+
+        // Add breakpoint
+        harness
+            .get_all_by_role_and_label(accesskit::Role::Button, "Add")
+            .nth(i)
             .unwrap()
             .click();
         harness.run();

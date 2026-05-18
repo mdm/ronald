@@ -1220,7 +1220,7 @@ impl fmt::Display for FdcPhaseBreakpoint {
         match (self.on_enter, self.on_leave) {
             (true, false) => write!(f, "entered"),
             (false, true) => write!(f, "left"),
-            (true, true) => write!(f, "changed"),
+            (true, true) => write!(f, "entered or left"),
             (false, false) => {
                 debug_assert!(false, "invalid fdc phase change breakpoint");
                 write!(f, "(never)")
