@@ -111,6 +111,29 @@ impl From<u8> for CommandType {
     }
 }
 
+impl From<CommandType> for u8 {
+    fn from(value: CommandType) -> Self {
+        match value {
+            CommandType::ReadData => 0b0000_0110,
+            CommandType::ReadDeletedData => 0b0000_1100,
+            CommandType::WriteData => 0b0000_0101,
+            CommandType::WriteDeletedData => 0b0000_1001,
+            CommandType::ReadTrack => 0b0000_0010,
+            CommandType::ReadId => 0b0000_1010,
+            CommandType::FormatTrack => 0b0000_1101,
+            CommandType::ScanEqual => 0b0001_0001,
+            CommandType::ScanLowOrEqual => 0b0001_1001,
+            CommandType::ScanHighOrEqual => 0b0001_1101,
+            CommandType::Recalibrate => 0b0000_0111,
+            CommandType::SenseInterruptStatus => 0b0000_1000,
+            CommandType::Specify => 0b0000_0011,
+            CommandType::SenseDriveStatus => 0b0000_0100,
+            CommandType::Seek => 0b0000_1111,
+            CommandType::Invalid => 0b0000_0000,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Chrn {
     pub cylinder_number: u8,
@@ -485,6 +508,471 @@ impl From<&[u8]> for Command {
             },
             CommandType::Invalid => Command::Invalid,
         }
+    }
+}
+
+impl From<Command> for Vec<u8> {
+    fn from(value: Command) -> Self {
+        let mut bytes = Vec::new();
+
+        match value {
+            Command::ReadData {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
+            } => {
+                let mut header = CommandType::ReadData.into();
+
+                if multi_track {
+                    header |= BITMASK_MULTI_TRACK;
+                }
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                if skip {
+                    header |= BITMASK_SKIP;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(chrn.cylinder_number);
+                bytes.push(chrn.head_address);
+                bytes.push(chrn.record);
+                bytes.push(chrn.number);
+
+                bytes.push(end_of_track);
+                bytes.push(gap_length);
+                bytes.push(data_length);
+            }
+            Command::ReadDeletedData {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
+            } => {
+                let mut header = CommandType::ReadDeletedData.into();
+
+                if multi_track {
+                    header |= BITMASK_MULTI_TRACK;
+                }
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                if skip {
+                    header |= BITMASK_SKIP;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(chrn.cylinder_number);
+                bytes.push(chrn.head_address);
+                bytes.push(chrn.record);
+                bytes.push(chrn.number);
+
+                bytes.push(end_of_track);
+                bytes.push(gap_length);
+                bytes.push(data_length);
+            }
+            Command::WriteData {
+                multi_track,
+                mode,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
+            } => {
+                let mut header = CommandType::WriteData.into();
+
+                if multi_track {
+                    header |= BITMASK_MULTI_TRACK;
+                }
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(chrn.cylinder_number);
+                bytes.push(chrn.head_address);
+                bytes.push(chrn.record);
+                bytes.push(chrn.number);
+
+                bytes.push(end_of_track);
+                bytes.push(gap_length);
+                bytes.push(data_length);
+            }
+            Command::WriteDeletedData {
+                multi_track,
+                mode,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
+            } => {
+                let mut header = CommandType::WriteDeletedData.into();
+
+                if multi_track {
+                    header |= BITMASK_MULTI_TRACK;
+                }
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(chrn.cylinder_number);
+                bytes.push(chrn.head_address);
+                bytes.push(chrn.record);
+                bytes.push(chrn.number);
+
+                bytes.push(end_of_track);
+                bytes.push(gap_length);
+                bytes.push(data_length);
+            }
+            Command::ReadTrack {
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                data_length,
+            } => {
+                let mut header = CommandType::ReadTrack.into();
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                if skip {
+                    header |= BITMASK_SKIP;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(chrn.cylinder_number);
+                bytes.push(chrn.head_address);
+                bytes.push(chrn.record);
+                bytes.push(chrn.number);
+
+                bytes.push(end_of_track);
+                bytes.push(gap_length);
+                bytes.push(data_length);
+            }
+            Command::ReadId {
+                mode,
+                head,
+                unit_select,
+            } => {
+                let mut header = CommandType::ReadId.into();
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+            }
+            Command::FormatTrack {
+                mode,
+                head,
+                unit_select,
+                number,
+                sector,
+                gap_length,
+                data,
+            } => {
+                let mut header = CommandType::FormatTrack.into();
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(number);
+                bytes.push(sector);
+
+                bytes.push(gap_length);
+                bytes.push(data);
+            }
+            Command::ScanEqual {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                scan_type,
+            } => {
+                let mut header = CommandType::ScanEqual.into();
+
+                if multi_track {
+                    header |= BITMASK_MULTI_TRACK;
+                }
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                if skip {
+                    header |= BITMASK_SKIP;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(chrn.cylinder_number);
+                bytes.push(chrn.head_address);
+                bytes.push(chrn.record);
+                bytes.push(chrn.number);
+
+                bytes.push(end_of_track);
+                bytes.push(gap_length);
+                bytes.push(scan_type);
+            }
+            Command::ScanLowOrEqual {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                scan_type,
+            } => {
+                let mut header = CommandType::ScanLowOrEqual.into();
+
+                if multi_track {
+                    header |= BITMASK_MULTI_TRACK;
+                }
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                if skip {
+                    header |= BITMASK_SKIP;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(chrn.cylinder_number);
+                bytes.push(chrn.head_address);
+                bytes.push(chrn.record);
+                bytes.push(chrn.number);
+
+                bytes.push(end_of_track);
+                bytes.push(gap_length);
+                bytes.push(scan_type);
+            }
+            Command::ScanHighOrEqual {
+                multi_track,
+                mode,
+                skip,
+                head,
+                unit_select,
+                chrn,
+                end_of_track,
+                gap_length,
+                scan_type,
+            } => {
+                let mut header = CommandType::ScanHighOrEqual.into();
+
+                if multi_track {
+                    header |= BITMASK_MULTI_TRACK;
+                }
+
+                if let Mode::ModifiedFrequencyModulation = mode {
+                    header |= BITMASK_MODE;
+                }
+
+                if skip {
+                    header |= BITMASK_SKIP;
+                }
+
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(chrn.cylinder_number);
+                bytes.push(chrn.head_address);
+                bytes.push(chrn.record);
+                bytes.push(chrn.number);
+
+                bytes.push(end_of_track);
+                bytes.push(gap_length);
+                bytes.push(scan_type);
+            }
+            Command::Recalibrate { unit_select } => {
+                let header = CommandType::Recalibrate.into();
+                bytes.push(header);
+
+                let subheader = unit_select & BITMASK_UNIT_SELECT;
+                bytes.push(subheader);
+            }
+            Command::SenseInterruptStatus => {
+                let header = CommandType::SenseInterruptStatus.into();
+                bytes.push(header);
+            }
+            Command::Specify {
+                step_rate_time,
+                head_unload_time,
+                head_load_time,
+                non_dma_mode,
+            } => {
+                let header = CommandType::Specify.into();
+                bytes.push(header);
+
+                let params1 = (step_rate_time << 4) | (head_unload_time & 0b0000_1111);
+                bytes.push(params1);
+
+                let mut params2 = head_load_time << 1;
+
+                if non_dma_mode {
+                    params2 |= 0b0000_0001;
+                }
+
+                bytes.push(params2);
+            }
+            Command::SenseDriveStatus { head, unit_select } => {
+                let header = CommandType::SenseDriveStatus.into();
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+            }
+            Command::Seek {
+                head,
+                unit_select,
+                new_cylinder_number,
+            } => {
+                let header = CommandType::Seek.into();
+                bytes.push(header);
+
+                let mut subheader = unit_select & BITMASK_UNIT_SELECT;
+
+                if head != 0 {
+                    subheader |= BITMASK_HEAD;
+                }
+
+                bytes.push(subheader);
+
+                bytes.push(new_cylinder_number);
+            }
+            Command::Invalid => {
+                let header = CommandType::Invalid.into();
+                bytes.push(header);
+            }
+        }
+
+        bytes
     }
 }
 
