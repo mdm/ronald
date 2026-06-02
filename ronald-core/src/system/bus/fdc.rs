@@ -38,7 +38,7 @@ impl Display for Phase {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Mode {
     FrequencyModulation,
     ModifiedFrequencyModulation,
@@ -134,7 +134,7 @@ impl From<CommandType> for u8 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Chrn {
     pub cylinder_number: u8,
     pub head_address: u8,
@@ -152,7 +152,7 @@ impl Display for Chrn {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Command {
     ReadData {
         multi_track: bool,
@@ -511,11 +511,11 @@ impl From<&[u8]> for Command {
     }
 }
 
-impl From<Command> for Vec<u8> {
-    fn from(value: Command) -> Self {
+impl From<&Command> for Vec<u8> {
+    fn from(value: &Command) -> Self {
         let mut bytes = Vec::new();
 
-        match value {
+        match *value {
             Command::ReadData {
                 multi_track,
                 mode,
@@ -2523,4 +2523,305 @@ impl Debuggable for FloppyDiskController {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_command_read_data_encode_decode() {
+        let command = Command::ReadData {
+            multi_track: true,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 1,
+            unit_select: 1,
+            chrn: Chrn {
+                cylinder_number: 42,
+                head_address: 1,
+                record: 43,
+                number: 44,
+            },
+            end_of_track: 42,
+            gap_length: 45,
+            data_length: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_read_deleted_data_encode_decode() {
+        let command = Command::ReadDeletedData {
+            multi_track: true,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 1,
+            unit_select: 1,
+            chrn: Chrn {
+                cylinder_number: 42,
+                head_address: 1,
+                record: 43,
+                number: 44,
+            },
+            end_of_track: 42,
+            gap_length: 45,
+            data_length: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_write_data_encode_decode() {
+        let command = Command::WriteData {
+            multi_track: true,
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 1,
+            unit_select: 1,
+            chrn: Chrn {
+                cylinder_number: 42,
+                head_address: 1,
+                record: 43,
+                number: 44,
+            },
+            end_of_track: 42,
+            gap_length: 45,
+            data_length: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_write_deleted_data_encode_decode() {
+        let command = Command::WriteDeletedData {
+            multi_track: true,
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 1,
+            unit_select: 1,
+            chrn: Chrn {
+                cylinder_number: 42,
+                head_address: 1,
+                record: 43,
+                number: 44,
+            },
+            end_of_track: 42,
+            gap_length: 45,
+            data_length: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_read_track_encode_decode() {
+        let command = Command::ReadTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 1,
+            unit_select: 1,
+            chrn: Chrn {
+                cylinder_number: 42,
+                head_address: 1,
+                record: 43,
+                number: 44,
+            },
+            end_of_track: 42,
+            gap_length: 45,
+            data_length: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_read_id_encode_decode() {
+        let command = Command::ReadId {
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 1,
+            unit_select: 1,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_format_track_encode_decode() {
+        let command = Command::FormatTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 1,
+            unit_select: 1,
+            number: 42,
+            sector: 43,
+            gap_length: 45,
+            data: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_scan_equal_encode_decode() {
+        let command = Command::ScanEqual {
+            multi_track: true,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 1,
+            unit_select: 1,
+            chrn: Chrn {
+                cylinder_number: 42,
+                head_address: 1,
+                record: 43,
+                number: 44,
+            },
+            end_of_track: 42,
+            gap_length: 45,
+            scan_type: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_scan_low_or_equal_encode_decode() {
+        let command = Command::ScanLowOrEqual {
+            multi_track: true,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 1,
+            unit_select: 1,
+            chrn: Chrn {
+                cylinder_number: 42,
+                head_address: 1,
+                record: 43,
+                number: 44,
+            },
+            end_of_track: 42,
+            gap_length: 45,
+            scan_type: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_scan_high_or_equal_encode_decode() {
+        let command = Command::ScanHighOrEqual {
+            multi_track: true,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 1,
+            unit_select: 1,
+            chrn: Chrn {
+                cylinder_number: 42,
+                head_address: 1,
+                record: 43,
+                number: 44,
+            },
+            end_of_track: 42,
+            gap_length: 45,
+            scan_type: 46,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_recalibrate_encode_decode() {
+        let command = Command::Recalibrate { unit_select: 1 };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_sense_interrupt_status_encode_decode() {
+        let command = Command::SenseInterruptStatus;
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_specify_encode_decode() {
+        let command = Command::Specify {
+            step_rate_time: 8,
+            head_unload_time: 9,
+            head_load_time: 44,
+            non_dma_mode: true,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_sense_drive_status_encode_decode() {
+        let command = Command::SenseDriveStatus {
+            head: 1,
+            unit_select: 1,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_seek_encode_decode() {
+        let command = Command::Seek {
+            head: 1,
+            unit_select: 1,
+            new_cylinder_number: 42,
+        };
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_invalid_encode_decode() {
+        let command = Command::Invalid;
+
+        let encoded = Vec::from(&command);
+        let decoded = Command::from(encoded.as_slice());
+
+        assert_eq!(command, decoded);
+    }
 }
