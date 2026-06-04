@@ -2522,7 +2522,91 @@ impl Debuggable for FloppyDiskController {
 
 #[cfg(test)]
 mod tests {
+    use crate::system::clock::MasterClock;
+
     use super::*;
+
+    const MSR_RQM: u8 = 0b1000_0000;
+    const MSR_DIO: u8 = 0b0100_0000;
+    const MSR_EXM: u8 = 0b0010_0000;
+
+    #[derive(Default)]
+    struct FdcHost {
+        clock: MasterClock,
+        fdc: FloppyDiskController,
+    }
+
+    impl FdcHost {
+        fn wait_for_rqm(&mut self) -> u8 {
+            for _ in 0..1_000 {
+                self.clock.step(1);
+                self.fdc.step(self.clock.current());
+
+                let msr = self.fdc.read_byte(Register::MainStatus as u16);
+                if msr & MSR_RQM != 0 {
+                    return msr;
+                }
+            }
+
+            panic!("FDC did not become ready in time");
+        }
+
+        fn write_command(&mut self, command: &Command) {
+            let bytes = Vec::from(command);
+
+            for byte in bytes {
+                let msr = self.wait_for_rqm();
+
+                if msr & MSR_DIO == 0 {
+                    self.fdc.write_byte(Register::Data as u16, byte);
+                } else {
+                    panic!("Trying to write when FDC expects read")
+                }
+            }
+        }
+
+        fn read_data(&mut self, expected_len: usize) -> Vec<u8> {
+            let mut data = Vec::with_capacity(expected_len);
+
+            for _ in 0..(expected_len + 1) {
+                let msr = self.wait_for_rqm();
+
+                if msr & MSR_DIO != 0 {
+                    if msr & MSR_EXM == 0 {
+                        return data;
+                    }
+
+                    let byte = self.fdc.read_byte(Register::Data as u16);
+                    data.push(byte);
+                } else {
+                    if !data.is_empty() {
+                        return data;
+                    }
+
+                    panic!("Trying to read when FDC expects write")
+                }
+            }
+
+            panic!("FDC has more data from execution phase than expected")
+        }
+
+        fn read_result(&mut self, expected_len: usize) -> Vec<u8> {
+            let mut data = Vec::with_capacity(expected_len);
+
+            for _ in 0..(expected_len + 1) {
+                let msr = self.wait_for_rqm();
+
+                if (msr & MSR_DIO != 0) && (msr & MSR_EXM == 0) {
+                    let byte = self.fdc.read_byte(Register::Data as u16);
+                    data.push(byte);
+                } else {
+                    return data;
+                }
+            }
+
+            panic!("FDC has more data from execution phase than expected")
+        }
+    }
 
     #[test]
     fn test_command_read_data_encode_decode() {
@@ -2823,5 +2907,74 @@ mod tests {
         let decoded = Command::from(encoded.as_slice());
 
         assert_eq!(command, decoded);
+    }
+
+    #[test]
+    fn test_command_recalibrate_without_disk_fails() {
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].track = 42;
+
+        let command = Command::Recalibrate { unit_select: 0 };
+        host.write_command(&command);
+        dbg!(host.fdc.phase);
+
+        let command = Command::SenseInterruptStatus;
+        host.write_command(&command);
+        let result = host.read_result(2);
+
+        let expected_result = CommandResult::SenseInterruptStatus {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                seek_end: false,
+                equipment_check: false,
+                not_ready: true,
+                head_address: 0,
+                unit_select: 0,
+            },
+            pcn: 42,
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_recalibrate_with_disk_succeeds() {
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(Disk {
+            path: "".into(),
+            extended: false,
+            creator: "".into(),
+            num_tracks: 0,
+            num_sides: 0,
+            track_size: 0,
+            tracks: Vec::new(),
+        });
+        host.fdc.drives[0].track = 42;
+
+        let command = Command::Recalibrate { unit_select: 0 };
+        host.write_command(&command);
+        dbg!(host.fdc.phase);
+
+        let command = Command::SenseInterruptStatus;
+        host.write_command(&command);
+        let result = host.read_result(2);
+
+        let expected_result = CommandResult::SenseInterruptStatus {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::NormalTermination,
+                seek_end: true,
+                equipment_check: false,
+                not_ready: false,
+                head_address: 0,
+                unit_select: 0,
+            },
+            pcn: 0,
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
     }
 }
