@@ -1872,6 +1872,7 @@ impl FloppyDiskController {
                             chrn.head_address,
                             chrn.record
                         );
+                        self.enter_phase(Phase::Result);
                         break;
                     }
 
@@ -1942,7 +1943,7 @@ impl FloppyDiskController {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, unused_variables)]
     fn command_write_data(
         &mut self,
         multi_track: bool,
@@ -1955,7 +1956,7 @@ impl FloppyDiskController {
         data_length: u8,
         deleted: bool,
     ) -> CommandResult {
-        todo!("support write commands")
+        todo!("support write commands") // TODO: remove allow(unused_variables) when implemented
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2196,7 +2197,7 @@ impl FloppyDiskController {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, unused_variables)]
     fn command_format_track(
         &mut self,
         mode: Mode,
@@ -2207,10 +2208,10 @@ impl FloppyDiskController {
         gap_length: u8,
         data: u8,
     ) -> CommandResult {
-        todo!("support write commands")
+        todo!("support write commands") // TODO: remove allow(unused_variables) when implemented
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, unused_variables)]
     fn command_scan(
         &mut self,
         multi_track: bool,
@@ -2225,7 +2226,7 @@ impl FloppyDiskController {
         low_or_equal: bool,
         high_or_equal: bool,
     ) -> CommandResult {
-        todo!("support scan commands")
+        todo!("support scan commands") // TODO: remove allow(unused_variables) when implemented
     }
 
     fn command_recalibrate(&mut self, unit_select: u8) -> CommandResult {
@@ -2522,7 +2523,7 @@ impl Debuggable for FloppyDiskController {
 
 #[cfg(test)]
 mod tests {
-    use crate::system::clock::MasterClock;
+    use crate::system::{bus::fdc::dsk_file::DiskBuilder, clock::MasterClock};
 
     use super::*;
 
@@ -2916,7 +2917,6 @@ mod tests {
 
         let command = Command::Recalibrate { unit_select: 0 };
         host.write_command(&command);
-        dbg!(host.fdc.phase);
 
         let command = Command::SenseInterruptStatus;
         host.write_command(&command);
@@ -2942,20 +2942,11 @@ mod tests {
     #[test]
     fn test_command_recalibrate_with_disk_succeeds() {
         let mut host = FdcHost::default();
-        host.fdc.drives[0].disk = Some(Disk {
-            path: "".into(),
-            extended: false,
-            creator: "".into(),
-            num_tracks: 0,
-            num_sides: 0,
-            track_size: 0,
-            tracks: Vec::new(),
-        });
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().build());
         host.fdc.drives[0].track = 42;
 
         let command = Command::Recalibrate { unit_select: 0 };
         host.write_command(&command);
-        dbg!(host.fdc.phase);
 
         let command = Command::SenseInterruptStatus;
         host.write_command(&command);
@@ -2977,4 +2968,196 @@ mod tests {
 
         assert_eq!(result, expected_result);
     }
+
+    #[test]
+    fn test_commmand_read_data_without_disk_fails() {
+        let mut host = FdcHost::default();
+
+        let command = Command::ReadData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 0,
+                number: 0,
+            },
+            end_of_track: 0,
+            gap_length: 0,
+            data_length: 0,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                not_ready: true,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 0,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_commmand_read_data_on_sector_not_found_fails() {
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::ReadData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 0,
+                number: 0,
+            },
+            end_of_track: 0,
+            gap_length: 0,
+            data_length: 0,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                no_data: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 0,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_commmand_read_data_if_sector_has_data_error_fails() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 0,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, Vec::new(), 0b0010_0000, 0b0000_0000)
+                .build(),
+        );
+
+        let command = Command::ReadData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 0,
+            gap_length: 0,
+            data_length: 0,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                data_error: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_commmand_read_data_if_sector_misses_address_mark_fails() {}
+
+    #[test]
+    fn test_commmand_read_data_if_sector_misses_control_mark_fails() {}
+
+    #[test]
+    fn test_commmand_read_data_if_sector_has_data_error_in_data_field_fails() {}
+
+    #[test]
+    fn test_commmand_read_data_if_sector_misses_address_mark_in_data_field_fails() {}
+
+    #[test]
+    fn test_commmand_read_data_on_wrong_cylinder_fails() {}
+
+    #[test]
+    fn test_commmand_read_data_reads_normal_sector() {}
+
+    #[test]
+    fn test_commmand_read_data_reads_deleted_sector_and_terminates() {}
+
+    #[test]
+    fn test_commmand_read_data_reads_multiple_sectors() {}
+
+    #[test]
+    fn test_commmand_read_data_skips_deleted_sector() {}
+
+    #[test]
+    fn test_commmand_read_deleted_data_reads_deleted_sector() {}
+
+    #[test]
+    fn test_commmand_read_deleted_data_reads_normal_sector_and_terminates() {}
+
+    #[test]
+    fn test_commmand_read_data_reads_multiple_deleted_sectors() {}
+
+    #[test]
+    fn test_commmand_read_data_skips_normal_sector() {}
 }

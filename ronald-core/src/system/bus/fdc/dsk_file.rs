@@ -185,3 +185,81 @@ pub struct SectorInfo {
     pub fdc_status2: u8, // TODO: do we actually use this?
     pub actual_length: Option<u16>,
 }
+
+#[cfg(test)]
+pub use tests::DiskBuilder;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    pub struct DiskBuilder {
+        current_track: Option<Track>,
+        tracks: Vec<Track>,
+    }
+
+    impl DiskBuilder {
+        pub fn new() -> Self {
+            Self {
+                current_track: None,
+                tracks: Vec::new(),
+            }
+        }
+
+        pub fn add_track(mut self, track: u8) -> Self {
+            if let Some(current_track) = self.current_track.take() {
+                self.tracks.push(current_track);
+            }
+
+            self.current_track = Some(Track {
+                track,
+                side: 0,
+                sector_size: 0,
+                num_sectors: 0,
+                gap3_length: 0,
+                filler_byte: 0,
+                sector_infos: Vec::new(),
+                sectors: Vec::new(),
+            });
+
+            self
+        }
+
+        pub fn with_sector(
+            mut self,
+            chrn: Chrn,
+            data: Vec<u8>,
+            fdc_status1: u8,
+            fdc_status2: u8,
+        ) -> Self {
+            let current_track = self
+                .current_track
+                .as_mut()
+                .expect("track needed before adding a sector");
+            current_track.sector_infos.push(SectorInfo {
+                chrn,
+                fdc_status1,
+                fdc_status2,
+                actual_length: None,
+            });
+            current_track.sectors.push(data);
+            self
+        }
+
+        pub fn build(mut self) -> Disk {
+            if let Some(current_track) = self.current_track.take() {
+                self.tracks.push(current_track);
+            }
+
+            Disk {
+                path: "test".into(),
+                extended: false,
+                creator: "Ronald".into(),
+                num_tracks: self.tracks.len() as u8,
+                num_sides: 1,
+                track_size: 0,
+                tracks: self.tracks,
+            }
+        }
+    }
+}
