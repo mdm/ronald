@@ -2971,7 +2971,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_without_disk_fails() {
+    fn test_command_read_data_without_disk_fails() {
         let mut host = FdcHost::default();
 
         let command = Command::ReadData {
@@ -3021,7 +3021,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_on_sector_not_found_fails() {
+    fn test_command_read_data_on_sector_not_found_fails() {
         let mut host = FdcHost::default();
         host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
 
@@ -3072,7 +3072,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_if_sector_has_data_error_fails() {
+    fn test_command_read_data_if_sector_has_data_error_fails() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3124,7 +3124,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_if_sector_misses_address_mark_fails() {
+    fn test_command_read_data_if_sector_misses_address_mark_fails() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3176,7 +3176,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_if_sector_has_data_error_in_data_field_fails() {
+    fn test_command_read_data_if_sector_has_data_error_in_data_field_fails() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3228,7 +3228,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_if_sector_misses_address_mark_in_data_field_fails() {
+    fn test_command_read_data_if_sector_misses_address_mark_in_data_field_fails() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3280,7 +3280,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_on_wrong_cylinder_fails() {
+    fn test_command_read_data_on_wrong_cylinder_fails() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3342,7 +3342,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_reads_normal_sector() {
+    fn test_command_read_data_reads_normal_sector() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3406,7 +3406,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_reads_deleted_sector_and_terminates() {
+    fn test_command_read_data_reads_deleted_sector_and_terminates() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3469,7 +3469,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_reads_multiple_sectors() {
+    fn test_command_read_data_reads_multiple_sectors() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3539,7 +3539,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_skips_deleted_sector() {
+    fn test_command_read_data_skips_deleted_sector() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3609,7 +3609,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_deleted_data_reads_deleted_sector() {
+    fn test_command_read_deleted_data_reads_deleted_sector() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3673,7 +3673,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_deleted_data_reads_normal_sector_and_terminates() {
+    fn test_command_read_deleted_data_reads_normal_sector_and_terminates() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3736,7 +3736,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_deleted_data_reads_multiple_deleted_sectors() {
+    fn test_command_read_deleted_data_reads_multiple_deleted_sectors() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
@@ -3806,7 +3806,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_deleted_data_skips_normal_sector() {
+    fn test_command_read_deleted_data_skips_normal_sector() {
         let mut host = FdcHost::default();
         let chrn = Chrn {
             cylinder_number: 0,
