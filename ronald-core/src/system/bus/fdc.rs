@@ -1758,9 +1758,6 @@ impl FloppyDiskController {
         if let Mode::FrequencyModulation = mode {
             log::error!("Unsupported frequency modulation mode");
         }
-        if skip {
-            log::error!("Unsupported skip flag set");
-        }
         if head != 0 {
             log::error!("Unsupported head number");
             todo!("Return NOT READY in ST0")
@@ -1832,10 +1829,7 @@ impl FloppyDiskController {
                         interrupt_code = InterruptCode::AbnormalTermination;
                     }
 
-                    if sector_info.fdc_status2 & 0b0100_0000 != 0 {
-                        control_mark = true;
-                        interrupt_code = InterruptCode::AbnormalTermination;
-                    }
+                    let deleted_data_address_mark = sector_info.fdc_status2 & 0b0100_0000 != 0;
 
                     if sector_info.fdc_status2 & 0b0010_0000 != 0 {
                         data_error_in_data_field = true;
@@ -1865,7 +1859,7 @@ impl FloppyDiskController {
                         sector_info.fdc_status2,
                     );
 
-                    if !control_mark && interrupt_code == InterruptCode::AbnormalTermination {
+                    if interrupt_code == InterruptCode::AbnormalTermination {
                         log::debug!(
                             "Abnormal termination on sector ID {}:{}:{}",
                             chrn.cylinder_number,
@@ -1882,18 +1876,25 @@ impl FloppyDiskController {
                         log::error!("Specified data length exceeds physical sector size");
                     }
 
-                    if control_mark || !deleted {
+                    if deleted_data_address_mark == deleted || !skip {
                         self.data_buffer
                             .extend(sector_data.iter().take(data_length));
+
+                        if deleted_data_address_mark != deleted {
+                            control_mark = true;
+                        }
                     }
 
-                    if !control_mark && chrn.record < end_of_track {
+                    if chrn.record < end_of_track {
                         chrn.record += 1;
                     } else {
                         end_of_cylinder = true;
                         interrupt_code = InterruptCode::AbnormalTermination;
                         chrn.cylinder_number += 1;
                         chrn.record = 1;
+                    }
+
+                    if end_of_cylinder || control_mark {
                         log::debug!("Read {} bytes from disk", self.data_buffer.len());
                         break;
                     }
@@ -2605,7 +2606,7 @@ mod tests {
                 }
             }
 
-            panic!("FDC has more data from execution phase than expected")
+            panic!("FDC has more data from result phase than expected")
         }
     }
 
@@ -3341,26 +3342,536 @@ mod tests {
     }
 
     #[test]
-    fn test_commmand_read_data_reads_normal_sector() {}
+    fn test_commmand_read_data_reads_normal_sector() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0000_0000)
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 2,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(3);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                end_of_cylinder: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 1,
+                head_address: 0,
+                record: 1,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc]);
+        assert_eq!(result, expected_result);
+    }
 
     #[test]
-    fn test_commmand_read_data_reads_deleted_sector_and_terminates() {}
+    fn test_commmand_read_data_reads_deleted_sector_and_terminates() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0100_0000)
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 3,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(3);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadData(StandardResult {
+            st0: StatusRegister0 {
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                control_mark: true,
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 3,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc]);
+        assert_eq!(result, expected_result);
+    }
 
     #[test]
-    fn test_commmand_read_data_reads_multiple_sectors() {}
+    fn test_commmand_read_data_reads_multiple_sectors() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0000_0000)
+                .with_sector(
+                    Chrn { record: 3, ..chrn },
+                    vec![0xd, 0xe, 0xf],
+                    0b0000_0000,
+                    0b0000_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 3,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(6);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                end_of_cylinder: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 1,
+                head_address: 0,
+                record: 1,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc, 0xd, 0xe, 0xf]);
+        assert_eq!(result, expected_result);
+    }
 
     #[test]
-    fn test_commmand_read_data_skips_deleted_sector() {}
+    fn test_commmand_read_data_skips_deleted_sector() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0100_0000)
+                .with_sector(
+                    Chrn { record: 3, ..chrn },
+                    vec![0xd, 0xe, 0xf],
+                    0b0000_0000,
+                    0b0000_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 3,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(3);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                end_of_cylinder: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 1,
+                head_address: 0,
+                record: 1,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xd, 0xe, 0xf]);
+        assert_eq!(result, expected_result);
+    }
 
     #[test]
-    fn test_commmand_read_deleted_data_reads_deleted_sector() {}
+    fn test_commmand_read_deleted_data_reads_deleted_sector() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0100_0000)
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadDeletedData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 2,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(3);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadDeletedData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                end_of_cylinder: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 1,
+                head_address: 0,
+                record: 1,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc]);
+        assert_eq!(result, expected_result);
+    }
 
     #[test]
-    fn test_commmand_read_deleted_data_reads_normal_sector_and_terminates() {}
+    fn test_commmand_read_deleted_data_reads_normal_sector_and_terminates() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0000_0000)
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadDeletedData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 3,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(3);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadDeletedData(StandardResult {
+            st0: StatusRegister0 {
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                control_mark: true,
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 3,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc]);
+        assert_eq!(result, expected_result);
+    }
 
     #[test]
-    fn test_commmand_read_data_reads_multiple_deleted_sectors() {}
+    fn test_commmand_read_deleted_data_reads_multiple_deleted_sectors() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0100_0000)
+                .with_sector(
+                    Chrn { record: 3, ..chrn },
+                    vec![0xd, 0xe, 0xf],
+                    0b0000_0000,
+                    0b0100_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadDeletedData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 3,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(6);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadDeletedData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                end_of_cylinder: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 1,
+                head_address: 0,
+                record: 1,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc, 0xd, 0xe, 0xf]);
+        assert_eq!(result, expected_result);
+    }
 
     #[test]
-    fn test_commmand_read_data_skips_normal_sector() {}
+    fn test_commmand_read_deleted_data_skips_normal_sector() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0000_0000)
+                .with_sector(
+                    Chrn { record: 3, ..chrn },
+                    vec![0xd, 0xe, 0xf],
+                    0b0000_0000,
+                    0b0100_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadDeletedData {
+            multi_track: false,
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 3,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(3);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadDeletedData(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                end_of_cylinder: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 1,
+                head_address: 0,
+                record: 1,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xd, 0xe, 0xf]);
+        assert_eq!(result, expected_result);
+    }
 }
