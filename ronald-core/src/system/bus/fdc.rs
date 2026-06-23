@@ -1967,7 +1967,7 @@ impl FloppyDiskController {
         skip: bool,
         head: u8,
         unit_select: u8,
-        mut chrn: Chrn,
+        chrn: Chrn,
         end_of_track: u8,
         _gap_length: u8,
         data_length: u8,
@@ -2002,45 +2002,28 @@ impl FloppyDiskController {
                 };
 
                 // ST0
-                let mut interrupt_code = InterruptCode::AbnormalTermination;
+                let mut interrupt_code = InterruptCode::NormalTermination;
 
                 // ST1
-                let end_of_cylinder = true;
-                let mut data_error = false; // TODO: is this reported for Read Track?
-                let mut no_data = false;
+                let mut no_data = true; // reset below if specified sector ID found
                 let mut missing_address_mark = true; // reset below if any sector ID found
 
-                // ST2 // TODO: is this reported for Read Track?
-                let mut control_mark = false;
-                let mut data_error_in_data_field = false;
-
                 for sector in 0..end_of_track as usize {
+                    if sector >= disk.tracks[track].sectors.len() {
+                        log::error!("Specified end of track exceeds physical track length");
+                        break;
+                    }
+
                     if missing_address_mark {
                         // first valid sector found
                         missing_address_mark = false;
-                        interrupt_code = InterruptCode::NormalTermination;
                     }
 
                     let sector_info = &disk.tracks[track].sector_infos[sector];
 
-                    if sector_info.fdc_status1 & 0b0010_0000 != 0 {
-                        data_error = true;
-                        interrupt_code = InterruptCode::AbnormalTermination;
-                    }
-
-                    if sector_info.fdc_status2 & 0b0100_0000 != 0 {
-                        control_mark = true;
-                        interrupt_code = InterruptCode::AbnormalTermination;
-                    }
-
-                    if sector_info.fdc_status2 & 0b0010_0000 != 0 {
-                        data_error_in_data_field = true;
-                        interrupt_code = InterruptCode::AbnormalTermination;
-                    }
-
-                    if sector >= disk.tracks[track].sectors.len() {
-                        log::error!("Specified end of track exceeds physical track length");
-                        break;
+                    if sector_info.chrn == chrn {
+                        // specified sector ID found
+                        no_data = false;
                     }
 
                     let sector_data = &disk.tracks[track].sectors[sector];
@@ -2053,12 +2036,12 @@ impl FloppyDiskController {
                         .extend(sector_data.iter().take(data_length));
                 }
 
-                chrn.cylinder_number += 1;
-                chrn.record = 1;
-
-                if disk.tracks[track].find_sector(chrn, true).is_none() {
-                    no_data = true;
+                if missing_address_mark || no_data {
                     interrupt_code = InterruptCode::AbnormalTermination;
+                }
+
+                if self.data_buffer.is_empty() {
+                    self.enter_phase(Phase::Result);
                 }
 
                 let result = StandardResult {
@@ -2069,15 +2052,11 @@ impl FloppyDiskController {
                         ..Default::default()
                     },
                     st1: StatusRegister1 {
-                        end_of_cylinder,
-                        data_error,
                         no_data,
                         missing_address_mark,
                         ..Default::default()
                     },
                     st2: StatusRegister2 {
-                        control_mark,
-                        data_error_in_data_field,
                         ..Default::default()
                     },
                     chrn,
@@ -3872,6 +3851,423 @@ mod tests {
         .collect::<Vec<_>>();
 
         assert_eq!(data, vec![0xd, 0xe, 0xf]);
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_track_without_disk_fails() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 3,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadTrack(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                not_ready: true,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_track_with_empty_track_signals_missing_address_mark() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 1,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadTrack(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                missing_address_mark: true,
+                no_data: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_track_with_missing_sector_signals_no_data() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(
+                    Chrn { record: 3, ..chrn },
+                    vec![0xa, 0xb, 0xc],
+                    0b0000_0000,
+                    0b0000_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 1,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(3);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadTrack(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                no_data: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc]);
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_track_with_ordered_sectors_succeeds() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0000_0000)
+                .with_sector(
+                    Chrn { record: 3, ..chrn },
+                    vec![0xd, 0xe, 0xf],
+                    0b0000_0000,
+                    0b0000_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 2,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(6);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadTrack(StandardResult {
+            st0: StatusRegister0 {
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc, 0xd, 0xe, 0xf]);
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_track_with_unordered_sectors_succeeds() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0000_0000)
+                .with_sector(
+                    Chrn { record: 1, ..chrn },
+                    vec![0xd, 0xe, 0xf],
+                    0b0000_0000,
+                    0b0000_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: false,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 2,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(6);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadTrack(StandardResult {
+            st0: StatusRegister0 {
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc, 0xd, 0xe, 0xf]);
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_track_with_deleted_sectors_succeeds() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0000_0000)
+                .with_sector(
+                    Chrn { record: 3, ..chrn },
+                    vec![0xd, 0xe, 0xf],
+                    0b0000_0000,
+                    0b0100_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 2,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(6);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadTrack(StandardResult {
+            st0: StatusRegister0 {
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc, 0xd, 0xe, 0xf]);
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_track_with_crc_errors_succeeds() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 2,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, vec![0xa, 0xb, 0xc], 0b0000_0000, 0b0000_0000)
+                .with_sector(
+                    Chrn { record: 3, ..chrn },
+                    vec![0xd, 0xe, 0xf],
+                    0b0010_0000,
+                    0b0000_0000,
+                )
+                .build(),
+        );
+
+        let command = Command::Specify {
+            step_rate_time: 0,
+            head_unload_time: 0,
+            head_load_time: 0,
+            non_dma_mode: true,
+        };
+        host.write_command(&command);
+        let command = Command::ReadTrack {
+            mode: Mode::ModifiedFrequencyModulation,
+            skip: true,
+            head: 0,
+            unit_select: 0,
+            chrn,
+            end_of_track: 2,
+            gap_length: 0,
+            data_length: 3,
+        };
+        host.write_command(&command);
+        let data = host.read_data(6);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadTrack(StandardResult {
+            st0: StatusRegister0 {
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn,
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(data, vec![0xa, 0xb, 0xc, 0xd, 0xe, 0xf]);
         assert_eq!(result, expected_result);
     }
 }
