@@ -1866,7 +1866,6 @@ impl FloppyDiskController {
                             chrn.head_address,
                             chrn.record
                         );
-                        self.enter_phase(Phase::Result);
                         break;
                     }
 
@@ -1898,6 +1897,10 @@ impl FloppyDiskController {
                         log::debug!("Read {} bytes from disk", self.data_buffer.len());
                         break;
                     }
+                }
+
+                if self.data_buffer.is_empty() {
+                    self.enter_phase(Phase::Result);
                 }
 
                 let result = StandardResult {
