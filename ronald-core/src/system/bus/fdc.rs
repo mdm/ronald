@@ -2553,21 +2553,25 @@ mod tests {
 
                 if msr & MSR_DIO != 0 {
                     if msr & MSR_EXM == 0 {
-                        return data;
+                        break;
                     }
 
                     let byte = self.fdc.read_byte(Register::Data as u16);
                     data.push(byte);
                 } else {
                     if !data.is_empty() {
-                        return data;
+                        break;
                     }
 
                     panic!("Trying to read when FDC expects write")
                 }
             }
 
-            panic!("FDC has more data from execution phase than expected")
+            if data.len() != expected_len {
+                panic!("Expected {} data bytes, got {}", expected_len, data.len());
+            }
+
+            data
         }
 
         fn read_result(&mut self, expected_len: usize) -> Vec<u8> {
@@ -2580,11 +2584,15 @@ mod tests {
                     let byte = self.fdc.read_byte(Register::Data as u16);
                     data.push(byte);
                 } else {
-                    return data;
+                    break;
                 }
             }
 
-            panic!("FDC has more data from result phase than expected")
+            if data.len() != expected_len {
+                panic!("Expected {} result bytes, got {}", expected_len, data.len());
+            }
+
+            data
         }
     }
 
