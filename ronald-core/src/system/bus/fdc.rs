@@ -2105,11 +2105,11 @@ impl FloppyDiskController {
                 let mut interrupt_code = InterruptCode::NormalTermination;
 
                 // ST1
-                let mut data_error = false;
                 let mut no_data = false;
                 let mut missing_address_mark = false;
 
                 let chrn = if disk.tracks[track].sector_infos.is_empty() {
+                    missing_address_mark = true;
                     no_data = true;
                     interrupt_code = InterruptCode::AbnormalTermination;
                     Chrn {
@@ -2121,16 +2121,13 @@ impl FloppyDiskController {
                 } else {
                     let sector_info = &disk.tracks[track].sector_infos[0];
 
-                    if sector_info.fdc_status1 & 0b0010_0000 != 0 {
-                        data_error = true;
+                    if sector_info.fdc_status1 & 0b0000_0001 != 0 {
+                        missing_address_mark = true;
                         interrupt_code = InterruptCode::AbnormalTermination;
                     }
 
-                    // Contrary to https://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
-                    // we determine the NO DATA condition above instead of from fdc_status1 bit 2
-
-                    if sector_info.fdc_status1 & 0b0000_0001 != 0 {
-                        missing_address_mark = true;
+                    if sector_info.fdc_status1 & 0b0000_0100 != 0 {
+                        no_data = true;
                         interrupt_code = InterruptCode::AbnormalTermination;
                     }
 
@@ -2154,7 +2151,6 @@ impl FloppyDiskController {
                         ..Default::default()
                     },
                     st1: StatusRegister1 {
-                        data_error,
                         no_data,
                         missing_address_mark,
                         ..Default::default()
@@ -4272,5 +4268,267 @@ mod tests {
 
         assert_eq!(data, vec![0xa, 0xb, 0xc, 0xd, 0xe, 0xf]);
         assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_id_without_disk_fails() {
+        let mut host = FdcHost::default();
+
+        let command = Command::ReadId {
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 0,
+            unit_select: 0,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadId(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                not_ready: true,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 0,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_track_with_empty_track_signals_missing_address_mark_and_no_data() {
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::ReadId {
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 0,
+            unit_select: 0,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadId(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                missing_address_mark: true,
+                no_data: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 0,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_id_with_missing_address_mark_fails() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 1,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, Vec::new(), 0b0000_0001, 0b0000_0000)
+                .build(),
+        );
+
+        let command = Command::ReadId {
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 0,
+            unit_select: 0,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadId(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                missing_address_mark: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 0,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_id_with_no_data_fails() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 1,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, Vec::new(), 0b0000_0100, 0b0000_0000)
+                .build(),
+        );
+
+        let command = Command::ReadId {
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 0,
+            unit_select: 0,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadId(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::AbnormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                no_data: true,
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 0,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_read_id_reports_chrn() {
+        let mut host = FdcHost::default();
+        let chrn = Chrn {
+            cylinder_number: 0,
+            head_address: 0,
+            record: 42,
+            number: 0,
+        };
+        host.fdc.drives[0].disk = Some(
+            DiskBuilder::new()
+                .add_track(0)
+                .with_sector(chrn, Vec::new(), 0b0000_0000, 0b0000_0000)
+                .build(),
+        );
+
+        let command = Command::ReadId {
+            mode: Mode::ModifiedFrequencyModulation,
+            head: 0,
+            unit_select: 0,
+        };
+        host.write_command(&command);
+        let data = host.read_data(0);
+        let result = host.read_result(7);
+
+        let expected_result = CommandResult::ReadId(StandardResult {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::NormalTermination,
+                ..Default::default()
+            },
+            st1: StatusRegister1 {
+                ..Default::default()
+            },
+            st2: StatusRegister2 {
+                ..Default::default()
+            },
+            chrn: Chrn {
+                cylinder_number: 0,
+                head_address: 0,
+                record: 42,
+                number: 0,
+            },
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert!(data.is_empty(), "Expected no data to be read");
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_command_sense_interrupt_status_with_pending_interrupt_succeeds() {
+        todo!()
+    }
+
+    #[test]
+    fn test_command_sense_interrupt_status_without_pending_interrupt_is_invalid() {
+        todo!()
+    }
+
+    #[test]
+    fn test_command_sense_drive_status_at_track_zero_reports_correctly() {
+        todo!()
+    }
+
+    #[test]
+    fn test_command_sense_drive_status_not_at_track_zero_reports_correctly() {
+        todo!()
+    }
+
+    #[test]
+    fn test_command_seek_succeeds_and_reports_seek_end() {
+        todo!()
+    }
+
+    #[test]
+    fn test_invalid_command_is_rejected_during_execution() {
+        todo!()
     }
 }
