@@ -2327,11 +2327,10 @@ impl FloppyDiskController {
                     return CommandResult::SenseDriveStatus { st3 };
                 };
 
-                let ready = true;
                 let track_zero = drive.track == 0;
 
                 let st3 = StatusRegister3 {
-                    ready,
+                    ready: true,
                     track_zero,
                     head_address,
                     unit_select,
@@ -2341,6 +2340,7 @@ impl FloppyDiskController {
             }
             None => {
                 let st3 = StatusRegister3 {
+                    ready: false,
                     head_address,
                     unit_select,
                     ..Default::default()
@@ -4522,10 +4522,7 @@ mod tests {
             st0: StatusRegister0 {
                 interrupt_code: InterruptCode::NormalTermination,
                 seek_end: true,
-                equipment_check: false,
-                not_ready: false,
-                head_address: 0,
-                unit_select: 0,
+                ..Default::default()
             },
             pcn: 42,
         }
@@ -4557,13 +4554,89 @@ mod tests {
     }
 
     #[test]
+    fn test_command_sense_drive_status_without_disk_reports_correctly() {
+        let mut host = FdcHost::default();
+
+        let command = Command::Recalibrate { unit_select: 0 };
+        host.write_command(&command);
+
+        let command = Command::SenseDriveStatus {
+            head: 0,
+            unit_select: 0,
+        };
+        host.write_command(&command);
+        let result = host.read_result(1);
+
+        let expected_result = CommandResult::SenseDriveStatus {
+            st3: StatusRegister3 {
+                ready: false,
+                ..Default::default()
+            },
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
     fn test_command_sense_drive_status_at_track_zero_reports_correctly() {
-        todo!()
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::Recalibrate { unit_select: 0 };
+        host.write_command(&command);
+
+        let command = Command::SenseDriveStatus {
+            head: 0,
+            unit_select: 0,
+        };
+        host.write_command(&command);
+        let result = host.read_result(1);
+
+        let expected_result = CommandResult::SenseDriveStatus {
+            st3: StatusRegister3 {
+                ready: true,
+                track_zero: true,
+                ..Default::default()
+            },
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
     }
 
     #[test]
     fn test_command_sense_drive_status_not_at_track_zero_reports_correctly() {
-        todo!()
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::Seek {
+            head: 0,
+            unit_select: 0,
+            new_cylinder_number: 42,
+        };
+        host.write_command(&command);
+
+        let command = Command::SenseDriveStatus {
+            head: 0,
+            unit_select: 0,
+        };
+        host.write_command(&command);
+        let result = host.read_result(1);
+
+        let expected_result = CommandResult::SenseDriveStatus {
+            st3: StatusRegister3 {
+                ready: true,
+                track_zero: false,
+                ..Default::default()
+            },
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
     }
 
     #[test]
