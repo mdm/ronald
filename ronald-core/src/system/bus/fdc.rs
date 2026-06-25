@@ -4504,12 +4504,56 @@ mod tests {
 
     #[test]
     fn test_command_sense_interrupt_status_with_pending_interrupt_succeeds() {
-        todo!()
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::Seek {
+            head: 0,
+            unit_select: 0,
+            new_cylinder_number: 42,
+        };
+        host.write_command(&command);
+
+        let command = Command::SenseInterruptStatus;
+        host.write_command(&command);
+        let result = host.read_result(2);
+
+        let expected_result = CommandResult::SenseInterruptStatus {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::NormalTermination,
+                seek_end: true,
+                equipment_check: false,
+                not_ready: false,
+                head_address: 0,
+                unit_select: 0,
+            },
+            pcn: 42,
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
     }
 
     #[test]
     fn test_command_sense_interrupt_status_without_pending_interrupt_is_invalid() {
-        todo!()
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::SenseInterruptStatus;
+        host.write_command(&command);
+        let result = host.read_result(1);
+
+        let expected_result = CommandResult::Invalid {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::InvalidCommand,
+                ..Default::default()
+            },
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
     }
 
     #[test]
