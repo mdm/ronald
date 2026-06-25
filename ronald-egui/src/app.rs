@@ -82,7 +82,8 @@ impl<S> eframe::App for RonaldApp<S>
 where
     S: KeyMapStore,
 {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let ctx = ui.ctx();
         let start = Instant::now();
         egui_extras::install_image_loaders(ctx);
 
