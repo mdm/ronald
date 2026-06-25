@@ -2,7 +2,9 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
-use crate::debug::{CpuDebugWindow, CrtcDebugWindow, GateArrayDebugWindow, MemoryDebugWindow};
+use crate::debug::{
+    CpuDebugWindow, CrtcDebugWindow, FdcDebugWindow, GateArrayDebugWindow, MemoryDebugWindow,
+};
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
@@ -32,6 +34,7 @@ where
     system_config_modal: SystemConfigModal,
     cpu_debug_window: CpuDebugWindow,
     crtc_debug_window: CrtcDebugWindow,
+    fdc_debug_window: FdcDebugWindow,
     gate_array_debug_window: GateArrayDebugWindow,
     memory_debug_window: MemoryDebugWindow,
 }
@@ -51,6 +54,7 @@ where
             system_config_modal: SystemConfigModal::default(),
             cpu_debug_window: CpuDebugWindow::default(),
             crtc_debug_window: CrtcDebugWindow::default(),
+            fdc_debug_window: FdcDebugWindow::default(),
             gate_array_debug_window: GateArrayDebugWindow::default(),
             memory_debug_window: MemoryDebugWindow::default(),
         }
@@ -98,6 +102,7 @@ where
         {
             self.cpu_debug_window.ui(ctx, frontend);
             self.crtc_debug_window.ui(ctx, frontend);
+            self.fdc_debug_window.ui(ctx, frontend);
             self.gate_array_debug_window.ui(ctx, frontend);
             self.memory_debug_window.ui(ctx, frontend);
         }
@@ -157,6 +162,13 @@ where
                             .clicked()
                         {
                             self.crtc_debug_window.show = !self.crtc_debug_window.show;
+                            ui.close_menu();
+                        }
+                        if ui
+                            .add(egui::Button::new("FDC").selected(self.fdc_debug_window.show))
+                            .clicked()
+                        {
+                            self.fdc_debug_window.show = !self.fdc_debug_window.show;
                             ui.close_menu();
                         }
                         if ui

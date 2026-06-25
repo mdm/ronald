@@ -1,16 +1,16 @@
 use serde::{Deserialize, Serialize};
 
-use crate::debug::event::GateArrayDebugEvent;
-use crate::debug::view::GateArrayDebugView;
+use crate::VideoSink;
 use crate::debug::DebugSource;
 use crate::debug::Debuggable;
 use crate::debug::Snapshottable;
+use crate::debug::event::GateArrayDebugEvent;
+use crate::debug::view::GateArrayDebugView;
 use crate::system::bus::crtc;
 use crate::system::bus::screen;
 use crate::system::clock::MasterClockTick;
 use crate::system::memory::MemManage;
 use crate::system::memory::MemRead;
-use crate::VideoSink;
 
 pub trait GateArray: Default {
     fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8);

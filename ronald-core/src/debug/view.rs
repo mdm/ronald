@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use crate::system::{
-    bus::crtc::Register as CrtcRegister, clock::MasterClockTick, instruction::InterruptMode,
+    bus::crtc::Register as CrtcRegister,
+    bus::fdc::{Command as FdcCommand, CommandResult as FdcResult, Phase as FdcPhase},
+    clock::MasterClockTick,
+    instruction::InterruptMode,
 };
 
 pub struct SystemDebugView {
@@ -10,6 +13,7 @@ pub struct SystemDebugView {
     pub memory: MemoryDebugView,
     pub gate_array: GateArrayDebugView,
     pub crtc: CrtcDebugView,
+    pub fdc: FdcDebugView,
 }
 
 pub struct CpuDebugView {
@@ -80,4 +84,17 @@ pub struct CrtcDebugView {
     pub vsync_active: bool,
     pub display_enabled: bool,
     pub current_address: usize,
+}
+
+pub struct FdcDebugView {
+    pub main_status_register: u8,
+    pub phase: FdcPhase,
+    pub command_buffer: Vec<u8>,
+    pub data_buffer: Vec<u8>,
+    pub result_buffer: Vec<u8>,
+    pub current_command: Option<FdcCommand>,
+    pub current_result: Option<FdcResult>,
+    pub motors_on: bool,
+    pub drive_a_track: Option<usize>,
+    pub drive_b_track: Option<usize>,
 }
