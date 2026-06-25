@@ -2380,7 +2380,7 @@ impl FloppyDiskController {
                 };
 
                 drive.busy = true;
-                drive.track = new_cylinder_number as usize;
+                drive.track = new_cylinder_number as usize; // TODO: what happens if NCN is out of bounds?
 
                 let interrupt_code = InterruptCode::NormalTermination;
                 let seek_end = true;
@@ -4640,8 +4640,33 @@ mod tests {
     }
 
     #[test]
-    fn test_command_seek_succeeds_and_reports_seek_end() {
-        todo!()
+    fn test_command_seek_succeeds_and_reports_correctly() {
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::Seek {
+            head: 0,
+            unit_select: 0,
+            new_cylinder_number: 42,
+        };
+        host.write_command(&command);
+
+        let command = Command::SenseInterruptStatus;
+        host.write_command(&command);
+        let result = host.read_result(2);
+
+        let expected_result = CommandResult::SenseInterruptStatus {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::NormalTermination,
+                seek_end: true,
+                ..Default::default()
+            },
+            pcn: 42,
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
     }
 
     #[test]
