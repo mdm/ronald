@@ -4679,6 +4679,22 @@ mod tests {
 
     #[test]
     fn test_invalid_command_is_rejected_during_execution() {
-        todo!()
+        let mut host = FdcHost::default();
+        host.fdc.drives[0].disk = Some(DiskBuilder::new().add_track(0).build());
+
+        let command = Command::Invalid;
+        host.write_command(&command);
+        let result = host.read_result(1);
+
+        let expected_result = CommandResult::Invalid {
+            st0: StatusRegister0 {
+                interrupt_code: InterruptCode::InvalidCommand,
+                ..Default::default()
+            },
+        }
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        assert_eq!(result, expected_result);
     }
 }
