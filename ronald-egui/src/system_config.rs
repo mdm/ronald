@@ -3,8 +3,16 @@ use eframe::egui;
 pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig};
 
 #[derive(Default)]
+enum Tab {
+    #[default]
+    Hardware,
+    Rom,
+}
+
+#[derive(Default)]
 pub struct SystemConfigModal {
     pub show: bool,
+    tab: Tab,
     changed_config: Option<SystemConfig>,
 }
 
@@ -29,112 +37,25 @@ impl SystemConfigModal {
                 ui.add_space(20.0);
 
                 ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
-                            ui.label("Model:");
-                        });
-                        ui.group(|ui| {
-                            ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                                if let Some(config) = &mut self.changed_config {
-                                    ui.radio_value(
-                                        &mut config.model,
-                                        CpcModel::Cpc464,
-                                        "Amstrad CPC 464",
-                                    );
-                                    ui.radio_value(
-                                        &mut config.model,
-                                        CpcModel::Cpc664,
-                                        "Amstrad CPC 664",
-                                    );
-                                    ui.radio_value(
-                                        &mut config.model,
-                                        CpcModel::Cpc6128,
-                                        "Amstrad CPC 6128",
-                                    );
-                                }
-                            });
-                        });
-                    });
-
-                    ui.add_space(15.0);
-
-                    ui.vertical(|ui| {
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
-                            ui.label("Enabled Disk Drives:");
-                        });
-                        ui.group(|ui| {
-                            ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                                if let Some(config) = &mut self.changed_config {
-                                    let none_enabled = config.model == CpcModel::Cpc464;
-
-                                    // Ensure we don't have None selected for models that require at least one drive
-                                    if !none_enabled && config.disk_drives == DiskDrives::None {
-                                        config.disk_drives = DiskDrives::One;
-                                    }
-
-                                    ui.add_enabled_ui(none_enabled, |ui| {
-                                        ui.radio_value(
-                                            &mut config.disk_drives,
-                                            DiskDrives::None,
-                                            DiskDrives::None.to_string(),
-                                        );
-                                    });
-                                    ui.radio_value(
-                                        &mut config.disk_drives,
-                                        DiskDrives::One,
-                                        DiskDrives::One.to_string(),
-                                    );
-                                    ui.radio_value(
-                                        &mut config.disk_drives,
-                                        DiskDrives::Two,
-                                        DiskDrives::Two.to_string(),
-                                    );
-                                }
-                            });
-                        });
-                    });
+                    if ui
+                        .selectable_label(matches!(self.tab, Tab::Hardware), "Hardware")
+                        .clicked()
+                    {
+                        self.tab = Tab::Hardware;
+                    }
+                    if ui
+                        .selectable_label(matches!(self.tab, Tab::Rom), "ROMs")
+                        .clicked()
+                    {
+                        self.tab = Tab::Rom;
+                    }
                 });
+                ui.separator();
 
-                ui.add_space(15.0);
-
-                ui.vertical(|ui| {
-                    ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
-                        ui.label("CRT Controller:");
-                    });
-                    ui.group(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.vertical(|ui| {
-                                if let Some(config) = &mut self.changed_config {
-                                    ui.radio_value(
-                                        &mut config.crtc,
-                                        CrtcType::Type0,
-                                        CrtcType::Type0.to_string(),
-                                    );
-                                    ui.radio_value(
-                                        &mut config.crtc,
-                                        CrtcType::Type1,
-                                        CrtcType::Type1.to_string(),
-                                    );
-                                }
-                            });
-                            ui.add_space(15.0);
-                            ui.vertical(|ui| {
-                                if let Some(config) = &mut self.changed_config {
-                                    ui.radio_value(
-                                        &mut config.crtc,
-                                        CrtcType::Type2,
-                                        CrtcType::Type2.to_string(),
-                                    );
-                                    ui.radio_value(
-                                        &mut config.crtc,
-                                        CrtcType::Type4,
-                                        CrtcType::Type4.to_string(),
-                                    );
-                                }
-                            });
-                        });
-                    });
-                });
+                match self.tab {
+                    Tab::Hardware => self.render_hardware_config(ui),
+                    Tab::Rom => self.render_rom_config(ui),
+                }
 
                 ui.add_space(20.0);
 
@@ -164,6 +85,110 @@ impl SystemConfigModal {
 
         config_changed
     }
+
+    fn render_hardware_config(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
+                    ui.label("Model:");
+                });
+                ui.group(|ui| {
+                    ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+                        if let Some(config) = &mut self.changed_config {
+                            ui.radio_value(&mut config.model, CpcModel::Cpc464, "Amstrad CPC 464");
+                            ui.radio_value(&mut config.model, CpcModel::Cpc664, "Amstrad CPC 664");
+                            ui.radio_value(
+                                &mut config.model,
+                                CpcModel::Cpc6128,
+                                "Amstrad CPC 6128",
+                            );
+                        }
+                    });
+                });
+            });
+
+            ui.add_space(15.0);
+
+            ui.vertical(|ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
+                    ui.label("Enabled Disk Drives:");
+                });
+                ui.group(|ui| {
+                    ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+                        if let Some(config) = &mut self.changed_config {
+                            let none_enabled = config.model == CpcModel::Cpc464;
+
+                            // Ensure we don't have None selected for models that require at least one drive
+                            if !none_enabled && config.disk_drives == DiskDrives::None {
+                                config.disk_drives = DiskDrives::One;
+                            }
+
+                            ui.add_enabled_ui(none_enabled, |ui| {
+                                ui.radio_value(
+                                    &mut config.disk_drives,
+                                    DiskDrives::None,
+                                    DiskDrives::None.to_string(),
+                                );
+                            });
+                            ui.radio_value(
+                                &mut config.disk_drives,
+                                DiskDrives::One,
+                                DiskDrives::One.to_string(),
+                            );
+                            ui.radio_value(
+                                &mut config.disk_drives,
+                                DiskDrives::Two,
+                                DiskDrives::Two.to_string(),
+                            );
+                        }
+                    });
+                });
+            });
+        });
+
+        ui.add_space(15.0);
+
+        ui.vertical(|ui| {
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
+                ui.label("CRT Controller:");
+            });
+            ui.group(|ui| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        if let Some(config) = &mut self.changed_config {
+                            ui.radio_value(
+                                &mut config.crtc,
+                                CrtcType::Type0,
+                                CrtcType::Type0.to_string(),
+                            );
+                            ui.radio_value(
+                                &mut config.crtc,
+                                CrtcType::Type1,
+                                CrtcType::Type1.to_string(),
+                            );
+                        }
+                    });
+                    ui.add_space(15.0);
+                    ui.vertical(|ui| {
+                        if let Some(config) = &mut self.changed_config {
+                            ui.radio_value(
+                                &mut config.crtc,
+                                CrtcType::Type2,
+                                CrtcType::Type2.to_string(),
+                            );
+                            ui.radio_value(
+                                &mut config.crtc,
+                                CrtcType::Type4,
+                                CrtcType::Type4.to_string(),
+                            );
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    fn render_rom_config(&mut self, ui: &mut egui::Ui) {}
 }
 
 #[cfg(test)]
