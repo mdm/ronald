@@ -1,6 +1,13 @@
+use std::path::PathBuf;
+
 use eframe::egui;
 
 pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig};
+
+use crate::utils::{
+    files::pick_folder,
+    sync::{Shared, shared},
+};
 
 #[derive(Default)]
 enum Tab {
@@ -9,11 +16,25 @@ enum Tab {
     Rom,
 }
 
-#[derive(Default)]
 pub struct SystemConfigModal {
     pub show: bool,
     tab: Tab,
     changed_config: Option<SystemConfig>,
+    rom_folder: Shared<Option<PathBuf>>,
+}
+
+impl Default for SystemConfigModal {
+    fn default() -> Self {
+        Self {
+            show: false,
+            tab: Tab::Hardware,
+            changed_config: None,
+            rom_folder: shared(
+                directories::ProjectDirs::from("dev", "int82", "ronald")
+                    .map(|dirs| dirs.data_dir().join("roms")),
+            ),
+        }
+    }
 }
 
 impl SystemConfigModal {
@@ -44,7 +65,7 @@ impl SystemConfigModal {
                         self.tab = Tab::Hardware;
                     }
                     if ui
-                        .selectable_label(matches!(self.tab, Tab::Rom), "ROMs")
+                        .selectable_label(matches!(self.tab, Tab::Rom), "System ROMs")
                         .clicked()
                     {
                         self.tab = Tab::Rom;
@@ -188,7 +209,38 @@ impl SystemConfigModal {
         });
     }
 
-    fn render_rom_config(&mut self, ui: &mut egui::Ui) {}
+    fn render_rom_config(&mut self, ui: &mut egui::Ui) {
+        self.render_rom_folder(ui);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn render_rom_folder(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            use crate::utils::sync::SharedExt;
+
+            ui.label("ROM folder:");
+            self.rom_folder.with_mut(|f| match f {
+                Some(path_buf) => {
+                    let mut path = path_buf.as_os_str().to_string_lossy();
+                    ui.text_edit_singleline(&mut path);
+                    *f = Some(PathBuf::from(path.to_string()));
+                }
+                None => {
+                    ui.add_enabled(false, egui::TextEdit::singleline(&mut "".to_string()));
+                }
+            });
+            if ui.button("Browse").clicked() {
+                pick_folder("ROM Folder", self.rom_folder.clone());
+            }
+        });
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn render_rom_folder(&mut self, ui: &mut egui::Ui) {
+        ui.label("ROMs are stored in the browser's IndexedDB.");
+        ui.button("Clear ROMs")
+            .on_hover_text("Clears all ROMs stored in the browser's IndexedDB.");
+    }
 }
 
 #[cfg(test)]

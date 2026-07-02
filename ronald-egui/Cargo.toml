@@ -8,6 +8,7 @@ edition = "2024"
 [dependencies]
 ronald-core = { path = "../ronald-core" }
 cpal = { version = "0.18", features = ["wasm-bindgen"] }
+directories = "6.0.0"
 eframe = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", default-features = false, features = [
   "accesskit",
   "default_fonts",
