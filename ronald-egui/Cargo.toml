@@ -21,6 +21,7 @@ egui_extras = { git = "https://github.com/mdm/egui.git", branch = "latest-patche
   "svg",
 ] }
 log = "0.4"
+open = "5.3"
 rfd = "0.17"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

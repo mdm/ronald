@@ -219,20 +219,34 @@ impl SystemConfigModal {
             use crate::utils::sync::SharedExt;
 
             ui.label("ROM folder:");
-            self.rom_folder.with_mut(|f| match f {
-                Some(path_buf) => {
-                    let mut path = path_buf.as_os_str().to_string_lossy();
-                    ui.text_edit_singleline(&mut path);
-                    *f = Some(PathBuf::from(path.to_string()));
-                }
-                None => {
-                    ui.add_enabled(false, egui::TextEdit::singleline(&mut "".to_string()));
-                }
+            self.rom_folder.with_mut(|f| {
+                let mut path = match f {
+                    Some(path_buf) => path_buf.as_os_str().to_string_lossy().to_string(),
+                    None => "".to_string(),
+                };
+                ui.text_edit_singleline(&mut path);
+                *f = Some(PathBuf::from(path));
             });
-            if ui.button("Browse").clicked() {
+            if ui.button("Open").clicked() {
+                self.rom_folder.with_mut(|f| {
+                    if let Some(path) = f.as_ref() {
+                        open::that(path).unwrap_or_else(|e| {
+                            log::error!("Failed to open ROM folder {:?}: {}", path, e);
+                        });
+                    }
+                });
+            }
+            if ui
+                .button("Pick")
+                .on_hover_text("Pick a different folder")
+                .clicked()
+            {
                 pick_folder("ROM Folder", self.rom_folder.clone());
             }
         });
+
+        // TODO: Show warning if the folder is not writable or does not exist, and provide a button
+        // to create it if it doesn't exist.
     }
 
     #[cfg(target_arch = "wasm32")]
