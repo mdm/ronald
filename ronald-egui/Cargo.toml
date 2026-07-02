@@ -7,8 +7,7 @@ edition = "2024"
 
 [dependencies]
 ronald-core = { path = "../ronald-core" }
-serde_json = "1.0"
-cpal = { version = "0.16.0", features = ["wasm-bindgen"] }
+cpal = { version = "0.18", features = ["wasm-bindgen"] }
 eframe = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", default-features = false, features = [
   "accesskit",
   "default_fonts",
@@ -20,20 +19,21 @@ egui = { git = "https://github.com/mdm/egui.git", branch = "latest-patched" }
 egui_extras = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", features = [
   "svg",
 ] }
-log = "0.4.27"
-rfd = "0.15.4"
-serde = { version = "1.0.219", features = ["derive"] }
-web-time = "1.1.0"
-wgpu = { version = "24.0", features = ["webgpu", "webgl"] }
+log = "0.4"
+rfd = "0.17"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+web-time = "1.1"
+wgpu = { version = "29.0", features = ["webgpu", "webgl"] }
 
 # Native-only dependencies
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-env_logger = "0.11.8"
+env_logger = "0.11"
 
 # Web-only dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = [
@@ -46,8 +46,8 @@ web-sys = { version = "0.3", features = [
 ] }
 
 [dev-dependencies]
-kittest = "0.2"
 egui_kittest = { git = "https://github.com/mdm/egui.git", branch = "latest-patched", features = [
   "snapshot",
   "wgpu",
 ] }
+kittest = "0.4"

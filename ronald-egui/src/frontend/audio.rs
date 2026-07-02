@@ -35,13 +35,13 @@ impl CpalAudio {
 
                     match config.sample_format() {
                         cpal::SampleFormat::F32 => {
-                            self.run_audio_stream::<f32>(&device, &config.into(), sample_queue)
+                            self.run_audio_stream::<f32>(&device, config.into(), sample_queue)
                         }
                         cpal::SampleFormat::I16 => {
-                            self.run_audio_stream::<i16>(&device, &config.into(), sample_queue)
+                            self.run_audio_stream::<i16>(&device, config.into(), sample_queue)
                         }
                         cpal::SampleFormat::U16 => {
-                            self.run_audio_stream::<u16>(&device, &config.into(), sample_queue)
+                            self.run_audio_stream::<u16>(&device, config.into(), sample_queue)
                         }
                         sample_format => {
                             log::error!("Unsupported sample format: {sample_format:?}");
@@ -61,12 +61,12 @@ impl CpalAudio {
     fn run_audio_stream<T>(
         &mut self,
         device: &cpal::Device,
-        config: &cpal::StreamConfig,
+        config: cpal::StreamConfig,
         sample_queue: mpsc::Receiver<f32>,
     ) where
         T: cpal::SizedSample + cpal::FromSample<f32>,
     {
-        let sample_rate = config.sample_rate.0 as f32;
+        let sample_rate = config.sample_rate as f32;
         let channels = config.channels as usize;
 
         let mut last_sample = 0.0;
