@@ -1,8 +1,7 @@
-use std::{path::PathBuf, thread::spawn};
+use std::path::PathBuf;
 
 use eframe::{egui, egui_wgpu};
 use egui::Vec2;
-use serde::{Deserialize, Serialize};
 use web_time::Instant;
 
 #[cfg(target_arch = "wasm32")]
@@ -12,27 +11,24 @@ use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
     debug::{
-        breakpoint::{AnyBreakpoint, Breakpoint, BreakpointManager},
+        breakpoint::{AnyBreakpoint, BreakpointManager},
         view::SystemDebugView,
     },
     system::{SystemConfig, instruction::DecodedInstruction},
 };
 
-use crate::key_mapper::{KeyEvent, KeyMapStore, KeyMapper};
 use crate::utils::sync::{Shared, SharedExt, shared};
 use crate::{
     debug::Debugger,
     frontend::{audio::CpalAudio, video::EguiWgpuVideo},
 };
+use crate::{
+    key_mapper::{KeyEvent, KeyMapStore, KeyMapper},
+    utils::files::{File, pick_file},
+};
 
 mod audio;
 mod video;
-
-#[derive(Debug)]
-struct File {
-    path_buf: PathBuf,
-    image: Vec<u8>,
-}
 
 pub struct Frontend {
     initialized: bool,
@@ -117,7 +113,7 @@ impl Frontend {
     }
 
     pub fn pick_file_disk_a(&mut self) {
-        self.pick_file_internal(
+        pick_file(
             "Load DSK into Drive A:",
             "DSK Disk Image",
             "dsk",
@@ -126,7 +122,7 @@ impl Frontend {
     }
 
     pub fn pick_file_disk_b(&mut self) {
-        self.pick_file_internal(
+        pick_file(
             "Load DSK into Drive B:",
             "DSK Disk Image",
             "dsk",
@@ -135,70 +131,12 @@ impl Frontend {
     }
 
     pub fn pick_file_tape(&mut self) {
-        self.pick_file_internal(
+        pick_file(
             "Load Tape:",
             "CDT Tape Image",
             "cdt",
             self.picked_file_tape.clone(),
         );
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    fn pick_file_internal(
-        &mut self,
-        title: &str,
-        filter_name: &str,
-        extension: &str,
-        picked_file: Shared<Option<File>>,
-    ) {
-        let title = title.to_string();
-        let filter_name = filter_name.to_string();
-        let extension = extension.to_string();
-        spawn(move || {
-            if let Some(file) = rfd::FileDialog::new()
-                .set_title(&title)
-                .add_filter(&filter_name, &[&extension])
-                .pick_file()
-            {
-                if let Ok(image) = std::fs::read(&file) {
-                    picked_file.with_mut(|f| {
-                        *f = Some(File {
-                            path_buf: file,
-                            image,
-                        });
-                    });
-                }
-            }
-        });
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn pick_file_internal(
-        &mut self,
-        title: &str,
-        filter_name: &str,
-        extension: &str,
-        picked_file: Shared<Option<File>>,
-    ) {
-        let title = title.to_string();
-        let filter_name = filter_name.to_string();
-        let extension = extension.to_string();
-        wasm_bindgen_futures::spawn_local(async move {
-            if let Some(file) = rfd::AsyncFileDialog::new()
-                .set_title(&title)
-                .add_filter(&filter_name, &[&extension])
-                .pick_file()
-                .await
-            {
-                let file_data = File {
-                    path_buf: file.file_name().into(),
-                    image: file.read().await,
-                };
-                picked_file.with_mut(|f| {
-                    *f = Some(file_data);
-                });
-            }
-        });
     }
 
     fn run_frame<K>(
