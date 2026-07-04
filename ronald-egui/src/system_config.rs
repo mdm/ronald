@@ -4,9 +4,10 @@ use eframe::egui;
 
 pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig};
 
+use crate::colors;
 use crate::utils::{
     files::pick_folder,
-    sync::{Shared, shared},
+    sync::{Shared, SharedExt, shared},
 };
 
 #[derive(Default)]
@@ -215,19 +216,40 @@ impl SystemConfigModal {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn render_rom_folder(&mut self, ui: &mut egui::Ui) {
+        let mut valid = false;
         ui.horizontal(|ui| {
-            use crate::utils::sync::SharedExt;
-
             ui.label("ROM folder:");
-            self.rom_folder.with_mut(|f| {
-                let mut path = match f {
-                    Some(path_buf) => path_buf.as_os_str().to_string_lossy().to_string(),
-                    None => "".to_string(),
-                };
-                ui.text_edit_singleline(&mut path);
-                *f = Some(PathBuf::from(path));
-            });
-            if ui.button("Open").clicked() {
+            if !self
+                .rom_folder
+                .try_with_mut(|f| {
+                    let mut path = match f {
+                        Some(path_buf) => path_buf.as_os_str().to_string_lossy().to_string(),
+                        None => "".to_string(),
+                    };
+                    ui.text_edit_singleline(&mut path);
+                    *f = Some(PathBuf::from(path));
+                    true
+                })
+                .unwrap_or(false)
+            {
+                ui.add_enabled(false, egui::TextEdit::singleline(&mut "".to_string()));
+            }
+            valid = self
+                .rom_folder
+                .try_with_mut(|f| match f {
+                    Some(path_buf) => {
+                        path_buf.is_dir() && {
+                            if let Ok(metadata) = std::fs::metadata(path_buf) {
+                                !metadata.permissions().readonly()
+                            } else {
+                                false
+                            }
+                        }
+                    }
+                    None => false,
+                })
+                .unwrap_or(false);
+            if ui.add_enabled(valid, egui::Button::new("Open")).clicked() {
                 self.rom_folder.with_mut(|f| {
                     if let Some(path) = f.as_ref() {
                         open::that(path).unwrap_or_else(|e| {
@@ -244,9 +266,23 @@ impl SystemConfigModal {
                 pick_folder("ROM Folder", self.rom_folder.clone());
             }
         });
-
-        // TODO: Show warning if the folder is not writable or does not exist, and provide a button
-        // to create it if it doesn't exist.
+        if !valid {
+            ui.horizontal(|ui| {
+                ui.colored_label(
+                    colors::DARK_RED,
+                    "The specified folder does not exist or is not writable.",
+                );
+                if ui.button("Create").clicked() {
+                    self.rom_folder.with_mut(|f| {
+                        if let Some(path_buf) = &f {
+                            std::fs::create_dir_all(path_buf).unwrap_or_else(|e| {
+                                log::error!("Failed to create ROM folder {:?}: {}", path_buf, e);
+                            });
+                        }
+                    });
+                }
+            });
+        }
     }
 
     #[cfg(target_arch = "wasm32")]
