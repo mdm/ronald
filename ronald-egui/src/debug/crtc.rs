@@ -594,12 +594,6 @@ mod gui_tests {
 
     use crate::debug::mock::TestDebugger;
 
-    fn big_harness<'a>(app: impl FnMut(&mut egui::Ui) + 'a) -> Harness<'a> {
-        Harness::builder()
-            .with_size(egui::Vec2::new(1000.0, 1000.0))
-            .build_ui(app)
-    }
-
     #[test]
     fn test_crtc_debug_window_opens_and_closes() {
         let mut debugger = TestDebugger::default();
@@ -613,7 +607,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Check that the window title is rendered
@@ -640,7 +635,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         let i = 0;
@@ -704,7 +700,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         let i = 0;
@@ -769,7 +766,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         let i = 0;
@@ -836,7 +834,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         let i = 0;
@@ -885,7 +884,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Enter character row value "0x42"
@@ -955,7 +955,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Enter character row value "invalid"
@@ -1010,7 +1011,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Enter character row value "0x42"
@@ -1065,7 +1067,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Enter character row value "0x42"
@@ -1120,7 +1123,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Enter character row value "0x42"
@@ -1192,7 +1196,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Enter address value "0xbeef"
@@ -1236,7 +1241,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Enter character row value "0x42"
@@ -1287,7 +1293,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Check start
@@ -1338,7 +1345,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Add breakpoint
@@ -1366,7 +1374,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Check start
@@ -1417,7 +1426,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Add breakpoint
@@ -1445,7 +1455,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Check start
@@ -1504,7 +1515,8 @@ mod gui_tests {
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = big_harness(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Add breakpoint
