@@ -694,8 +694,9 @@ mod gui_tests {
 
     use egui::accesskit;
     use egui_kittest::{Harness, kittest::Queryable};
+    use kittest::NodeT;
 
-    use ronald_core::debug::breakpoint::{CpuRegister16Breakpoint, GateArrayScreenModeBreakpoint};
+    use ronald_core::debug::breakpoint::CpuRegister16Breakpoint;
 
     use crate::debug::mock::TestDebugger;
 
@@ -707,11 +708,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Check that the window title is rendered
@@ -733,11 +735,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select "Disassembly" view mode
@@ -781,11 +784,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select "Disassembly" view mode
@@ -841,11 +845,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select "Disassembly" view mode
@@ -879,11 +884,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select "Disassembly" view mode
@@ -928,11 +934,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select view mode
@@ -953,12 +960,17 @@ mod gui_tests {
 
         let scroll_area = harness
             .get_by_label("2000:")
+            .accesskit_node()
             .parent()
             .unwrap()
             .bounding_box()
             .unwrap();
 
-        let address_label = harness.get_by_label("2000:").bounding_box().unwrap();
+        let address_label = harness
+            .get_by_label("2000:")
+            .accesskit_node()
+            .bounding_box()
+            .unwrap();
         assert!(!scroll_area.contains(address_label.origin()));
 
         // Jump to address
@@ -967,7 +979,11 @@ mod gui_tests {
             .click();
         harness.run();
 
-        let address_label = harness.get_by_label("2000:").bounding_box().unwrap();
+        let address_label = harness
+            .get_by_label("2000:")
+            .accesskit_node()
+            .bounding_box()
+            .unwrap();
         assert!(scroll_area.contains(address_label.origin()));
     }
 
@@ -1008,7 +1024,7 @@ mod snapshot_tests {
     use super::*;
 
     use egui::accesskit;
-    use egui_kittest::{Harness, kittest, kittest::Queryable};
+    use egui_kittest::{Harness, kittest::Queryable};
 
     use crate::debug::mock::TestDebugger;
 
@@ -1019,11 +1035,12 @@ mod snapshot_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Show color configuration
@@ -1063,7 +1080,7 @@ mod snapshot_tests {
             .unwrap();
         value.click();
         value.type_text("255");
-        value.key_press(kittest::Key::Escape); // close color picker
+        harness.key_press(egui::Key::Escape); // close color picker
         harness.run();
 
         harness.snapshot(snaphot);
