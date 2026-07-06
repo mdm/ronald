@@ -188,10 +188,10 @@ impl KeyMapEditor {
                         self.listening = None;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if let Some(host_key) = key_mapper.binding(hovered_key, shifted) {
-                            if ui.button("Clear Binding").clicked() {
-                                let _ = key_mapper.clear_binding(hovered_key, shifted);
-                            }
+                        if let Some(_host_key) = key_mapper.binding(hovered_key, shifted)
+                            && ui.button("Clear Binding").clicked()
+                        {
+                            let _ = key_mapper.clear_binding(hovered_key, shifted);
                         }
                     });
                 });
@@ -415,8 +415,10 @@ mod gui_tests {
             repeat: false,
             modifiers,
         }];
-        let mut raw_input = egui::RawInput::default();
-        raw_input.events = events;
+        let raw_input = egui::RawInput {
+            events,
+            ..Default::default()
+        };
         let mut input_state = egui::InputState::default();
         input_state.raw = raw_input;
         input_state
@@ -430,11 +432,12 @@ mod gui_tests {
         // Initially modal should not be shown
         key_map_editor.show = false;
 
-        let app = move |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             key_map_editor.ui(ctx, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let harness = Harness::new_ui(app);
 
         // Modal should not be visible initially
         assert!(
@@ -477,8 +480,10 @@ mod gui_tests {
 
     #[test]
     fn test_key_binding_dialog_opens_on_click() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
@@ -504,8 +509,10 @@ mod gui_tests {
 
     #[test]
     fn test_shifted_key_binding_dialog() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
@@ -531,8 +538,10 @@ mod gui_tests {
 
     #[test]
     fn test_key_binding_dialog_cancellation() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
@@ -571,8 +580,10 @@ mod gui_tests {
 
     #[test]
     fn test_clear_existing_binding() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         // Pre-set a binding for A key to Q
@@ -610,8 +621,10 @@ mod gui_tests {
 
     #[test]
     fn test_shift_key_exclusion() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
@@ -635,8 +648,10 @@ mod gui_tests {
 
     #[test]
     fn test_keyboard_navigation() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
