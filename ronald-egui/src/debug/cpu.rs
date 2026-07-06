@@ -506,11 +506,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Check that the window title is rendered
@@ -532,11 +533,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 0;
@@ -552,11 +554,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "0x42"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("0x42");
+            .unwrap();
+        input.focus();
+        input.type_text("0x42");
         harness.run();
 
         // Add breakpoint
@@ -586,11 +589,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 0;
@@ -606,11 +610,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "invalid"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("invalid");
+            .unwrap();
+        input.focus();
+        input.type_text("invalid");
         harness.run();
 
         // Add breakpoint
@@ -634,11 +639,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 0;
@@ -701,11 +707,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -721,11 +728,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "0xbeef"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("0xbeef");
+            .unwrap();
+        input.focus();
+        input.type_text("0xbeef");
         harness.run();
 
         // Add breakpoint
@@ -755,11 +763,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -803,11 +812,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -870,11 +880,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -886,15 +897,18 @@ mod gui_tests {
             .unwrap()
             .click();
         harness.run();
+        harness.get_by_label("HL'").scroll_to_me();
+        harness.run();
         harness.get_by_label("HL'").click();
         harness.run();
 
         // Enter value "0xbeef"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("0xbeef");
+            .unwrap();
+        input.focus();
+        input.type_text("0xbeef");
         harness.run();
 
         // Add breakpoint
@@ -924,11 +938,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -972,11 +987,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             window.ui(ctx, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -987,6 +1003,8 @@ mod gui_tests {
             .nth(i)
             .unwrap()
             .click();
+        harness.run();
+        harness.get_by_label("HL'").scroll_to_me();
         harness.run();
         harness.get_by_label("HL'").click();
         harness.run();
