@@ -452,11 +452,12 @@ mod gui_tests {
         // Modal should be shown
         key_map_editor.show = true;
 
-        let app = move |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             key_map_editor.ui(ctx, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Modal should be visible
@@ -480,11 +481,12 @@ mod gui_tests {
         key_map_editor.show = true;
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             key_map_editor.ui(ctx, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Get the A key by its accessibility label
@@ -506,19 +508,19 @@ mod gui_tests {
         key_map_editor.show = true;
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             key_map_editor.ui(ctx, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Get the A key by its accessibility label
         let a_key = harness.get_by_label("A key");
 
         // Press shift and click on the A key
-        a_key.key_down(egui_kittest::kittest::Key::Shift);
-        a_key.click();
+        a_key.click_modifiers(egui::Modifiers::SHIFT);
         harness.run();
 
         // Verify shifted binding dialog opened
@@ -533,11 +535,12 @@ mod gui_tests {
         key_map_editor.show = true;
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             key_map_editor.ui(ctx, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Open binding dialog
@@ -578,11 +581,12 @@ mod gui_tests {
             .try_set_binding("A", false, &input_state)
             .unwrap();
 
-        let app = move |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             key_map_editor.ui(ctx, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Get the A key by its accessibility label
@@ -610,11 +614,12 @@ mod gui_tests {
         key_map_editor.show = true;
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             key_map_editor.ui(ctx, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Verify the instruction text mentions that Shift keys cannot be bound
@@ -634,23 +639,20 @@ mod gui_tests {
         key_map_editor.show = true;
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
             key_map_editor.ui(ctx, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Tab once to highlight the first key (should be Escape key)
-        harness
-            .get_by_role(Role::Image)
-            .key_down(egui_kittest::kittest::Key::Tab);
+        harness.get_by_role(Role::Image).key_down(egui::Key::Tab);
         harness.run();
 
         // Press Enter to activate the focused key
-        harness
-            .get_by_role(Role::Image)
-            .key_down(egui_kittest::kittest::Key::Enter);
+        harness.get_by_role(Role::Image).key_down(egui::Key::Enter);
         harness.run();
 
         // Verify binding dialog opened for Escape key
