@@ -756,6 +756,9 @@ mod gui_tests {
         // Type in PC address
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
             .type_text("0x0000");
         harness.run();
 
@@ -803,6 +806,9 @@ mod gui_tests {
         harness.run();
 
         // Type in PC address
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
+            .focus();
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
             .type_text("0x0000");
@@ -905,6 +911,9 @@ mod gui_tests {
         // Type 0xc000
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
             .type_text("0xc000");
         harness.run();
 
@@ -955,16 +964,23 @@ mod gui_tests {
         // Type 0x2000
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
             .type_text("0x2000");
         harness.run();
 
-        let scroll_area = harness
-            .get_by_label("2000:")
-            .accesskit_node()
-            .parent()
-            .unwrap()
-            .bounding_box()
-            .unwrap();
+        // egui 0.34 no longer sets a bounding box on the label's immediate
+        // container, so walk up to the nearest ancestor that has one (the
+        // visible window area) to check whether the target row is on-screen.
+        let mut ancestor = harness.get_by_label("2000:").accesskit_node().parent();
+        let scroll_area = loop {
+            let node = ancestor.expect("no ancestor with a bounding box");
+            if let Some(bounding_box) = node.bounding_box() {
+                break bounding_box;
+            }
+            ancestor = node.parent();
+        };
 
         let address_label = harness
             .get_by_label("2000:")
