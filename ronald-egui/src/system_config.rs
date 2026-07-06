@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use eframe::egui;
 
 pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig};
-use wgpu::hal::auxil::db;
 
 use crate::colors;
 use crate::utils::{
@@ -323,20 +322,23 @@ impl SystemConfigModal {
 mod gui_tests {
     use super::*;
     use egui_kittest::{Harness, kittest::Queryable};
+    use kittest::NodeT;
 
     #[test]
     fn test_system_config_modal_opens_and_closes() {
         let mut modal = SystemConfigModal {
             show: true,
-            changed_config: None,
+            ..Default::default()
         };
         let mut config = SystemConfig::default();
+        let mut rom_folder = None;
 
-        let app = move |ctx: &egui::Context| {
-            modal.ui(ctx, &mut config);
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
+            modal.ui(ctx, &mut config, &mut rom_folder);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Check that the modal heading is actually rendered
@@ -354,25 +356,28 @@ mod gui_tests {
     fn test_disk_drives_validation_by_model() {
         let mut modal = SystemConfigModal {
             show: true,
-            changed_config: None,
+            ..Default::default()
         };
         let mut config = SystemConfig {
             model: CpcModel::Cpc464,
             crtc: CrtcType::Type0,
             disk_drives: DiskDrives::None,
+            ..Default::default()
+        };
+        let mut rom_folder = None;
+
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
+            modal.ui(ctx, &mut config, &mut rom_folder);
         };
 
-        let app = move |ctx: &egui::Context| {
-            modal.ui(ctx, &mut config);
-        };
-
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Initially None should be selected for CPC 464
         let none_option = harness.get_by_label("None");
         assert_eq!(
-            none_option.node().toggled(),
+            none_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
@@ -383,7 +388,7 @@ mod gui_tests {
         // Verify that "Drive A only" is now selected
         let drive_a_option = harness.get_by_label("Drive A only");
         assert_eq!(
-            drive_a_option.node().toggled(),
+            drive_a_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
     }
@@ -392,25 +397,28 @@ mod gui_tests {
     fn test_restore_defaults_button() {
         let mut modal = SystemConfigModal {
             show: true,
-            changed_config: None,
+            ..Default::default()
         };
         let mut config = SystemConfig {
             model: CpcModel::Cpc6128,
             crtc: CrtcType::Type4,
             disk_drives: DiskDrives::Two,
+            ..Default::default()
+        };
+        let mut rom_folder = None;
+
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
+            modal.ui(ctx, &mut config, &mut rom_folder);
         };
 
-        let app = move |ctx: &egui::Context| {
-            modal.ui(ctx, &mut config);
-        };
-
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Verify initial state - CPC 6128 should be selected
         let cpc6128_option = harness.get_by_label("Amstrad CPC 6128");
         assert_eq!(
-            cpc6128_option.node().toggled(),
+            cpc6128_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
@@ -421,19 +429,19 @@ mod gui_tests {
         // Verify UI shows defaults - CPC 464 should now be selected
         let cpc464_option = harness.get_by_label("Amstrad CPC 464");
         assert_eq!(
-            cpc464_option.node().toggled(),
+            cpc464_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
         let type0_option = harness.get_by_label("Type 0 (HD6845S/UM6845)");
         assert_eq!(
-            type0_option.node().toggled(),
+            type0_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
         let none_option = harness.get_by_label("None");
         assert_eq!(
-            none_option.node().toggled(),
+            none_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
     }
@@ -442,21 +450,23 @@ mod gui_tests {
     fn test_crtc_selection_changes_config() {
         let mut modal = SystemConfigModal {
             show: true,
-            changed_config: None,
+            ..Default::default()
         };
         let mut config = SystemConfig::default();
+        let mut rom_folder = None;
 
-        let app = move |ctx: &egui::Context| {
-            modal.ui(ctx, &mut config);
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
+            modal.ui(ctx, &mut config, &mut rom_folder);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Initially Type 0 should be selected
         let type0_option = harness.get_by_label("Type 0 (HD6845S/UM6845)");
         assert_eq!(
-            type0_option.node().toggled(),
+            type0_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
@@ -467,7 +477,7 @@ mod gui_tests {
         // Verify Type 2 is now selected in UI
         let type2_option = harness.get_by_label("Type 2 (MC6845)");
         assert_eq!(
-            type2_option.node().toggled(),
+            type2_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
     }
@@ -476,25 +486,28 @@ mod gui_tests {
     fn test_cancel_button_preserves_config() {
         let mut modal = SystemConfigModal {
             show: true,
-            changed_config: None,
+            ..Default::default()
         };
         let mut config = SystemConfig {
             model: CpcModel::Cpc6128,
             crtc: CrtcType::Type4,
             disk_drives: DiskDrives::Two,
+            ..Default::default()
+        };
+        let mut rom_folder = None;
+
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
+            modal.ui(ctx, &mut config, &mut rom_folder);
         };
 
-        let app = |ctx: &egui::Context| {
-            modal.ui(ctx, &mut config);
-        };
-
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Verify initial UI state - CPC 6128 should be selected
         let cpc6128_option = harness.get_by_label("Amstrad CPC 6128");
         assert_eq!(
-            cpc6128_option.node().toggled(),
+            cpc6128_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
@@ -513,29 +526,30 @@ mod gui_tests {
         // Reopen modal to verify original config was preserved
         drop(harness);
         modal.show = true;
-        let app = |ctx: &egui::Context| {
-            modal.ui(ctx, &mut config);
+        let app = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx();
+            modal.ui(ctx, &mut config, &mut rom_folder);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Verify original values are still selected in UI
         let cpc6128_option = harness.get_by_label("Amstrad CPC 6128");
         assert_eq!(
-            cpc6128_option.node().toggled(),
+            cpc6128_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
         let type4_option = harness.get_by_label("Type 4 (AMS40226)");
         assert_eq!(
-            type4_option.node().toggled(),
+            type4_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
         let drives_ab_option = harness.get_by_label("Drives A and B");
         assert_eq!(
-            drives_ab_option.node().toggled(),
+            drives_ab_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
     }
