@@ -137,14 +137,14 @@ where
                         .clicked()
                     {
                         self.workbench = false;
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui
                         .add(egui::Button::new("Workbench").selected(self.workbench))
                         .clicked()
                     {
                         self.workbench = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                     if self.workbench {
                         ui.separator();
@@ -153,7 +153,7 @@ where
                             .clicked()
                         {
                             self.cpu_debug_window.show = !self.cpu_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(
@@ -162,21 +162,21 @@ where
                             .clicked()
                         {
                             self.memory_debug_window.show = !self.memory_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(egui::Button::new("CRTC").selected(self.crtc_debug_window.show))
                             .clicked()
                         {
                             self.crtc_debug_window.show = !self.crtc_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(egui::Button::new("FDC").selected(self.fdc_debug_window.show))
                             .clicked()
                         {
                             self.fdc_debug_window.show = !self.fdc_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(
@@ -186,30 +186,30 @@ where
                             .clicked()
                         {
                             self.gate_array_debug_window.show = !self.gate_array_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         ui.separator();
                         if ui.button("Organize Windows").clicked() {
                             ui.ctx().memory_mut(|mem| mem.reset_areas());
-                            ui.close_menu();
+                            ui.close();
                         }
                     }
                 });
                 ui.menu_button("Media", |ui| {
                     if ui.button("Drive A: Load DSK").clicked() {
-                        ui.close_menu();
+                        ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_disk_a();
                         }
                     }
                     if ui.button("Drive B: Load DSK").clicked() {
-                        ui.close_menu();
+                        ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_disk_b();
                         }
                     }
                     if ui.button("Tape: Load CDT").clicked() {
-                        ui.close_menu();
+                        ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_tape();
                         }
@@ -223,7 +223,7 @@ where
                         {
                             self.dark_mode = false;
                             ui.ctx().set_theme(egui::Theme::Light);
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(egui::Button::new("Dark").selected(self.dark_mode))
@@ -231,23 +231,24 @@ where
                         {
                             self.dark_mode = true;
                             ui.ctx().set_theme(egui::Theme::Dark);
-                            ui.close_menu();
+                            ui.close();
                         }
                     });
                     ui.separator();
                     if ui.button("System Configuration").clicked() {
                         self.system_config_modal.show = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.button("Key Bindings").clicked() {
                         self.key_map_editor.show = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
             });
         });
     }
 
+    #[allow(unused_variables)]
     fn initialize_frontend(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend) {
             // On WASM, show a welcome modal to work around the fact that browser audio contexts
