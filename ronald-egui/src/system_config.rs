@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use eframe::egui;
 
 pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig};
+use wgpu::hal::auxil::db;
 
 use crate::colors;
 use crate::utils::{
@@ -10,13 +11,14 @@ use crate::utils::{
     sync::{Shared, SharedExt, shared},
 };
 
-#[derive(Default)]
+#[derive(Debug, Default, Clone, Copy)]
 enum Tab {
     #[default]
     Hardware,
     Rom,
 }
 
+#[derive(Debug)]
 pub struct SystemConfigModal {
     pub show: bool,
     tab: Tab,
@@ -30,16 +32,18 @@ impl Default for SystemConfigModal {
             show: false,
             tab: Tab::Hardware,
             changed_config: None,
-            rom_folder: shared(
-                directories::ProjectDirs::from("dev", "int82", "ronald")
-                    .map(|dirs| dirs.data_dir().join("roms")),
-            ),
+            rom_folder: shared(None),
         }
     }
 }
 
 impl SystemConfigModal {
-    pub fn ui(&mut self, ctx: &egui::Context, config: &mut SystemConfig) -> bool {
+    pub fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        config: &mut SystemConfig,
+        rom_folder: &mut Option<PathBuf>,
+    ) -> bool {
         if !self.show {
             return false;
         }
@@ -50,6 +54,7 @@ impl SystemConfigModal {
         if self.changed_config.is_none() {
             self.changed_config = Some(config.clone());
         }
+        self.initialize_rom_folder(rom_folder);
 
         egui::Modal::new("system_config_modal".into()).show(ctx, |ui| {
             ui.vertical_centered_justified(|ui| {
@@ -87,16 +92,22 @@ impl SystemConfigModal {
                             config_changed = *config != changed;
                             *config = changed;
                         }
+                        self.rom_folder.with_mut(|f| *rom_folder = f.take());
                         self.show = false;
                     }
                     if ui.button("Cancel").clicked() {
                         self.show = false;
                         self.changed_config = None;
+                        self.rom_folder.with_mut(|f| *f = None);
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Restore Defaults").clicked() {
                             self.changed_config = Some(SystemConfig::default());
+                            self.rom_folder.with_mut(|f| {
+                                *f = directories::ProjectDirs::from("dev", "int82", "ronald")
+                                    .map(|dirs| dirs.data_dir().join("roms"))
+                            });
                         }
                     });
                 });
@@ -107,6 +118,21 @@ impl SystemConfigModal {
 
         config_changed
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn initialize_rom_folder(&mut self, rom_folder: &mut Option<PathBuf>) {
+        self.rom_folder.with_mut(|f| {
+            if f.is_none() {
+                *f = rom_folder.clone().or_else(|| {
+                    directories::ProjectDirs::from("dev", "int82", "ronald")
+                        .map(|dirs| dirs.data_dir().join("roms"))
+                });
+            }
+        });
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn initialize_rom_folder(&mut self, rom_folder: &mut Option<PathBuf>) {}
 
     fn render_hardware_config(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {

@@ -4,6 +4,7 @@ pub mod cpu;
 pub mod instruction;
 pub mod memory;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -149,12 +150,14 @@ where
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(default)]
 pub struct SystemConfig {
     pub model: CpcModel,
     pub crtc: CrtcType,
     pub disk_drives: DiskDrives,
+    pub lower_rom: Option<Vec<u8>>,
+    pub upper_roms: HashMap<u8, Vec<u8>>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -186,6 +189,8 @@ impl Default for SystemConfig {
             model: CpcModel::Cpc464,
             crtc: CrtcType::Type0,
             disk_drives: DiskDrives::None,
+            lower_rom: None,
+            upper_roms: HashMap::new(),
         }
     }
 }

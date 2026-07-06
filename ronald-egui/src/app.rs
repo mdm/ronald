@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use web_time::Instant;
@@ -24,6 +26,7 @@ where
     workbench: bool,
     dark_mode: bool,
     system_config: SystemConfig,
+    rom_folder: Option<PathBuf>,
     #[serde(skip)]
     frontend: Option<Frontend>,
     #[serde(skip)]
@@ -48,6 +51,7 @@ where
             workbench: false,
             dark_mode: true,
             system_config: SystemConfig::default(),
+            rom_folder: None,
             frontend: None,
             key_map_editor: KeyMapEditor::default(),
             key_mapper: KeyMapper::default(),
@@ -92,7 +96,9 @@ where
         self.render_emulator_only_mode(ctx);
         self.render_workbench_mode(ctx);
         self.key_map_editor.ui(ctx, &mut self.key_mapper);
-        let config_changed = self.system_config_modal.ui(ctx, &mut self.system_config);
+        let config_changed =
+            self.system_config_modal
+                .ui(ctx, &mut self.system_config, &mut self.rom_folder);
         if config_changed && let Some(render_state) = frame.wgpu_render_state() {
             let new_frontend = Frontend::with_config(render_state, &self.system_config);
             self.frontend = Some(new_frontend);
