@@ -9,11 +9,11 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::view::{CpuDebugView, GateArrayDebugView, MemoryDebugView, SystemDebugView};
+use crate::debug::view::{CpuDebugView, MemoryDebugView, SystemDebugView};
 use crate::debug::{Snapshottable, record_debug_events};
 use crate::system::bus::BusDebugView;
 use crate::system::clock::{MasterClock, MasterClockTick};
-use crate::system::instruction::{DecodedInstruction, Instruction};
+use crate::system::instruction::DecodedInstruction;
 use crate::{AudioSink, VideoSink};
 
 use bus::crtc::AnyCrtController;

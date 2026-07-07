@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct TapeController {}
 
 impl TapeController {
-    pub fn switch_motor(&mut self, on: bool) {
+    pub fn switch_motor(&mut self, _on: bool) {
         // TODO: implement this
     }
 
@@ -13,7 +13,7 @@ impl TapeController {
         false // TODO: implement this
     }
 
-    pub fn write_sample(&mut self, high_amplitude: bool) {
+    pub fn write_sample(&mut self, _high_amplitude: bool) {
         // TODO: implement this
     }
 }

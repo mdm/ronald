@@ -15,7 +15,7 @@ pub mod debug;
 pub mod system;
 
 pub trait VideoSink {
-    fn draw_frame(&mut self, buffer: &Vec<u8>);
+    fn draw_frame(&mut self, buffer: &[u8]);
 }
 
 pub trait AudioSink {
@@ -104,7 +104,7 @@ impl Driver {
         todo!()
     }
 
-    pub fn load_snapshot(&self, rom: Vec<u8>) {
+    pub fn load_snapshot(&self, _rom: Vec<u8>) {
         todo!()
     }
 

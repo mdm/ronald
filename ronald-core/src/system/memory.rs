@@ -170,13 +170,13 @@ impl MemWrite for Ram {
 
 // TODO: can we get rid of this empty impl? Currently required for bus writes.
 impl MemManage for Ram {
-    fn enable_lower_rom(&mut self, enable: bool) {}
+    fn enable_lower_rom(&mut self, _enable: bool) {}
 
-    fn enable_upper_rom(&mut self, enable: bool) {}
+    fn enable_upper_rom(&mut self, _enable: bool) {}
 
-    fn select_upper_rom(&mut self, upper_rom_nr: u8) {}
+    fn select_upper_rom(&mut self, _upper_rom_nr: u8) {}
 
-    fn force_ram_read(&mut self, force: bool) {}
+    fn force_ram_read(&mut self, _force: bool) {}
 }
 
 pub struct RamDebugView {
@@ -319,10 +319,8 @@ impl Snapshottable for MemoryCpcX64 {
             composite_rom_ram[0x0000..0x4000].copy_from_slice(&lower_rom);
         }
 
-        if upper_rom_enabled {
-            if let Some(upper_rom_data) = upper_roms.get(&selected_upper_rom) {
-                composite_rom_ram[0xC000..0x10000].copy_from_slice(upper_rom_data);
-            }
+        if upper_rom_enabled && let Some(upper_rom_data) = upper_roms.get(&selected_upper_rom) {
+            composite_rom_ram[0xC000..0x10000].copy_from_slice(upper_rom_data);
         }
 
         MemoryDebugView {
