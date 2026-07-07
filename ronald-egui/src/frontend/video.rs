@@ -8,7 +8,6 @@ use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 pub struct EguiWgpuVideo {
     queue: wgpu::Queue,
     texture: wgpu::Texture,
-    texture_view: wgpu::TextureView,
     framebuffer_texture_id: egui::TextureId,
 }
 
@@ -44,7 +43,6 @@ impl EguiWgpuVideo {
         Self {
             queue: render_state.queue.clone(),
             texture,
-            texture_view,
             framebuffer_texture_id,
         }
     }

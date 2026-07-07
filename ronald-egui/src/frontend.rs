@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use eframe::{egui, egui_wgpu};
 use egui::Vec2;
 use web_time::Instant;
@@ -273,7 +271,7 @@ impl Frontend {
                 .load_disk(1, picked_file.image, picked_file.path_buf);
         }
 
-        if let Some(picked_file) = self.picked_file_tape.try_with_mut(|f| f.take()).flatten() {
+        if let Some(_picked_file) = self.picked_file_tape.try_with_mut(|f| f.take()).flatten() {
             todo!("handle tape loading");
         }
     }

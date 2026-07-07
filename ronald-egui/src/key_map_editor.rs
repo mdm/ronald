@@ -663,11 +663,13 @@ mod gui_tests {
         harness.run();
 
         // Tab once to highlight the first key (should be Escape key)
-        harness.get_by_role(Role::Image).key_down(egui::Key::Tab);
+        harness.get_by_role(Role::Image).focus();
+        harness.key_down(egui::Key::Tab);
         harness.run();
 
         // Press Enter to activate the focused key
-        harness.get_by_role(Role::Image).key_down(egui::Key::Enter);
+        harness.get_by_role(Role::Image).focus();
+        harness.key_down(egui::Key::Enter);
         harness.run();
 
         // Verify binding dialog opened for Escape key
