@@ -87,18 +87,17 @@ where
     S: KeyMapStore,
 {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        let ctx = ui.ctx();
         let start = Instant::now();
-        egui_extras::install_image_loaders(ctx);
+        egui_extras::install_image_loaders(ui.ctx());
 
-        self.render_menu_bar(ctx);
-        self.initialize_frontend(ctx, frame);
-        self.render_emulator_only_mode(ctx);
-        self.render_workbench_mode(ctx);
-        self.key_map_editor.ui(ctx, &mut self.key_mapper);
+        self.render_menu_bar(ui);
+        self.initialize_frontend(ui, frame);
+        self.render_emulator_only_mode(ui);
+        self.render_workbench_mode(ui);
+        self.key_map_editor.ui(ui, &mut self.key_mapper);
         let config_changed =
             self.system_config_modal
-                .ui(ctx, &mut self.system_config, &mut self.rom_folder);
+                .ui(ui, &mut self.system_config, &mut self.rom_folder);
         if config_changed && let Some(render_state) = frame.wgpu_render_state() {
             let new_frontend = Frontend::with_config(render_state, &self.system_config);
             self.frontend = Some(new_frontend);
@@ -107,14 +106,14 @@ where
         if self.workbench
             && let Some(frontend) = &mut self.frontend
         {
-            self.cpu_debug_window.ui(ctx, frontend);
-            self.crtc_debug_window.ui(ctx, frontend);
-            self.fdc_debug_window.ui(ctx, frontend);
-            self.gate_array_debug_window.ui(ctx, frontend);
-            self.memory_debug_window.ui(ctx, frontend);
+            self.cpu_debug_window.ui(ui, frontend);
+            self.crtc_debug_window.ui(ui, frontend);
+            self.fdc_debug_window.ui(ui, frontend);
+            self.gate_array_debug_window.ui(ui, frontend);
+            self.memory_debug_window.ui(ui, frontend);
         }
 
-        ctx.request_repaint();
+        ui.ctx().request_repaint();
         let elapsed = Instant::now() - start;
         log::debug!("Frame time: {} us", elapsed.as_micros());
     }
@@ -128,9 +127,9 @@ impl<S> RonaldApp<S>
 where
     S: KeyMapStore,
 {
-    fn render_menu_bar(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+    fn render_menu_bar(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::top("menu_bar").show_inside(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("View", |ui| {
                     if ui
                         .add(egui::Button::new("Emulator Only").selected(!self.workbench))
@@ -249,12 +248,12 @@ where
     }
 
     #[allow(unused_variables)]
-    fn initialize_frontend(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn initialize_frontend(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend) {
             // On WASM, show a welcome modal to work around the fact that browser audio contexts
             // cannot be started without user interaction.
             #[cfg(target_arch = "wasm32")]
-            egui::Modal::new("welcome_modal".into()).show(ctx, |ui| {
+            egui::Modal::new("welcome_modal".into()).show(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(10.0);
                     ui.label(format!("Welcome to Ronald {}", env!("CARGO_PKG_VERSION")));
@@ -276,8 +275,8 @@ where
         }
     }
 
-    fn render_emulator_only_mode(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn render_emulator_only_mode(&mut self, ui: &mut egui::Ui) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             if let Some(frontend) = &mut self.frontend
                 && !self.workbench
             {
@@ -286,8 +285,8 @@ where
                         .with_cross_align(egui::Align::TOP),
                     |ui| {
                         frontend.ui(
-                            ctx,
-                            Some(ui),
+                            ui,
+                            false,
                             &mut self.key_mapper,
                             !self.key_map_editor.show && !self.system_config_modal.show,
                         );
@@ -297,13 +296,13 @@ where
         });
     }
 
-    fn render_workbench_mode(&mut self, ctx: &egui::Context) {
+    fn render_workbench_mode(&mut self, ui: &mut egui::Ui) {
         if let Some(frontend) = &mut self.frontend
             && self.workbench
         {
             frontend.ui(
-                ctx,
-                None,
+                ui,
+                true,
                 &mut self.key_mapper,
                 !self.key_map_editor.show && !self.system_config_modal.show,
             );

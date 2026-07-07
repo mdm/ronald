@@ -78,35 +78,32 @@ impl Frontend {
 
     pub fn ui<K>(
         &mut self,
-        ctx: &egui::Context,
-        ui: Option<&mut egui::Ui>,
+        ui: &mut egui::Ui,
+        workbench: bool,
         key_mapper: &mut KeyMapper<K>,
         can_interact: bool,
     ) where
         K: KeyMapStore,
     {
-        match ui {
-            Some(ui) => {
-                let size = self.calculate_emulator_display_size(ui);
-                self.run_frame(ctx, ui, size, false, can_interact, key_mapper);
-            }
-            None => {
-                let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
+        if workbench {
+            let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
 
-                if let Some(window) = egui::Window::new("Screen")
-                    .collapsible(false)
-                    .resizable(false)
-                    .default_size(size)
-                    .show(ctx, |ui| {
-                        self.run_frame(ctx, ui, size, true, can_interact, key_mapper);
-                    })
-                    && !self.initialized
-                {
-                    let layer_id = window.response.layer_id;
-                    ctx.move_to_top(layer_id);
-                    self.initialized = true;
-                }
+            if let Some(window) = egui::Window::new("Screen")
+                .collapsible(false)
+                .resizable(false)
+                .default_size(size)
+                .show(ui, |ui| {
+                    self.run_frame(ui, size, true, can_interact, key_mapper);
+                })
+                && !self.initialized
+            {
+                let layer_id = window.response.layer_id;
+                ui.move_to_top(layer_id);
+                self.initialized = true;
             }
+        } else {
+            let size = self.calculate_emulator_display_size(ui);
+            self.run_frame(ui, size, false, can_interact, key_mapper);
         }
     }
 
@@ -139,7 +136,6 @@ impl Frontend {
 
     fn run_frame<K>(
         &mut self,
-        ctx: &egui::Context,
         ui: &mut egui::Ui,
         size: egui::Vec2,
         workbench: bool,
@@ -151,18 +147,18 @@ impl Frontend {
     {
         self.can_interact = if workbench {
             // Workbench mode - check if window is active
-            let is_active_window = ctx.top_layer_id() == Some(ui.layer_id());
+            let is_active_window = ui.top_layer_id() == Some(ui.layer_id());
             is_active_window && can_interact && self.dropped_files.is_empty()
         } else {
             // Emulator only mode
             can_interact && self.dropped_files.is_empty()
         };
 
-        if !ctx.wants_keyboard_input() {
+        if !ui.egui_wants_keyboard_input() {
             ui.input(|input| self.handle_input(input, key_mapper));
         }
 
-        self.handle_dropped_files(ctx);
+        self.handle_dropped_files(ui);
         self.handle_picked_files();
 
         #[cfg(target_arch = "wasm32")]
@@ -175,7 +171,7 @@ impl Frontend {
         }
 
         self.step_emulation();
-        self.draw_framebuffer(ctx, ui, size, workbench)
+        self.draw_framebuffer(ui, size, workbench)
     }
     fn handle_input<K>(&mut self, input: &egui::InputState, key_mapper: &mut KeyMapper<K>)
     where
@@ -215,7 +211,7 @@ impl Frontend {
         }
     }
 
-    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
+    fn handle_dropped_files(&mut self, ui: &mut egui::Ui) {
         if let Some(dropped_file) = self.dropped_files.last() {
             let extension = dropped_file
                 .path_buf
@@ -224,7 +220,7 @@ impl Frontend {
                 .and_then(|s| s.into_string().ok());
             match extension.as_deref() {
                 Some("dsk") => {
-                    egui::Modal::new("drive_selection_modal".into()).show(ctx, |ui| {
+                    egui::Modal::new("drive_selection_modal".into()).show(ui, |ui| {
                         let filename = self
                             .dropped_files
                             .last()
@@ -320,7 +316,6 @@ impl Frontend {
 
     fn draw_framebuffer(
         &mut self,
-        ctx: &egui::Context,
         ui: &mut egui::Ui,
         size: egui::Vec2,
         workbench: bool,
@@ -330,9 +325,9 @@ impl Frontend {
 
         let hovered = response
             .rect
-            .contains(ctx.input(|i| i.pointer.hover_pos()).unwrap_or_default());
+            .contains(ui.input(|i| i.pointer.hover_pos()).unwrap_or_default());
 
-        let moved = ctx.input(|i| i.pointer.delta() != Vec2::new(0.0, 0.0)) || response.clicked();
+        let moved = ui.input(|i| i.pointer.delta() != Vec2::new(0.0, 0.0)) || response.clicked();
 
         if hovered && moved {
             self.hovered = Some(Instant::now());

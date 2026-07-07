@@ -39,7 +39,7 @@ impl Default for SystemConfigModal {
 impl SystemConfigModal {
     pub fn ui(
         &mut self,
-        ctx: &egui::Context,
+        ui: &mut egui::Ui,
         config: &mut SystemConfig,
         rom_folder: &mut Option<PathBuf>,
     ) -> bool {
@@ -55,7 +55,7 @@ impl SystemConfigModal {
         }
         self.initialize_rom_folder(rom_folder);
 
-        egui::Modal::new("system_config_modal".into()).show(ctx, |ui| {
+        egui::Modal::new("system_config_modal".into()).show(ui, |ui| {
             ui.vertical_centered_justified(|ui| {
                 ui.set_max_width(400.0);
                 ui.add_space(10.0);
@@ -334,8 +334,7 @@ mod gui_tests {
         let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            modal.ui(ctx, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config, &mut rom_folder);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -367,8 +366,7 @@ mod gui_tests {
         let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            modal.ui(ctx, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config, &mut rom_folder);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -408,8 +406,7 @@ mod gui_tests {
         let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            modal.ui(ctx, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config, &mut rom_folder);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -456,8 +453,7 @@ mod gui_tests {
         let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            modal.ui(ctx, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config, &mut rom_folder);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -497,8 +493,7 @@ mod gui_tests {
         let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            modal.ui(ctx, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config, &mut rom_folder);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -527,8 +522,7 @@ mod gui_tests {
         drop(harness);
         modal.show = true;
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            modal.ui(ctx, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config, &mut rom_folder);
         };
 
         let mut harness = Harness::new_ui(app);

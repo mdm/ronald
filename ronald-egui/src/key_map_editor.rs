@@ -123,7 +123,7 @@ pub struct KeyMapEditor {
 }
 
 impl KeyMapEditor {
-    pub fn ui<K>(&mut self, ctx: &egui::Context, key_mapper: &mut KeyMapper<K>)
+    pub fn ui<K>(&mut self, ui: &mut egui::Ui, key_mapper: &mut KeyMapper<K>)
     where
         K: KeyMapStore,
     {
@@ -131,8 +131,8 @@ impl KeyMapEditor {
             return;
         }
 
-        egui::Modal::new("key_bindings_modal".into()).show(ctx, |ui| {
-            self.render_binding_listener_modal(ctx, key_mapper);
+        egui::Modal::new("key_bindings_modal".into()).show(ui, |ui| {
+            self.render_binding_listener_modal(ui, key_mapper);
 
             ui.add_space(10.0);
             ui.heading("Key Bindings");
@@ -144,7 +144,7 @@ impl KeyMapEditor {
             let svg = self.generate_keyboard_svg(ui);
             let image_response = self.render_keyboard_image(ui, svg);
 
-            self.handle_key_interactions(ctx, ui, image_response);
+            self.handle_key_interactions(ui, image_response);
 
             ui.add_space(15.0);
             if ui.button("Close").clicked() {
@@ -153,15 +153,12 @@ impl KeyMapEditor {
         });
     }
 
-    fn render_binding_listener_modal<K>(
-        &mut self,
-        ctx: &egui::Context,
-        key_mapper: &mut KeyMapper<K>,
-    ) where
+    fn render_binding_listener_modal<K>(&mut self, ui: &mut egui::Ui, key_mapper: &mut KeyMapper<K>)
+    where
         K: KeyMapStore,
     {
         if let Some((hovered_key, shifted)) = self.listening {
-            egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
+            egui::Modal::new("key_binding_listener".into()).show(ui, |ui| {
                 ui.set_max_width(350.0);
                 if shifted {
                     ui.label(format!(
@@ -277,12 +274,7 @@ impl KeyMapEditor {
         )
     }
 
-    fn handle_key_interactions(
-        &mut self,
-        ctx: &egui::Context,
-        ui: &mut egui::Ui,
-        image_response: egui::Response,
-    ) {
+    fn handle_key_interactions(&mut self, ui: &mut egui::Ui, image_response: egui::Response) {
         let image_rect = image_response.rect;
         let scale_x = image_rect.width() / 2200.0; // SVG viewBox is 2200x500
         let scale_y = image_rect.height() / 500.0;
@@ -315,7 +307,7 @@ impl KeyMapEditor {
 
             // For Enter key, use precise L-shaped hit detection
             let is_valid_hit = if key_layout.name == "Enter" {
-                if let Some(cursor_pos) = ctx.pointer_interact_pos() {
+                if let Some(cursor_pos) = ui.pointer_interact_pos() {
                     // Convert cursor position back to SVG coordinates
                     let svg_x = (cursor_pos.x - image_rect.left()) / scale_x;
                     let svg_y = (cursor_pos.y - image_rect.top()) / scale_y;
@@ -433,8 +425,7 @@ mod gui_tests {
         key_map_editor.show = false;
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            key_map_editor.ui(ctx, &mut key_mapper);
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
         let harness = Harness::new_ui(app);
@@ -456,8 +447,7 @@ mod gui_tests {
         key_map_editor.show = true;
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            key_map_editor.ui(ctx, &mut key_mapper);
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -487,8 +477,7 @@ mod gui_tests {
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            key_map_editor.ui(ctx, &mut key_mapper);
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -516,8 +505,7 @@ mod gui_tests {
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            key_map_editor.ui(ctx, &mut key_mapper);
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -545,8 +533,7 @@ mod gui_tests {
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            key_map_editor.ui(ctx, &mut key_mapper);
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -593,8 +580,7 @@ mod gui_tests {
             .unwrap();
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            key_map_editor.ui(ctx, &mut key_mapper);
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -628,8 +614,7 @@ mod gui_tests {
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            key_map_editor.ui(ctx, &mut key_mapper);
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -655,8 +640,7 @@ mod gui_tests {
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            key_map_editor.ui(ctx, &mut key_mapper);
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
         let mut harness = Harness::new_ui(app);

@@ -214,7 +214,7 @@ impl MemoryDebugWindow {
         });
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         if !self.show {
             return;
         }
@@ -222,7 +222,7 @@ impl MemoryDebugWindow {
         let mut open = self.show;
         egui::Window::new("Memory Internals")
             .open(&mut open)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.heading("View Config");
                 self.render_view_mode_selector(ui, debugger);
                 self.render_color_configuration(ui);
@@ -709,8 +709,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -736,8 +735,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -788,8 +786,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -852,8 +849,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -891,8 +887,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -944,8 +939,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1052,8 +1046,7 @@ mod snapshot_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);

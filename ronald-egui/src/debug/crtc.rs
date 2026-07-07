@@ -62,12 +62,12 @@ pub struct CrtcDebugWindow {
 }
 
 impl CrtcDebugWindow {
-    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         let mut open = self.show;
         egui::Window::new("CRTC Internals")
             .auto_sized()
             .open(&mut open)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 self.render_crtc_state(ui, debugger);
                 ui.separator();
                 self.render_breakpoints_section(ui, debugger);
@@ -603,8 +603,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -631,8 +630,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -696,8 +694,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -762,8 +759,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -830,8 +826,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -880,8 +875,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -951,8 +945,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1007,8 +1000,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1063,8 +1055,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1119,8 +1110,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1192,8 +1182,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1237,8 +1226,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1289,8 +1277,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1341,8 +1328,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1370,8 +1356,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1422,8 +1407,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1451,8 +1435,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -1511,8 +1494,7 @@ mod gui_tests {
         };
 
         let app = |ui: &mut egui::Ui| {
-            let ctx = ui.ctx();
-            window.ui(ctx, &mut debugger);
+            window.ui(ui, &mut debugger);
         };
 
         let mut harness = Harness::new_ui(app);
