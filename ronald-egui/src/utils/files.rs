@@ -25,15 +25,14 @@ pub fn pick_file(
             .set_title(&title)
             .add_filter(&filter_name, &[&extension])
             .pick_file()
+            && let Ok(image) = std::fs::read(&file)
         {
-            if let Ok(image) = std::fs::read(&file) {
-                picked_file.with_mut(|f| {
-                    *f = Some(File {
-                        path_buf: file,
-                        image,
-                    });
+            picked_file.with_mut(|f| {
+                *f = Some(File {
+                    path_buf: file,
+                    image,
                 });
-            }
+            });
         }
     });
 }
