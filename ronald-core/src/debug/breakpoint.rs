@@ -1595,12 +1595,12 @@ impl BreakpointManager {
             .retain(|_id, bp| bp.triggered().is_none() || !bp.one_shot());
 
         // Reset all triggered flags
-        for (_id, breakpoint) in self.breakpoints.iter_mut() {
+        for breakpoint in self.breakpoints.values_mut() {
             breakpoint.set_triggered(None);
         }
 
         self.subscription.with_events(|record| {
-            for (_id, breakpoint) in self.breakpoints.iter_mut() {
+            for breakpoint in self.breakpoints.values_mut() {
                 if breakpoint.should_break(record.source, &record.event) {
                     breakpoint.set_triggered(Some(record.master_clock));
                 }

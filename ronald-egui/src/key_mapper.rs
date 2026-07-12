@@ -162,7 +162,7 @@ where
         guest_key: &str,
         shifted: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        for (_, guest_keys) in self.key_map.host_to_guest.iter_mut() {
+        for guest_keys in self.key_map.host_to_guest.values_mut() {
             guest_keys.retain(|old_binding| {
                 !(old_binding.iter().any(|old_key| old_key == guest_key)
                     && (!shifted || old_binding.iter().any(|old_key| old_key == "Shift")))
@@ -339,7 +339,7 @@ impl<'a> KeyMapStore for NativeKeyMapStore<'a> {
                 }
             })
             .inspect_err(|err| {
-                log::error!("Failed to save key map: {}", &err);
+                log::error!("Failed to save key map: {}", err);
                 if backup
                     && let Ok(()) = std::fs::rename(self.key_map_backup_path, self.key_map_path)
                 {

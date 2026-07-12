@@ -39,6 +39,12 @@ pub trait MemManage {
     fn force_ram_read(&mut self, force: bool);
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub enum RomSlot {
+    Lower,
+    Upper(u8),
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Rom {
     #[serde(rename = "rom")]
