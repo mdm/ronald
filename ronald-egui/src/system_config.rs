@@ -1,7 +1,9 @@
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use eframe::egui;
 
+use ronald_core::system::memory::RomSlot;
 pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig};
 
 use crate::colors;
@@ -9,6 +11,53 @@ use crate::utils::{
     files::pick_folder,
     sync::{Shared, SharedExt, shared},
 };
+
+#[derive(Eq)]
+struct RomInfo {
+    name: String,
+    hash: Vec<u8>,
+    slot: Option<RomSlot>,
+}
+
+impl PartialEq for RomInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+    }
+}
+
+impl From<(&str, &str, Option<RomSlot>)> for RomInfo {
+    fn from(tuple: (&str, &str, Option<RomSlot>)) -> Self {
+        let (name, hash_hex, slot) = tuple;
+        // Panic is okay here because this is a hardcoded value and should never fail to decode.
+        let hash = hex::decode(hash_hex)
+            .unwrap_or_else(|_| panic!("Failed to decode ROM hash for {}: {}", name, hash_hex));
+        Self {
+            name: name.to_string(),
+            hash,
+            slot,
+        }
+    }
+}
+
+static ORIGINAL_ROMS: LazyLock<[RomInfo; 3]> = LazyLock::new(|| {
+    [
+        RomInfo::from((
+            "CPC 464 OS (English)",
+            "b57872c97d569a1968816fcaf359de4b6bf5c188e7dbd0954761cc552b25d327",
+            Some(RomSlot::Lower),
+        )),
+        RomInfo::from((
+            "Locomotive BASIC 1.0 (English)",
+            "ff6fbb6e12808e7d32c9217813d730df7321b4b5e499a45e3eac21b421dcf729",
+            Some(RomSlot::Upper(0)),
+        )),
+        RomInfo::from((
+            "AMSDOS 0.5",
+            "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
+            Some(RomSlot::Upper(7)),
+        )),
+    ]
+});
 
 #[derive(Debug, Default, Clone, Copy)]
 enum Tab {
@@ -57,7 +106,6 @@ impl SystemConfigModal {
 
         egui::Modal::new("system_config_modal".into()).show(ui, |ui| {
             ui.vertical_centered_justified(|ui| {
-                ui.set_max_width(400.0);
                 ui.add_space(10.0);
                 ui.heading("System Configuration");
                 ui.add_space(20.0);
@@ -136,7 +184,7 @@ impl SystemConfigModal {
     fn render_hardware_config(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
                     ui.label("Model:");
                 });
                 ui.group(|ui| {
@@ -237,6 +285,72 @@ impl SystemConfigModal {
 
     fn render_rom_config(&mut self, ui: &mut egui::Ui) {
         self.render_rom_folder(ui);
+
+        ui.add_space(15.0);
+
+        let mut language = "English";
+        ui.horizontal(|ui| {
+            ui.label("Preferred Language:");
+            egui::ComboBox::from_id_salt("rom_language_selector")
+                .selected_text(language)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut language, "Danish", "Danish");
+                    ui.selectable_value(&mut language, "English", "English");
+                    ui.selectable_value(&mut language, "French", "French");
+                    ui.selectable_value(&mut language, "Spanish", "Spanish");
+                });
+        });
+
+        let mut auto_config = true;
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
+            ui.checkbox(
+                &mut auto_config,
+                "Automatically configure based on selected hardware model",
+            );
+        });
+
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
+            ui.label("Original ROMs:");
+        });
+        ui.group(|ui| {
+            ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+                egui::Grid::new("original_roms_grid")
+                    .num_columns(4)
+                    .spacing([20.0, 20.0])
+                    .show(ui, |ui| {
+                        for rom in ORIGINAL_ROMS.iter() {
+                            ui.vertical(|ui| {
+                                ui.add(egui::Label::new(&rom.name).extend());
+                                ui.add(
+                                    egui::Label::new(format!(
+                                        "SHA3-256: {}",
+                                        hex::encode(&rom.hash)
+                                    ))
+                                    .truncate(),
+                                );
+                            });
+
+                            let found = false;
+                            if found {
+                                ui.colored_label(colors::FORREST_GREEN, "found");
+                            } else {
+                                ui.colored_label(colors::DARK_GRAY, "not found");
+                            }
+
+                            if let Some(slot) = rom.slot {
+                                ui.label(format!("Slot: {}", slot));
+                            } else {
+                                ui.label("No slot");
+                            }
+
+                            let mut used = true;
+                            ui.add_enabled(!auto_config, egui::Checkbox::new(&mut used, "Use"));
+
+                            ui.end_row();
+                        }
+                    });
+            });
+        });
     }
 
     #[cfg(not(target_arch = "wasm32"))]

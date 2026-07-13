@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +44,15 @@ pub trait MemManage {
 pub enum RomSlot {
     Lower,
     Upper(u8),
+}
+
+impl Display for RomSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RomSlot::Lower => write!(f, "Lower ROM"),
+            RomSlot::Upper(nr) => write!(f, "Upper ROM {}", nr),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]

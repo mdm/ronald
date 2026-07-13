@@ -14,6 +14,7 @@ use crate::debug::{Snapshottable, record_debug_events};
 use crate::system::bus::BusDebugView;
 use crate::system::clock::{MasterClock, MasterClockTick};
 use crate::system::instruction::DecodedInstruction;
+use crate::system::memory::RomSlot;
 use crate::{AudioSink, VideoSink};
 
 use bus::crtc::AnyCrtController;
@@ -156,8 +157,7 @@ pub struct SystemConfig {
     pub model: CpcModel,
     pub crtc: CrtcType,
     pub disk_drives: DiskDrives,
-    pub lower_rom: Option<Vec<u8>>,
-    pub upper_roms: HashMap<u8, Vec<u8>>,
+    pub roms: HashMap<RomSlot, Vec<u8>>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -189,8 +189,7 @@ impl Default for SystemConfig {
             model: CpcModel::Cpc464,
             crtc: CrtcType::Type0,
             disk_drives: DiskDrives::None,
-            lower_rom: None,
-            upper_roms: HashMap::new(),
+            roms: HashMap::new(),
         }
     }
 }
