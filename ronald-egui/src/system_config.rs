@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
@@ -12,9 +13,30 @@ use crate::utils::{
     sync::{Shared, SharedExt, shared},
 };
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum RomLanguage {
+    Danish,
+    #[default]
+    English,
+    French,
+    Spanish,
+}
+
+impl Display for RomLanguage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Danish => write!(f, "Danish"),
+            Self::English => write!(f, "English"),
+            Self::French => write!(f, "French"),
+            Self::Spanish => write!(f, "Spanish"),
+        }
+    }
+}
+
 #[derive(Eq)]
 struct RomInfo {
     name: String,
+    language: Option<RomLanguage>,
     hash: Vec<u8>,
     slot: Option<RomSlot>,
 }
@@ -25,14 +47,15 @@ impl PartialEq for RomInfo {
     }
 }
 
-impl From<(&str, &str, Option<RomSlot>)> for RomInfo {
-    fn from(tuple: (&str, &str, Option<RomSlot>)) -> Self {
-        let (name, hash_hex, slot) = tuple;
+impl From<(&str, Option<RomLanguage>, &str, Option<RomSlot>)> for RomInfo {
+    fn from(tuple: (&str, Option<RomLanguage>, &str, Option<RomSlot>)) -> Self {
+        let (name, language, hash_hex, slot) = tuple;
         // Panic is okay here because this is a hardcoded value and should never fail to decode.
         let hash = hex::decode(hash_hex)
             .unwrap_or_else(|_| panic!("Failed to decode ROM hash for {}: {}", name, hash_hex));
         Self {
             name: name.to_string(),
+            language,
             hash,
             slot,
         }
@@ -42,17 +65,20 @@ impl From<(&str, &str, Option<RomSlot>)> for RomInfo {
 static ORIGINAL_ROMS: LazyLock<[RomInfo; 3]> = LazyLock::new(|| {
     [
         RomInfo::from((
-            "CPC 464 OS (English)",
+            "CPC 464 OS",
+            Some(RomLanguage::English),
             "b57872c97d569a1968816fcaf359de4b6bf5c188e7dbd0954761cc552b25d327",
             Some(RomSlot::Lower),
         )),
         RomInfo::from((
-            "Locomotive BASIC 1.0 (English)",
+            "Locomotive BASIC 1.0",
+            Some(RomLanguage::English),
             "ff6fbb6e12808e7d32c9217813d730df7321b4b5e499a45e3eac21b421dcf729",
             Some(RomSlot::Upper(0)),
         )),
         RomInfo::from((
             "AMSDOS 0.5",
+            None,
             "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
             Some(RomSlot::Upper(7)),
         )),
@@ -72,6 +98,7 @@ pub struct SystemConfigModal {
     tab: Tab,
     changed_config: Option<SystemConfig>,
     rom_folder: Shared<Option<PathBuf>>,
+    preferred_language: RomLanguage,
 }
 
 impl Default for SystemConfigModal {
@@ -81,6 +108,7 @@ impl Default for SystemConfigModal {
             tab: Tab::Hardware,
             changed_config: None,
             rom_folder: shared(None),
+            preferred_language: RomLanguage::English,
         }
     }
 }
@@ -288,16 +316,31 @@ impl SystemConfigModal {
 
         ui.add_space(15.0);
 
-        let mut language = "English";
         ui.horizontal(|ui| {
             ui.label("Preferred Language:");
             egui::ComboBox::from_id_salt("rom_language_selector")
-                .selected_text(language)
+                .selected_text(self.preferred_language.to_string())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut language, "Danish", "Danish");
-                    ui.selectable_value(&mut language, "English", "English");
-                    ui.selectable_value(&mut language, "French", "French");
-                    ui.selectable_value(&mut language, "Spanish", "Spanish");
+                    ui.selectable_value(
+                        &mut self.preferred_language,
+                        RomLanguage::Danish,
+                        "Danish",
+                    );
+                    ui.selectable_value(
+                        &mut self.preferred_language,
+                        RomLanguage::English,
+                        "English",
+                    );
+                    ui.selectable_value(
+                        &mut self.preferred_language,
+                        RomLanguage::French,
+                        "French",
+                    );
+                    ui.selectable_value(
+                        &mut self.preferred_language,
+                        RomLanguage::Spanish,
+                        "Spanish",
+                    );
                 });
         });
 
@@ -319,8 +362,17 @@ impl SystemConfigModal {
                     .spacing([20.0, 20.0])
                     .show(ui, |ui| {
                         for rom in ORIGINAL_ROMS.iter() {
+                            if let Some(language) = rom.language
+                                && language != self.preferred_language
+                            {
+                                continue;
+                            }
                             ui.vertical(|ui| {
-                                ui.add(egui::Label::new(&rom.name).extend());
+                                let title = match rom.language {
+                                    Some(language) => format!("{} ({})", rom.name, language),
+                                    None => rom.name.to_string(),
+                                };
+                                ui.add(egui::Label::new(title).extend());
                                 ui.add(
                                     egui::Label::new(format!(
                                         "SHA3-256: {}",
