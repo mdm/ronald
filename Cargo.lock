@@ -3710,6 +3710,7 @@ dependencies = [
 name = "ronald-egui"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "console_error_panic_hook",
  "cpal",
  "directories",

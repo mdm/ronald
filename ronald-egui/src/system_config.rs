@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -5,7 +6,8 @@ use std::sync::LazyLock;
 use eframe::egui;
 
 use ronald_core::system::memory::RomSlot;
-pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig};
+pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig as CoreSystemConfig};
+use serde::{Deserialize, Serialize};
 
 use crate::colors;
 use crate::utils::{
@@ -13,7 +15,64 @@ use crate::utils::{
     sync::{Shared, SharedExt, shared},
 };
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct SystemConfig {
+    model: CpcModel,
+    crtc: CrtcType,
+    disk_drives: DiskDrives,
+    rom_folder: Option<PathBuf>,
+    preferred_language: RomLanguage,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Default for SystemConfig {
+    fn default() -> Self {
+        let rom_folder = directories::ProjectDirs::from("dev", "int82", "ronald")
+            .map(|dirs| dirs.data_dir().join("roms"));
+
+        // TODO: change defaults
+        Self {
+            model: CpcModel::Cpc464,
+            crtc: CrtcType::Type0,
+            disk_drives: DiskDrives::One,
+            rom_folder,
+            preferred_language: RomLanguage::English,
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Default for SystemConfig {
+    fn default() -> Self {
+        let rom_folder = None;
+
+        // TODO: change defaults
+        Self {
+            model: CpcModel::Cpc464,
+            crtc: CrtcType::Type0,
+            disk_drives: DiskDrives::One,
+            rom_folder,
+            preferred_language: RomLanguage::English,
+        }
+    }
+}
+
+impl TryFrom<SystemConfig> for CoreSystemConfig {
+    type Error = anyhow::Error;
+
+    fn try_from(value: SystemConfig) -> Result<Self, Self::Error> {
+        let roms = HashMap::new();
+
+        Ok(Self {
+            model: value.model,
+            crtc: value.crtc,
+            disk_drives: value.disk_drives,
+            roms,
+        })
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 enum RomLanguage {
     Danish,
     #[default]
@@ -97,8 +156,7 @@ pub struct SystemConfigModal {
     pub show: bool,
     tab: Tab,
     changed_config: Option<SystemConfig>,
-    rom_folder: Shared<Option<PathBuf>>,
-    preferred_language: RomLanguage,
+    picked_rom_folder: Shared<Option<PathBuf>>,
 }
 
 impl Default for SystemConfigModal {
@@ -107,19 +165,13 @@ impl Default for SystemConfigModal {
             show: false,
             tab: Tab::Hardware,
             changed_config: None,
-            rom_folder: shared(None),
-            preferred_language: RomLanguage::English,
+            picked_rom_folder: shared(None),
         }
     }
 }
 
 impl SystemConfigModal {
-    pub fn ui(
-        &mut self,
-        ui: &mut egui::Ui,
-        config: &mut SystemConfig,
-        rom_folder: &mut Option<PathBuf>,
-    ) -> bool {
+    pub fn ui(&mut self, ui: &mut egui::Ui, config: &mut SystemConfig) -> bool {
         if !self.show {
             return false;
         }
@@ -130,7 +182,8 @@ impl SystemConfigModal {
         if self.changed_config.is_none() {
             self.changed_config = Some(config.clone());
         }
-        self.initialize_rom_folder(rom_folder);
+
+        self.handle_picked_rom_folder();
 
         egui::Modal::new("system_config_modal".into()).show(ui, |ui| {
             ui.vertical_centered_justified(|ui| {
@@ -167,22 +220,16 @@ impl SystemConfigModal {
                             config_changed = *config != changed;
                             *config = changed;
                         }
-                        self.rom_folder.with_mut(|f| *rom_folder = f.take());
                         self.show = false;
                     }
                     if ui.button("Cancel").clicked() {
                         self.show = false;
                         self.changed_config = None;
-                        self.rom_folder.with_mut(|f| *f = None);
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("Restore Defaults").clicked() {
                             self.changed_config = Some(SystemConfig::default());
-                            self.rom_folder.with_mut(|f| {
-                                *f = directories::ProjectDirs::from("dev", "int82", "ronald")
-                                    .map(|dirs| dirs.data_dir().join("roms"))
-                            });
                         }
                     });
                 });
@@ -194,20 +241,17 @@ impl SystemConfigModal {
         config_changed
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    fn initialize_rom_folder(&mut self, rom_folder: &mut Option<PathBuf>) {
-        self.rom_folder.with_mut(|f| {
-            if f.is_none() {
-                *f = rom_folder.clone().or_else(|| {
-                    directories::ProjectDirs::from("dev", "int82", "ronald")
-                        .map(|dirs| dirs.data_dir().join("roms"))
-                });
-            }
-        });
+    fn access_config(&self) -> &SystemConfig {
+        self.changed_config
+            .as_ref()
+            .expect("changed_config should be initialized")
     }
 
-    #[cfg(target_arch = "wasm32")]
-    fn initialize_rom_folder(&mut self, rom_folder: &mut Option<PathBuf>) {}
+    fn access_config_mut(&mut self) -> &mut SystemConfig {
+        self.changed_config
+            .as_mut()
+            .expect("changed_config should be initialized")
+    }
 
     fn render_hardware_config(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
@@ -319,25 +363,25 @@ impl SystemConfigModal {
         ui.horizontal(|ui| {
             ui.label("Preferred Language:");
             egui::ComboBox::from_id_salt("rom_language_selector")
-                .selected_text(self.preferred_language.to_string())
+                .selected_text(self.access_config().preferred_language.to_string())
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
-                        &mut self.preferred_language,
+                        &mut self.access_config_mut().preferred_language,
                         RomLanguage::Danish,
                         "Danish",
                     );
                     ui.selectable_value(
-                        &mut self.preferred_language,
+                        &mut self.access_config_mut().preferred_language,
                         RomLanguage::English,
                         "English",
                     );
                     ui.selectable_value(
-                        &mut self.preferred_language,
+                        &mut self.access_config_mut().preferred_language,
                         RomLanguage::French,
                         "French",
                     );
                     ui.selectable_value(
-                        &mut self.preferred_language,
+                        &mut self.access_config_mut().preferred_language,
                         RomLanguage::Spanish,
                         "Spanish",
                     );
@@ -363,7 +407,7 @@ impl SystemConfigModal {
                     .show(ui, |ui| {
                         for rom in ORIGINAL_ROMS.iter() {
                             if let Some(language) = rom.language
-                                && language != self.preferred_language
+                                && language != self.access_config().preferred_language
                             {
                                 continue;
                             }
@@ -410,43 +454,30 @@ impl SystemConfigModal {
         let mut valid = false;
         ui.horizontal(|ui| {
             ui.label("ROM folder:");
-            if !self
-                .rom_folder
-                .try_with_mut(|f| {
-                    let mut path = match f {
-                        Some(path_buf) => path_buf.as_os_str().to_string_lossy().to_string(),
-                        None => "".to_string(),
-                    };
-                    ui.text_edit_singleline(&mut path);
-                    *f = Some(PathBuf::from(path));
-                    true
-                })
-                .unwrap_or(false)
-            {
-                ui.add_enabled(false, egui::TextEdit::singleline(&mut "".to_string()));
-            }
-            valid = self
-                .rom_folder
-                .try_with_mut(|f| match f {
-                    Some(path_buf) => {
-                        path_buf.is_dir() && {
-                            if let Ok(metadata) = std::fs::metadata(path_buf) {
-                                !metadata.permissions().readonly()
-                            } else {
-                                false
-                            }
+            let (enabled, mut path) = match &self.access_config().rom_folder {
+                Some(path_buf) => (true, path_buf.as_os_str().to_string_lossy().to_string()),
+                None => (false, "".to_string()),
+            };
+            ui.add_enabled(enabled, egui::TextEdit::singleline(&mut path));
+            self.access_config_mut().rom_folder = Some(PathBuf::from(path));
+
+            valid = match &self.access_config().rom_folder {
+                Some(path_buf) => {
+                    path_buf.is_dir() && {
+                        if let Ok(metadata) = std::fs::metadata(path_buf) {
+                            !metadata.permissions().readonly()
+                        } else {
+                            false
                         }
                     }
-                    None => false,
-                })
-                .unwrap_or(false);
-            if ui.add_enabled(valid, egui::Button::new("Open")).clicked() {
-                self.rom_folder.with_mut(|f| {
-                    if let Some(path) = f.as_ref() {
-                        open::that(path).unwrap_or_else(|e| {
-                            log::error!("Failed to open ROM folder {:?}: {}", path, e);
-                        });
-                    }
+                }
+                None => false,
+            };
+            if ui.add_enabled(valid, egui::Button::new("Open")).clicked()
+                && let Some(path) = &self.access_config().rom_folder
+            {
+                open::that(path).unwrap_or_else(|e| {
+                    log::error!("Failed to open ROM folder {:?}: {}", path, e);
                 });
             }
             if ui
@@ -454,7 +485,7 @@ impl SystemConfigModal {
                 .on_hover_text("Pick a different folder")
                 .clicked()
             {
-                pick_folder("ROM Folder", self.rom_folder.clone());
+                pick_folder("ROM Folder", self.picked_rom_folder.clone());
             }
         });
         if !valid {
@@ -463,16 +494,21 @@ impl SystemConfigModal {
                     colors::DARK_RED,
                     "The specified folder does not exist or is not writable.",
                 );
-                if ui.button("Create").clicked() {
-                    self.rom_folder.with_mut(|f| {
-                        if let Some(path_buf) = &f {
-                            std::fs::create_dir_all(path_buf).unwrap_or_else(|e| {
-                                log::error!("Failed to create ROM folder {:?}: {}", path_buf, e);
-                            });
-                        }
+                if ui.button("Create").clicked()
+                    && let Some(path_buf) = &self.access_config().rom_folder
+                {
+                    std::fs::create_dir_all(path_buf).unwrap_or_else(|e| {
+                        log::error!("Failed to create ROM folder {:?}: {}", path_buf, e);
                     });
                 }
             });
+        }
+    }
+
+    fn handle_picked_rom_folder(&mut self) {
+        if let Some(picked_rom_folder) = self.picked_rom_folder.try_with_mut(|f| f.take()).flatten()
+        {
+            self.access_config_mut().rom_folder = Some(picked_rom_folder);
         }
     }
 
@@ -497,10 +533,9 @@ mod gui_tests {
             ..Default::default()
         };
         let mut config = SystemConfig::default();
-        let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            modal.ui(ui, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -529,10 +564,9 @@ mod gui_tests {
             disk_drives: DiskDrives::None,
             ..Default::default()
         };
-        let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            modal.ui(ui, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -569,10 +603,9 @@ mod gui_tests {
             disk_drives: DiskDrives::Two,
             ..Default::default()
         };
-        let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            modal.ui(ui, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -616,10 +649,9 @@ mod gui_tests {
             ..Default::default()
         };
         let mut config = SystemConfig::default();
-        let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            modal.ui(ui, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -656,10 +688,9 @@ mod gui_tests {
             disk_drives: DiskDrives::Two,
             ..Default::default()
         };
-        let mut rom_folder = None;
 
         let app = |ui: &mut egui::Ui| {
-            modal.ui(ui, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config);
         };
 
         let mut harness = Harness::new_ui(app);
@@ -688,7 +719,7 @@ mod gui_tests {
         drop(harness);
         modal.show = true;
         let app = |ui: &mut egui::Ui| {
-            modal.ui(ui, &mut config, &mut rom_folder);
+            modal.ui(ui, &mut config);
         };
 
         let mut harness = Harness::new_ui(app);

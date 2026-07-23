@@ -47,10 +47,10 @@ impl Driver {
         }
     }
 
-    pub fn with_config(config: &SystemConfig) -> Self {
+    pub fn with_config(config: SystemConfig) -> Self {
         let keys = HashMap::from(constants::KEYS);
         Self {
-            system: config.clone().into(),
+            system: config.into(),
             keys,
             breakpoint_manager: BreakpointManager::default(),
             cached_debug_view: None,

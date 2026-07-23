@@ -151,7 +151,7 @@ where
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(default)]
 pub struct SystemConfig {
     pub model: CpcModel,
