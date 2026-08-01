@@ -8,6 +8,7 @@ use eframe::egui;
 use ronald_core::system::memory::RomSlot;
 pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig as CoreSystemConfig};
 use serde::{Deserialize, Serialize};
+use sha3::Digest;
 
 use crate::colors;
 use crate::utils::{
@@ -23,6 +24,8 @@ pub struct SystemConfig {
     rom_folder: Option<PathBuf>,
     preferred_language: RomLanguage,
     auto_config: bool,
+    #[serde(skip)]
+    available_roms: Vec<RomInfo>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -39,6 +42,7 @@ impl Default for SystemConfig {
             rom_folder,
             preferred_language: RomLanguage::English,
             auto_config: true,
+            available_roms: Vec::new(),
         }
     }
 }
@@ -56,6 +60,7 @@ impl Default for SystemConfig {
             rom_folder,
             preferred_language: RomLanguage::English,
             auto_config: true,
+            available_roms: Vec::new(),
         }
     }
 }
@@ -269,6 +274,7 @@ impl SystemConfigModal {
         // Initialize temp config if not already set
         if self.changed_config.is_none() {
             self.changed_config = Some(config.clone());
+            self.update_available_roms();
         }
 
         self.handle_picked_rom_folder();
@@ -476,12 +482,21 @@ impl SystemConfigModal {
                 });
         });
 
-        let mut auto_config = true;
         ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
-            ui.checkbox(
-                &mut auto_config,
-                "Automatically configure based on selected hardware model",
-            );
+            if ui
+                .checkbox(
+                    &mut self.access_config_mut().auto_config,
+                    "Automatically configure based on selected hardware model",
+                )
+                .clicked()
+                && self.access_config().auto_config
+            {
+                match self.access_config().model {
+                    CpcModel::Cpc464 => {}
+                    CpcModel::Cpc664 => {}
+                    CpcModel::Cpc6128 => {}
+                }
+            };
         });
 
         ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
@@ -552,7 +567,11 @@ impl SystemConfigModal {
                 None => (false, "".to_string()),
             };
             ui.add_enabled(enabled, egui::TextEdit::singleline(&mut path));
-            self.access_config_mut().rom_folder = Some(PathBuf::from(path));
+            let rom_folder = Some(PathBuf::from(path));
+            if self.access_config_mut().rom_folder != rom_folder {
+                self.access_config_mut().rom_folder = rom_folder;
+                self.update_available_roms();
+            }
 
             valid = match &self.access_config().rom_folder {
                 Some(path_buf) => {
@@ -598,18 +617,92 @@ impl SystemConfigModal {
         }
     }
 
-    fn handle_picked_rom_folder(&mut self) {
-        if let Some(picked_rom_folder) = self.picked_rom_folder.try_with_mut(|f| f.take()).flatten()
-        {
-            self.access_config_mut().rom_folder = Some(picked_rom_folder);
-        }
-    }
-
     #[cfg(target_arch = "wasm32")]
     fn render_rom_folder(&mut self, ui: &mut egui::Ui) {
         ui.label("ROMs are stored in the browser's IndexedDB.");
         ui.button("Clear ROMs")
             .on_hover_text("Clears all ROMs stored in the browser's IndexedDB.");
+    }
+
+    fn handle_picked_rom_folder(&mut self) {
+        if let Some(picked_rom_folder) = self.picked_rom_folder.try_with_mut(|f| f.take()).flatten()
+        {
+            self.access_config_mut().rom_folder = Some(picked_rom_folder);
+            self.update_available_roms();
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn update_available_roms(&mut self) {
+        let mut roms = Vec::with_capacity(256);
+        if self.access_config().rom_folder.is_none() {
+            log::error!("No ROM folder specified");
+            return;
+        }
+
+        for rom in walkdir::WalkDir::new(self.access_config().rom_folder.as_ref().unwrap()) {
+            let entry = match rom {
+                Ok(entry) => entry,
+                Err(e) => {
+                    log::error!("Error reading ROM folder: {}", e);
+                    continue;
+                }
+            };
+
+            if !entry.file_type().is_file() {
+                continue;
+            }
+
+            match entry.metadata() {
+                Ok(metadata) => {
+                    if metadata.len() != 16 * 1024 {
+                        log::info!("Skipping file {:?}: size is not 16KB", entry.path());
+                        continue; // Skip files that are not 16KB
+                    }
+                }
+                Err(_) => {
+                    log::warn!("Failed to get metadata for file: {:?}", entry.path());
+                    continue;
+                }
+            }
+
+            let contents = match std::fs::read(entry.path()) {
+                Ok(contents) => contents,
+                Err(e) => {
+                    log::error!("Failed to read file {:?}: {}", entry.path(), e);
+                    continue;
+                }
+            };
+
+            let name = entry.path().to_string_lossy().to_string();
+            let hash = sha3::Sha3_256::digest(&contents).to_vec();
+            let variant = None;
+            let slot = None;
+
+            let mut info = RomInfo {
+                name,
+                variant,
+                hash,
+                slot,
+            };
+
+            if let Some(original) = ORIGINAL_ROMS
+                .iter()
+                .find(|original| original.info.hash == info.hash)
+            {
+                info.variant = original.info.variant.clone();
+                info.slot = original.info.slot;
+            }
+
+            roms.push(info);
+        }
+
+        self.access_config_mut().available_roms = roms;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn update_available_roms(&self) {
+        let mut roms = Vec::with_capacity(256);
     }
 }
 

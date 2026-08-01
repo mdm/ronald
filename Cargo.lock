@@ -3729,6 +3729,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
+ "walkdir",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
