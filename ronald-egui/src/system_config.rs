@@ -22,6 +22,7 @@ pub struct SystemConfig {
     disk_drives: DiskDrives,
     rom_folder: Option<PathBuf>,
     preferred_language: RomLanguage,
+    auto_config: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -37,6 +38,7 @@ impl Default for SystemConfig {
             disk_drives: DiskDrives::One,
             rom_folder,
             preferred_language: RomLanguage::English,
+            auto_config: true,
         }
     }
 }
@@ -53,6 +55,7 @@ impl Default for SystemConfig {
             disk_drives: DiskDrives::One,
             rom_folder,
             preferred_language: RomLanguage::English,
+            auto_config: true,
         }
     }
 }
@@ -73,6 +76,7 @@ impl TryFrom<SystemConfig> for CoreSystemConfig {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[non_exhaustive]
 enum RomLanguage {
     Danish,
     #[default]
@@ -92,55 +96,139 @@ impl Display for RomLanguage {
     }
 }
 
-#[derive(Eq)]
-struct RomInfo {
-    name: String,
-    language: Option<RomLanguage>,
-    hash: Vec<u8>,
-    slot: Option<RomSlot>,
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+enum RomVariant {
+    Language(RomLanguage),
+    Other(String),
 }
 
-impl PartialEq for RomInfo {
-    fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash
+impl Display for RomVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Language(lang) => write!(f, "{}", lang),
+            Self::Other(desc) => write!(f, "{}", desc),
+        }
     }
 }
 
-impl From<(&str, Option<RomLanguage>, &str, Option<RomSlot>)> for RomInfo {
-    fn from(tuple: (&str, Option<RomLanguage>, &str, Option<RomSlot>)) -> Self {
-        let (name, language, hash_hex, slot) = tuple;
+#[cfg(not(target_arch = "wasm32"))]
+struct RomKey(PathBuf);
+
+#[cfg(target_arch = "wasm32")]
+struct RomKey(Vec<u8>);
+
+struct RomConfig {
+    key: RomKey,
+    slot: RomSlot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+struct RomInfo {
+    name: String,
+    hash: Vec<u8>,
+    variant: Option<RomVariant>,
+    slot: Option<RomSlot>,
+}
+
+impl From<(&str, &str, Option<RomVariant>, Option<RomSlot>)> for RomInfo {
+    fn from(tuple: (&str, &str, Option<RomVariant>, Option<RomSlot>)) -> Self {
+        let (name, hash_hex, variant, slot) = tuple;
         // Panic is okay here because this is a hardcoded value and should never fail to decode.
         let hash = hex::decode(hash_hex)
             .unwrap_or_else(|_| panic!("Failed to decode ROM hash for {}: {}", name, hash_hex));
         Self {
             name: name.to_string(),
-            language,
+            variant,
             hash,
             slot,
         }
     }
 }
 
-static ORIGINAL_ROMS: LazyLock<[RomInfo; 3]> = LazyLock::new(|| {
+struct AutoConfigRule {
+    models: &'static [CpcModel],
+    requires_disk_drive: bool,
+}
+
+struct OriginalRom {
+    info: RomInfo,
+    auto_config_rule: AutoConfigRule,
+}
+
+static ORIGINAL_ROMS: LazyLock<[OriginalRom; 6]> = LazyLock::new(|| {
     [
-        RomInfo::from((
-            "CPC 464 OS",
-            Some(RomLanguage::English),
-            "b57872c97d569a1968816fcaf359de4b6bf5c188e7dbd0954761cc552b25d327",
-            Some(RomSlot::Lower),
-        )),
-        RomInfo::from((
-            "Locomotive BASIC 1.0",
-            Some(RomLanguage::English),
-            "ff6fbb6e12808e7d32c9217813d730df7321b4b5e499a45e3eac21b421dcf729",
-            Some(RomSlot::Upper(0)),
-        )),
-        RomInfo::from((
-            "AMSDOS 0.5",
-            None,
-            "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
-            Some(RomSlot::Upper(7)),
-        )),
+        OriginalRom {
+            info: RomInfo::from((
+                "CPC 464 OS",
+                "b57872c97d569a1968816fcaf359de4b6bf5c188e7dbd0954761cc552b25d327",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Lower),
+            )),
+            auto_config_rule: AutoConfigRule {
+                models: &[CpcModel::Cpc464],
+                requires_disk_drive: false,
+            },
+        },
+        OriginalRom {
+            info: RomInfo::from((
+                "CPC 664 OS",
+                "b57872c97d569a1968816fcaf359de4b6bf5c188e7dbd0954761cc552b25d327",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Lower),
+            )),
+            auto_config_rule: AutoConfigRule {
+                models: &[CpcModel::Cpc664],
+                requires_disk_drive: false,
+            },
+        },
+        OriginalRom {
+            info: RomInfo::from((
+                "CPC 6128 OS",
+                "b57872c97d569a1968816fcaf359de4b6bf5c188e7dbd0954761cc552b25d327",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Lower),
+            )),
+            auto_config_rule: AutoConfigRule {
+                models: &[CpcModel::Cpc6128],
+                requires_disk_drive: false,
+            },
+        },
+        OriginalRom {
+            info: RomInfo::from((
+                "Locomotive BASIC 1.0",
+                "ff6fbb6e12808e7d32c9217813d730df7321b4b5e499a45e3eac21b421dcf729",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Upper(0)),
+            )),
+            auto_config_rule: AutoConfigRule {
+                models: &[CpcModel::Cpc464],
+                requires_disk_drive: false,
+            },
+        },
+        OriginalRom {
+            info: RomInfo::from((
+                "Locomotive BASIC 1.1",
+                "ff6fbb6e12808e7d32c9217813d730df7321b4b5e499a45e3eac21b421dcf729",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Upper(0)),
+            )),
+            auto_config_rule: AutoConfigRule {
+                models: &[CpcModel::Cpc664, CpcModel::Cpc6128],
+                requires_disk_drive: false,
+            },
+        },
+        OriginalRom {
+            info: RomInfo::from((
+                "AMSDOS 0.5",
+                "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
+                None,
+                Some(RomSlot::Upper(7)),
+            )),
+            auto_config_rule: AutoConfigRule {
+                models: &[CpcModel::Cpc464, CpcModel::Cpc664, CpcModel::Cpc6128],
+                requires_disk_drive: true,
+            },
+        },
     ]
 });
 
@@ -406,21 +494,23 @@ impl SystemConfigModal {
                     .spacing([20.0, 20.0])
                     .show(ui, |ui| {
                         for rom in ORIGINAL_ROMS.iter() {
-                            if let Some(language) = rom.language
+                            if let Some(RomVariant::Language(language)) = rom.info.variant
                                 && language != self.access_config().preferred_language
                             {
                                 continue;
                             }
                             ui.vertical(|ui| {
-                                let title = match rom.language {
-                                    Some(language) => format!("{} ({})", rom.name, language),
-                                    None => rom.name.to_string(),
+                                let title = match &rom.info.variant {
+                                    Some(variant) => {
+                                        format!("{} ({})", rom.info.name, variant)
+                                    }
+                                    None => rom.info.name.to_string(),
                                 };
                                 ui.add(egui::Label::new(title).extend());
                                 ui.add(
                                     egui::Label::new(format!(
                                         "SHA3-256: {}",
-                                        hex::encode(&rom.hash)
+                                        hex::encode(&rom.info.hash)
                                     ))
                                     .truncate(),
                                 );
@@ -433,14 +523,17 @@ impl SystemConfigModal {
                                 ui.colored_label(colors::DARK_GRAY, "not found");
                             }
 
-                            if let Some(slot) = rom.slot {
+                            if let Some(slot) = rom.info.slot {
                                 ui.label(format!("Slot: {}", slot));
                             } else {
                                 ui.label("No slot");
                             }
 
                             let mut used = true;
-                            ui.add_enabled(!auto_config, egui::Checkbox::new(&mut used, "Use"));
+                            ui.add_enabled(
+                                !self.access_config().auto_config,
+                                egui::Checkbox::new(&mut used, "Use"),
+                            );
 
                             ui.end_row();
                         }
