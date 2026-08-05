@@ -652,41 +652,52 @@ impl SystemConfigModal {
                     .num_columns(4)
                     .spacing([20.0, 20.0])
                     .show(ui, |ui| {
-                        for rom in ORIGINAL_ROMS.iter() {
-                            if let Some(RomVariant::Language(language)) = rom.info.variant
+                        for original_rom in ORIGINAL_ROMS.iter() {
+                            let available_rom = self
+                                .available_roms
+                                .iter()
+                                .find(|r| r.info.hash == original_rom.info.hash);
+
+                            let was_used = match available_rom {
+                                Some(rom) => self
+                                    .access_config()
+                                    .assigned_roms
+                                    .iter()
+                                    .any(|r| r.key == rom.key),
+                                None => false,
+                            };
+
+                            if let Some(RomVariant::Language(language)) = original_rom.info.variant
                                 && language != self.access_config().preferred_language
-                            // TODO: don't filter out ROMs actually in use
+                                && !was_used
                             {
                                 continue;
                             }
+
                             ui.vertical(|ui| {
-                                let title = match &rom.info.variant {
+                                let title = match &original_rom.info.variant {
                                     Some(variant) => {
-                                        format!("{} ({})", rom.info.name, variant)
+                                        format!("{} ({})", original_rom.info.name, variant)
                                     }
-                                    None => rom.info.name.to_string(),
+                                    None => original_rom.info.name.to_string(),
                                 };
                                 ui.add(egui::Label::new(title).extend());
                                 ui.add(
                                     egui::Label::new(format!(
                                         "SHA3-256: {}",
-                                        hex::encode(&rom.info.hash)
+                                        hex::encode(&original_rom.info.hash)
                                     ))
                                     .truncate(),
                                 );
                             });
 
-                            let available_rom = self
-                                .available_roms
-                                .iter()
-                                .find(|r| r.info.hash == rom.info.hash);
                             if available_rom.is_some() {
                                 ui.colored_label(colors::FORREST_GREEN, "found");
                             } else {
                                 ui.colored_label(colors::DARK_RED, "not found");
                             }
 
-                            if let Some(slot) = rom.info.slot {
+                            if let Some(slot) = original_rom.info.slot {
                                 ui.label(format!("Slot: {}", slot));
                             } else {
                                 ui.label("No slot");
@@ -695,15 +706,6 @@ impl SystemConfigModal {
                             if let Some(rom) = available_rom {
                                 let key = rom.key.clone();
                                 let slot = rom.info.slot.expect("original ROMs should have a slot");
-
-                                let was_used = match available_rom {
-                                    Some(rom) => self
-                                        .access_config()
-                                        .assigned_roms
-                                        .iter()
-                                        .any(|r| r.key == rom.key),
-                                    None => false,
-                                };
 
                                 let reassign_pending = self
                                     .reassign_pending
