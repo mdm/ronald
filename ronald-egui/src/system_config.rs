@@ -185,6 +185,7 @@ pub struct SystemConfigModal {
     picked_rom_folder: Shared<Option<PathBuf>>,
     available_roms: Vec<AvailableRom>,
     reassign_pending: Option<RomKey>,
+    auto_config_inited: bool,
 }
 
 impl Default for SystemConfigModal {
@@ -196,6 +197,7 @@ impl Default for SystemConfigModal {
             picked_rom_folder: shared(None),
             available_roms: Vec::new(),
             reassign_pending: None,
+            auto_config_inited: false,
         }
     }
 }
@@ -420,20 +422,45 @@ impl SystemConfigModal {
         });
 
         ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
-            if ui
-                .checkbox(
-                    &mut self.access_config_mut().auto_config,
-                    "Automatically configure based on selected hardware model",
-                )
-                .clicked()
-                && self.access_config().auto_config
-            {
-                match self.access_config().model {
-                    CpcModel::Cpc464 => {}
-                    CpcModel::Cpc664 => {}
-                    CpcModel::Cpc6128 => {}
+            let was_auto_config = self.access_config().auto_config;
+            ui.checkbox(
+                &mut self.access_config_mut().auto_config,
+                "Automatically configure based on selected hardware model",
+            );
+
+            if !self.auto_config_inited || self.access_config().auto_config && !was_auto_config {
+                self.auto_config_inited = true;
+                for original_rom in ORIGINAL_ROMS.iter() {
+                    let Some(available_rom) = self
+                        .available_roms
+                        .iter()
+                        .find(|r| r.info.hash == original_rom.info.hash)
+                    else {
+                        continue;
+                    };
+
+                    let model = &self.access_config().model;
+                    if !original_rom.auto_config_rule.models.contains(model) {
+                        continue;
+                    }
+
+                    let has_disk_drive =
+                        !matches!(self.access_config().disk_drives, DiskDrives::None);
+                    if original_rom.auto_config_rule.requires_disk_drive && !has_disk_drive {
+                        continue;
+                    }
+
+                    let key = available_rom.key.clone();
+                    let slot = original_rom
+                        .info
+                        .slot
+                        .expect("original ROMs should have a slot");
+                    // TODO: detect if language is better than current assignment
+                    self.access_config_mut()
+                        .assigned_roms
+                        .push(AssignedRom { key, slot });
                 }
-            };
+            }
         });
 
         ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
