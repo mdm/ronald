@@ -419,26 +419,46 @@ impl SystemConfigModal {
             egui::ComboBox::from_id_salt("rom_language_selector")
                 .selected_text(self.access_config().preferred_language.to_string())
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut self.access_config_mut().preferred_language,
-                        RomLanguage::Danish,
-                        "Danish",
-                    );
-                    ui.selectable_value(
-                        &mut self.access_config_mut().preferred_language,
-                        RomLanguage::English,
-                        "English",
-                    );
-                    ui.selectable_value(
-                        &mut self.access_config_mut().preferred_language,
-                        RomLanguage::French,
-                        "French",
-                    );
-                    ui.selectable_value(
-                        &mut self.access_config_mut().preferred_language,
-                        RomLanguage::Spanish,
-                        "Spanish",
-                    );
+                    if ui
+                        .selectable_value(
+                            &mut self.access_config_mut().preferred_language,
+                            RomLanguage::Danish,
+                            "Danish",
+                        )
+                        .clicked()
+                    {
+                        self.apply_auto_config();
+                    }
+                    if ui
+                        .selectable_value(
+                            &mut self.access_config_mut().preferred_language,
+                            RomLanguage::English,
+                            "English",
+                        )
+                        .clicked()
+                    {
+                        self.apply_auto_config();
+                    }
+                    if ui
+                        .selectable_value(
+                            &mut self.access_config_mut().preferred_language,
+                            RomLanguage::French,
+                            "French",
+                        )
+                        .clicked()
+                    {
+                        self.apply_auto_config();
+                    }
+                    if ui
+                        .selectable_value(
+                            &mut self.access_config_mut().preferred_language,
+                            RomLanguage::Spanish,
+                            "Spanish",
+                        )
+                        .clicked()
+                    {
+                        self.apply_auto_config();
+                    }
                 });
         });
 
@@ -769,6 +789,8 @@ impl SystemConfigModal {
         self.access_config_mut().assigned_roms.clear();
         self.required_roms_missing = false;
 
+        let mut assigned_rom_languages = HashMap::new();
+
         for original_rom in ORIGINAL_ROMS.iter() {
             let model = &self.access_config().model;
             if !original_rom.auto_config_rule.models.contains(model) {
@@ -794,7 +816,33 @@ impl SystemConfigModal {
                 .info
                 .slot
                 .expect("original ROMs should have a slot");
-            // TODO: detect if language is better than current assignment
+
+            // Language priority:
+            // 1. Preferred language
+            // 2. English
+            // 3. Any other language
+
+            if let Some(best_language) = assigned_rom_languages.get(&slot) {
+                if *best_language == self.access_config().preferred_language {
+                    continue; // Already assigned preferred language
+                }
+
+                if *best_language == RomLanguage::English
+                    && let Some(RomVariant::Language(language)) = available_rom.info.variant
+                    && language != self.access_config().preferred_language
+                {
+                    continue; // Already assigned English, skip other languages
+                }
+            }
+
+            if let Some(RomVariant::Language(language)) = available_rom.info.variant {
+                assigned_rom_languages.insert(slot, language);
+            }
+
+            self.access_config_mut()
+                .assigned_roms
+                .retain(|r| r.slot != slot);
+
             self.access_config_mut()
                 .assigned_roms
                 .push(AssignedRom { key, slot });
