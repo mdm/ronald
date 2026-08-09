@@ -638,13 +638,13 @@ impl SystemConfigModal {
                     ui.label(format!("Slot \"{}\" is already occupied. Reassign?", slot));
                     ui.horizontal(|ui| {
                         if ui.button("Yes").clicked() {
-                            let key = rom.key.clone();
+                            let rom = self
+                                .reassign_pending
+                                .take()
+                                .expect("reassign_pending should be Some");
 
                             self.pending_commands.push(Command::UnassignRom { slot });
-                            self.pending_commands.push(Command::AssignRom {
-                                rom: AssignedRom { key, slot },
-                            });
-                            self.reassign_pending = None;
+                            self.pending_commands.push(Command::AssignRom { rom });
                         }
                         if ui.button("No").clicked() {
                             self.reassign_pending = None;
