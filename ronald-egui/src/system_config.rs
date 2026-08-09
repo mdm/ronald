@@ -134,12 +134,6 @@ struct AvailableRom {
     info: RomInfo,
 }
 
-impl AvailableRom {
-    fn is_used(&self, assigned_roms: &[AssignedRom]) -> bool {
-        assigned_roms.iter().any(|r| r.key == self.key)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 struct AssignedRom {
     key: RomKey,
@@ -187,6 +181,12 @@ enum Tab {
 }
 
 #[derive(Debug)]
+enum Command {
+    AssignRom { rom: AssignedRom },
+    UnassignRom { slot: RomSlot },
+}
+
+#[derive(Debug)]
 pub struct SystemConfigModal {
     pub show: bool,
     tab: Tab,
@@ -195,7 +195,8 @@ pub struct SystemConfigModal {
     last_scan: Instant,
     available_roms: Vec<AvailableRom>,
     custom_roms: Vec<AvailableRom>,
-    reassign_pending: Option<RomKey>,
+    pending_commands: Vec<Command>,
+    reassign_pending: Option<AssignedRom>,
     required_roms_missing: bool,
 }
 
@@ -209,6 +210,7 @@ impl Default for SystemConfigModal {
             last_scan: Instant::now(),
             available_roms: Vec::new(),
             custom_roms: Vec::new(),
+            pending_commands: Vec::new(),
             reassign_pending: None,
             required_roms_missing: false,
         }
@@ -283,6 +285,8 @@ impl SystemConfigModal {
                 ui.add_space(10.0);
             });
         });
+
+        self.handle_commands();
 
         config_changed
     }
@@ -602,64 +606,51 @@ impl SystemConfigModal {
         }
 
         if let Some(rom) = available_rom {
-            let key = rom.key.clone();
-            let slot = rom.info.slot.expect("original ROMs should have a slot");
-
             let reassign_pending = self
                 .reassign_pending
                 .as_ref()
-                .is_some_and(|pending_key| *pending_key == key);
-
-            let mut used = was_used || reassign_pending;
+                .is_some_and(|r| r.key == rom.key);
 
             if reassign_pending {
                 egui::Modal::new("reassign_slot".into()).show(ui, |ui| {
+                    let slot = rom.info.slot.expect("original ROMs should have a slot");
+
                     ui.label(format!("Slot \"{}\" is already occupied. Reassign?", slot));
                     ui.horizontal(|ui| {
                         if ui.button("Yes").clicked() {
-                            self.access_config_mut()
-                                .assigned_roms
-                                .retain(|r| r.slot != slot);
+                            let key = rom.key.clone();
 
-                            self.access_config_mut()
-                                .assigned_roms
-                                .push(AssignedRom { key, slot });
-
+                            self.pending_commands.push(Command::UnassignRom { slot });
+                            self.pending_commands.push(Command::AssignRom {
+                                rom: AssignedRom { key, slot },
+                            });
                             self.reassign_pending = None;
                         }
                         if ui.button("No").clicked() {
-                            used = false;
                             self.reassign_pending = None;
                         }
                     });
                 });
-            } else if ui
+            }
+
+            let mut used = was_used || reassign_pending;
+            if ui
                 .add_enabled(
                     !self.access_config().auto_config,
                     egui::Checkbox::new(&mut used, "Use"),
                 )
                 .clicked()
             {
-                if used {
-                    let slot_occupied = self
-                        .access_config()
-                        .assigned_roms
-                        .iter()
-                        .any(|r| r.slot == slot && r.key != key);
+                let slot = rom.info.slot.expect("original ROMs should have a slot");
 
-                    if slot_occupied {
-                        if self.reassign_pending.is_none() {
-                            self.reassign_pending = Some(key.clone());
-                        }
-                    } else {
-                        self.access_config_mut()
-                            .assigned_roms
-                            .push(AssignedRom { key, slot });
-                    }
+                if used {
+                    let key = rom.key.clone();
+
+                    self.pending_commands.push(Command::AssignRom {
+                        rom: AssignedRom { key, slot },
+                    });
                 } else {
-                    self.access_config_mut()
-                        .assigned_roms
-                        .retain(|r| r.key != key);
+                    self.pending_commands.push(Command::UnassignRom { slot });
                 }
             }
         }
@@ -807,6 +798,33 @@ impl SystemConfigModal {
             self.access_config_mut()
                 .assigned_roms
                 .push(AssignedRom { key, slot });
+        }
+    }
+
+    fn handle_commands(&mut self) {
+        for command in std::mem::take(&mut self.pending_commands) {
+            match command {
+                Command::AssignRom { rom } => {
+                    if self
+                        .access_config()
+                        .assigned_roms
+                        .iter()
+                        .any(|r| r.slot == rom.slot && r.key != rom.key)
+                    {
+                        self.reassign_pending = Some(rom);
+                        continue;
+                    }
+                    self.access_config_mut()
+                        .assigned_roms
+                        .retain(|r| r.slot != rom.slot);
+                    self.access_config_mut().assigned_roms.push(rom);
+                }
+                Command::UnassignRom { slot } => {
+                    self.access_config_mut()
+                        .assigned_roms
+                        .retain(|r| r.slot != slot);
+                }
+            }
         }
     }
 }
