@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use eframe::egui;
 
@@ -17,6 +18,8 @@ use crate::utils::{
 };
 
 mod known_roms;
+
+const SCAN_INTERVAL_SECS: u64 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct SystemConfig {
@@ -131,6 +134,12 @@ struct AvailableRom {
     info: RomInfo,
 }
 
+impl AvailableRom {
+    fn is_used(&self, assigned_roms: &[AssignedRom]) -> bool {
+        assigned_roms.iter().any(|r| r.key == self.key)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 struct AssignedRom {
     key: RomKey,
@@ -183,9 +192,11 @@ pub struct SystemConfigModal {
     tab: Tab,
     changed_config: Option<SystemConfig>,
     picked_rom_folder: Shared<Option<PathBuf>>,
+    last_scan: Instant,
     available_roms: Vec<AvailableRom>,
+    custom_roms: Vec<AvailableRom>,
     reassign_pending: Option<RomKey>,
-    auto_config_inited: bool,
+    required_roms_missing: bool,
 }
 
 impl Default for SystemConfigModal {
@@ -195,9 +206,11 @@ impl Default for SystemConfigModal {
             tab: Tab::Hardware,
             changed_config: None,
             picked_rom_folder: shared(None),
+            last_scan: Instant::now(),
             available_roms: Vec::new(),
+            custom_roms: Vec::new(),
             reassign_pending: None,
-            auto_config_inited: false,
+            required_roms_missing: false,
         }
     }
 }
@@ -213,7 +226,7 @@ impl SystemConfigModal {
         // Initialize temp config if not already set
         if self.changed_config.is_none() {
             self.changed_config = Some(config.clone());
-            self.update_available_roms();
+            self.update_available_roms(true);
         }
 
         self.handle_picked_rom_folder();
@@ -389,6 +402,10 @@ impl SystemConfigModal {
     }
 
     fn render_rom_config(&mut self, ui: &mut egui::Ui) {
+        if self.last_scan.elapsed().as_secs() > SCAN_INTERVAL_SECS {
+            self.update_available_roms(false);
+        }
+
         self.render_rom_folder(ui);
 
         ui.add_space(15.0);
@@ -422,44 +439,22 @@ impl SystemConfigModal {
         });
 
         ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
-            let was_auto_config = self.access_config().auto_config;
-            ui.checkbox(
-                &mut self.access_config_mut().auto_config,
-                "Automatically configure based on selected hardware model",
-            );
+            if ui
+                .checkbox(
+                    &mut self.access_config_mut().auto_config,
+                    "Automatically configure based on selected hardware model",
+                )
+                .clicked()
+                && self.access_config().auto_config
+            {
+                self.apply_auto_config();
+            }
 
-            if !self.auto_config_inited || self.access_config().auto_config && !was_auto_config {
-                self.auto_config_inited = true;
-                for original_rom in ORIGINAL_ROMS.iter() {
-                    let Some(available_rom) = self
-                        .available_roms
-                        .iter()
-                        .find(|r| r.info.hash == original_rom.info.hash)
-                    else {
-                        continue;
-                    };
-
-                    let model = &self.access_config().model;
-                    if !original_rom.auto_config_rule.models.contains(model) {
-                        continue;
-                    }
-
-                    let has_disk_drive =
-                        !matches!(self.access_config().disk_drives, DiskDrives::None);
-                    if original_rom.auto_config_rule.requires_disk_drive && !has_disk_drive {
-                        continue;
-                    }
-
-                    let key = available_rom.key.clone();
-                    let slot = original_rom
-                        .info
-                        .slot
-                        .expect("original ROMs should have a slot");
-                    // TODO: detect if language is better than current assignment
-                    self.access_config_mut()
-                        .assigned_roms
-                        .push(AssignedRom { key, slot });
-                }
+            if self.required_roms_missing {
+                ui.colored_label(
+                    colors::DARK_RED,
+                    "Some required ROMs are missing for the selected hardware model.",
+                );
             }
         });
 
@@ -473,115 +468,7 @@ impl SystemConfigModal {
                     .spacing([20.0, 20.0])
                     .show(ui, |ui| {
                         for original_rom in ORIGINAL_ROMS.iter() {
-                            let available_rom = self
-                                .available_roms
-                                .iter()
-                                .find(|r| r.info.hash == original_rom.info.hash);
-
-                            let was_used = match available_rom {
-                                Some(rom) => self
-                                    .access_config()
-                                    .assigned_roms
-                                    .iter()
-                                    .any(|r| r.key == rom.key),
-                                None => false,
-                            };
-
-                            if let Some(RomVariant::Language(language)) = original_rom.info.variant
-                                && language != self.access_config().preferred_language
-                                && !was_used
-                            {
-                                continue;
-                            }
-
-                            ui.vertical(|ui| {
-                                let title = match &original_rom.info.variant {
-                                    Some(variant) => {
-                                        format!("{} ({})", original_rom.info.name, variant)
-                                    }
-                                    None => original_rom.info.name.to_string(),
-                                };
-                                ui.add(egui::Label::new(title).extend());
-                                ui.add(
-                                    egui::Label::new(format!(
-                                        "SHA3-256: {}",
-                                        hex::encode(&original_rom.info.hash)
-                                    ))
-                                    .truncate(),
-                                );
-                            });
-
-                            if available_rom.is_some() {
-                                ui.colored_label(colors::FORREST_GREEN, "found");
-                            } else {
-                                ui.colored_label(colors::DARK_RED, "not found");
-                            }
-
-                            if let Some(slot) = original_rom.info.slot {
-                                ui.label(format!("Slot: {}", slot));
-                            } else {
-                                ui.label("No slot");
-                            }
-
-                            if let Some(rom) = available_rom {
-                                let key = rom.key.clone();
-                                let slot = rom.info.slot.expect("original ROMs should have a slot");
-
-                                let reassign_pending = self
-                                    .reassign_pending
-                                    .as_ref()
-                                    .is_some_and(|pending_key| *pending_key == key);
-
-                                let mut used = was_used || reassign_pending;
-                                ui.add_enabled(
-                                    !self.access_config().auto_config,
-                                    egui::Checkbox::new(&mut used, "Use"),
-                                );
-
-                                if reassign_pending {
-                                    egui::Modal::new("reassign_slot".into()).show(ui, |ui| {
-                                        ui.label(format!(
-                                            "Slot \"{}\" is already occupied. Reassign?",
-                                            slot
-                                        ));
-                                        ui.horizontal(|ui| {
-                                            if ui.button("Yes").clicked() {
-                                                self.access_config_mut()
-                                                    .assigned_roms
-                                                    .retain(|r| r.slot != slot);
-                                                self.reassign_pending = None;
-                                            }
-                                            if ui.button("No").clicked() {
-                                                used = false;
-                                                self.reassign_pending = None;
-                                            }
-                                        });
-                                    });
-                                }
-                                if used && !was_used {
-                                    let slot_occupied = self
-                                        .access_config()
-                                        .assigned_roms
-                                        .iter()
-                                        .any(|r| r.slot == slot && r.key != key);
-
-                                    if slot_occupied {
-                                        if self.reassign_pending.is_none() {
-                                            self.reassign_pending = Some(key.clone());
-                                        }
-                                    } else {
-                                        self.access_config_mut()
-                                            .assigned_roms
-                                            .push(AssignedRom { key, slot });
-                                    }
-                                } else if !used && was_used {
-                                    self.access_config_mut()
-                                        .assigned_roms
-                                        .retain(|r| r.key != key);
-                                }
-                            }
-
-                            ui.end_row();
+                            self.render_original_rom(ui, original_rom);
                         }
                     });
             });
@@ -601,7 +488,7 @@ impl SystemConfigModal {
             let rom_folder = Some(PathBuf::from(path));
             if self.access_config_mut().rom_folder != rom_folder {
                 self.access_config_mut().rom_folder = rom_folder;
-                self.update_available_roms();
+                self.update_available_roms(true);
             }
 
             valid = match &self.access_config().rom_folder {
@@ -659,16 +546,141 @@ impl SystemConfigModal {
         if let Some(picked_rom_folder) = self.picked_rom_folder.try_with_mut(|f| f.take()).flatten()
         {
             self.access_config_mut().rom_folder = Some(picked_rom_folder);
-            self.update_available_roms();
+            self.update_available_roms(true);
+        }
+    }
+
+    fn render_original_rom(&mut self, ui: &mut egui::Ui, original_rom: &OriginalRom) {
+        let available_rom = self
+            .available_roms
+            .iter()
+            .find(|r| r.info.hash == original_rom.info.hash);
+
+        let was_used = match available_rom {
+            Some(rom) => self
+                .access_config()
+                .assigned_roms
+                .iter()
+                .any(|r| r.key == rom.key),
+            None => false,
+        };
+
+        if let Some(RomVariant::Language(language)) = original_rom.info.variant
+            && language != self.access_config().preferred_language
+            && !was_used
+        {
+            return;
+        }
+
+        ui.vertical(|ui| {
+            let title = match &original_rom.info.variant {
+                Some(variant) => {
+                    format!("{} ({})", original_rom.info.name, variant)
+                }
+                None => original_rom.info.name.to_string(),
+            };
+            ui.add(egui::Label::new(title).extend());
+            ui.add(
+                egui::Label::new(format!(
+                    "SHA3-256: {}",
+                    hex::encode(&original_rom.info.hash)
+                ))
+                .truncate(),
+            );
+        });
+
+        if available_rom.is_some() {
+            ui.colored_label(colors::FORREST_GREEN, "found");
+        } else {
+            ui.colored_label(colors::DARK_RED, "not found");
+        }
+
+        if let Some(slot) = original_rom.info.slot {
+            ui.label(format!("Slot: {}", slot));
+        } else {
+            ui.label("No slot");
+        }
+
+        if let Some(rom) = available_rom {
+            let key = rom.key.clone();
+            let slot = rom.info.slot.expect("original ROMs should have a slot");
+
+            let reassign_pending = self
+                .reassign_pending
+                .as_ref()
+                .is_some_and(|pending_key| *pending_key == key);
+
+            let mut used = was_used || reassign_pending;
+
+            if reassign_pending {
+                egui::Modal::new("reassign_slot".into()).show(ui, |ui| {
+                    ui.label(format!("Slot \"{}\" is already occupied. Reassign?", slot));
+                    ui.horizontal(|ui| {
+                        if ui.button("Yes").clicked() {
+                            self.access_config_mut()
+                                .assigned_roms
+                                .retain(|r| r.slot != slot);
+
+                            self.access_config_mut()
+                                .assigned_roms
+                                .push(AssignedRom { key, slot });
+
+                            self.reassign_pending = None;
+                        }
+                        if ui.button("No").clicked() {
+                            used = false;
+                            self.reassign_pending = None;
+                        }
+                    });
+                });
+            } else if ui
+                .add_enabled(
+                    !self.access_config().auto_config,
+                    egui::Checkbox::new(&mut used, "Use"),
+                )
+                .clicked()
+            {
+                if used {
+                    let slot_occupied = self
+                        .access_config()
+                        .assigned_roms
+                        .iter()
+                        .any(|r| r.slot == slot && r.key != key);
+
+                    if slot_occupied {
+                        if self.reassign_pending.is_none() {
+                            self.reassign_pending = Some(key.clone());
+                        }
+                    } else {
+                        self.access_config_mut()
+                            .assigned_roms
+                            .push(AssignedRom { key, slot });
+                    }
+                } else {
+                    self.access_config_mut()
+                        .assigned_roms
+                        .retain(|r| r.key != key);
+                }
+            }
+        }
+
+        ui.end_row();
+    }
+
+    fn update_available_roms(&mut self, force: bool) {
+        if force || self.scan_available_roms() {
+            self.filter_custom_roms();
+            self.apply_auto_config();
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn update_available_roms(&mut self) {
+    fn scan_available_roms(&mut self) -> bool {
+        self.last_scan = Instant::now();
         let mut roms = Vec::with_capacity(256);
         if self.access_config().rom_folder.is_none() {
             log::error!("No ROM folder specified");
-            return;
+            return true;
         }
 
         for rom in walkdir::WalkDir::new(self.access_config().rom_folder.as_ref().unwrap()) {
@@ -731,12 +743,71 @@ impl SystemConfigModal {
             });
         }
 
+        roms.sort_by(|a, b| a.info.hash.cmp(&b.info.hash));
+        let changed = roms != self.available_roms;
         self.available_roms = roms;
+
+        changed
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn update_available_roms(&self) {
+    fn scan_available_roms(&self) -> bool {
         let mut roms = Vec::with_capacity(256);
+        false
+    }
+
+    fn filter_custom_roms(&mut self) {
+        let original_rom_hashes = ORIGINAL_ROMS
+            .iter()
+            .map(|original| original.info.hash.clone())
+            .collect::<Vec<_>>();
+
+        self.custom_roms = self
+            .available_roms
+            .iter()
+            .filter(|rom| !original_rom_hashes.contains(&rom.info.hash))
+            .cloned()
+            .collect();
+    }
+
+    fn apply_auto_config(&mut self) {
+        if !self.access_config().auto_config {
+            return;
+        }
+
+        self.access_config_mut().assigned_roms.clear();
+        self.required_roms_missing = false;
+
+        for original_rom in ORIGINAL_ROMS.iter() {
+            let model = &self.access_config().model;
+            if !original_rom.auto_config_rule.models.contains(model) {
+                continue;
+            }
+
+            let has_disk_drive = !matches!(self.access_config().disk_drives, DiskDrives::None);
+            if original_rom.auto_config_rule.requires_disk_drive && !has_disk_drive {
+                continue;
+            }
+
+            let Some(available_rom) = self
+                .available_roms
+                .iter()
+                .find(|r| r.info.hash == original_rom.info.hash)
+            else {
+                self.required_roms_missing = true;
+                continue;
+            };
+
+            let key = available_rom.key.clone();
+            let slot = original_rom
+                .info
+                .slot
+                .expect("original ROMs should have a slot");
+            // TODO: detect if language is better than current assignment
+            self.access_config_mut()
+                .assigned_roms
+                .push(AssignedRom { key, slot });
+        }
     }
 }
 
