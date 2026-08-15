@@ -197,7 +197,6 @@ pub struct SystemConfigModal {
     custom_roms: Vec<AvailableRom>,
     pending_commands: Vec<Command>,
     reassign_pending: Option<AssignedRom>,
-    required_roms_missing: bool,
 }
 
 impl Default for SystemConfigModal {
@@ -212,7 +211,6 @@ impl Default for SystemConfigModal {
             custom_roms: Vec::new(),
             pending_commands: Vec::new(),
             reassign_pending: None,
-            required_roms_missing: false,
         }
     }
 }
@@ -918,8 +916,6 @@ impl SystemConfigModal {
     }
 
     fn required_by_auto_config(&self, original_rom: &OriginalRom) -> bool {
-        // TOTO: This is a bit of a hack, but it works for now. We should probably refactor this to
-        // be more robust.
         let model = &self.access_config().model;
         if !original_rom.auto_config_rule.models.contains(model) {
             return false;
@@ -930,7 +926,24 @@ impl SystemConfigModal {
             return false;
         }
 
-        true
+        let preferred_language_exists = || {
+            ORIGINAL_ROMS.iter().any(|r| {
+                r.info.slot == original_rom.info.slot
+                    && r.info.variant
+                        == Some(RomVariant::Language(
+                            self.access_config().preferred_language,
+                        ))
+                    && r.auto_config_rule.models.contains(model)
+            })
+        };
+
+        match &original_rom.info.variant {
+            Some(RomVariant::Language(language)) => {
+                *language == self.access_config().preferred_language
+                    || (*language == RomLanguage::English && !preferred_language_exists())
+            }
+            _ => true,
+        }
     }
 
     fn apply_auto_config(&mut self) {
@@ -939,18 +952,9 @@ impl SystemConfigModal {
         }
 
         self.access_config_mut().assigned_roms.clear();
-        self.required_roms_missing = false;
-
-        let mut assigned_rom_languages = HashMap::new();
 
         for original_rom in ORIGINAL_ROMS.iter() {
-            let model = &self.access_config().model;
-            if !original_rom.auto_config_rule.models.contains(model) {
-                continue;
-            }
-
-            let has_disk_drive = !matches!(self.access_config().disk_drives, DiskDrives::None);
-            if original_rom.auto_config_rule.requires_disk_drive && !has_disk_drive {
+            if !self.required_by_auto_config(original_rom) {
                 continue;
             }
 
@@ -959,7 +963,6 @@ impl SystemConfigModal {
                 .iter()
                 .find(|r| r.info.hash == original_rom.info.hash)
             else {
-                self.required_roms_missing = true;
                 continue;
             };
 
@@ -968,28 +971,6 @@ impl SystemConfigModal {
                 .info
                 .slot
                 .expect("original ROMs should have a slot");
-
-            // Language priority:
-            // 1. Preferred language
-            // 2. English
-            // 3. Any other language
-
-            if let Some(best_language) = assigned_rom_languages.get(&slot) {
-                if *best_language == self.access_config().preferred_language {
-                    continue; // Already assigned preferred language
-                }
-
-                if *best_language == RomLanguage::English
-                    && let Some(RomVariant::Language(language)) = available_rom.info.variant
-                    && language != self.access_config().preferred_language
-                {
-                    continue; // Already assigned English, skip other languages
-                }
-            }
-
-            if let Some(RomVariant::Language(language)) = available_rom.info.variant {
-                assigned_rom_languages.insert(slot, language);
-            }
 
             self.access_config_mut()
                 .assigned_roms
