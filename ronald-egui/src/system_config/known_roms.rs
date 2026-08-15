@@ -212,3 +212,38 @@ pub static ORIGINAL_ROMS: LazyLock<[OriginalRom; 17]> = LazyLock::new(|| {
         },
     ]
 });
+
+pub static CUSTOM_ROMS: LazyLock<[RomInfo; 5]> = LazyLock::new(|| {
+    [
+        RomInfo::from((
+            "FutureOS 2026-05-03 ROM A",
+            "dc3e7cb97233d4917e9a91af6e26f991875923e8744aa6a04b3f5b0d29fab975",
+            Some(RomVariant::Language(RomLanguage::English)),
+            None,
+        )),
+        RomInfo::from((
+            "FutureOS 2026-05-03 ROM B",
+            "0f805a4512eaa23474b03b9627c7003314e2c7be1923b5c5ecf29cd846e82865",
+            Some(RomVariant::Language(RomLanguage::English)),
+            None,
+        )),
+        RomInfo::from((
+            "FutureOS 2026-05-03 ROM C",
+            "6ae0abfb3d8be545b039f7725e0b7a2b6c0672fa110aa6052dd461e4de6286c4",
+            Some(RomVariant::Language(RomLanguage::English)),
+            None,
+        )),
+        RomInfo::from((
+            "FutureOS 2026-05-03 ROM D",
+            "e844b6d502bc5159c8aaf19813e522505ea3f7935d6da994ffaf24fe16f3f148",
+            Some(RomVariant::Language(RomLanguage::English)),
+            None,
+        )),
+        RomInfo::from((
+            "PARADOS 1.2",
+            "8e294cdd13becee72d94c71ad0e928964401da3dddc37a8f28be20a59e548c6f",
+            None,
+            None,
+        )),
+    ]
+});
