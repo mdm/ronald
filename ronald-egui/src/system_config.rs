@@ -414,6 +414,26 @@ impl SystemConfigModal {
 
         ui.add_space(15.0);
 
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
+            if ui
+                .checkbox(
+                    &mut self.access_config_mut().auto_config,
+                    "Automatically configure based on selected hardware model",
+                )
+                .clicked()
+                && self.access_config().auto_config
+            {
+                self.apply_auto_config();
+            }
+
+            // if self.required_roms_missing {
+            //     ui.colored_label(
+            //         colors::DARK_RED,
+            //         "Some required ROMs are missing for the selected hardware model.",
+            //     );
+            // }
+        });
+
         ui.horizontal(|ui| {
             ui.label("Preferred Language:");
             egui::ComboBox::from_id_salt("rom_language_selector")
@@ -462,40 +482,74 @@ impl SystemConfigModal {
                 });
         });
 
-        ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
-            if ui
-                .checkbox(
-                    &mut self.access_config_mut().auto_config,
-                    "Automatically configure based on selected hardware model",
-                )
-                .clicked()
-                && self.access_config().auto_config
-            {
-                self.apply_auto_config();
-            }
-
-            if self.required_roms_missing {
-                ui.colored_label(
-                    colors::DARK_RED,
-                    "Some required ROMs are missing for the selected hardware model.",
-                );
-            }
-        });
+        ui.separator();
 
         ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
             ui.label("Original ROMs:");
         });
         ui.group(|ui| {
-            ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                egui::Grid::new("original_roms_grid")
-                    .num_columns(4)
-                    .spacing([20.0, 20.0])
-                    .show(ui, |ui| {
-                        for original_rom in ORIGINAL_ROMS.iter() {
-                            self.render_original_rom(ui, original_rom);
-                        }
+            egui::ScrollArea::vertical()
+                .id_salt("original_roms_scroll_area")
+                .max_height(400.0)
+                .show(ui, |ui| {
+                    ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+                        // TODO: match column widths for original and custom ROMs
+                        egui::Grid::new("required_original_roms_grid")
+                            .num_columns(3)
+                            .spacing([20.0, 20.0])
+                            .show(ui, |ui| {
+                                // TODO: order by presence, slot, language, name
+                                for original_rom in ORIGINAL_ROMS.iter() {
+                                    if !self.required_by_auto_config(original_rom) {
+                                        continue;
+                                    }
+                                    self.render_original_rom(ui, original_rom);
+                                }
+                            });
+
+                        ui.add_space(20.0);
+
+                        egui::CollapsingHeader::new("All detected original ROMs").show_unindented(
+                            ui,
+                            |ui| {
+                                egui::Grid::new("other_original_roms_grid")
+                                    .num_columns(3)
+                                    .spacing([20.0, 20.0])
+                                    .show(ui, |ui| {
+                                        for original_rom in ORIGINAL_ROMS.iter() {
+                                            if self.required_by_auto_config(original_rom) {
+                                                continue;
+                                            }
+                                            self.render_original_rom(ui, original_rom);
+                                        }
+                                    });
+                            },
+                        );
                     });
-            });
+                });
+        });
+
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
+            ui.label("Custom ROMs:");
+        });
+        ui.group(|ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("custom_roms_scroll_area")
+                .max_height(400.0)
+                .show(ui, |ui| {
+                    ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+                        egui::Grid::new("custom_roms_grid")
+                            .num_columns(3)
+                            .spacing([20.0, 20.0])
+                            .show(ui, |ui| {
+                                let custom_roms = std::mem::take(&mut self.custom_roms);
+                                for custom_rom in &custom_roms {
+                                    self.render_custom_rom(ui, custom_rom);
+                                }
+                                self.custom_roms = custom_roms;
+                            });
+                    });
+                });
         });
     }
 
@@ -589,12 +643,12 @@ impl SystemConfigModal {
             None => false,
         };
 
-        if let Some(RomVariant::Language(language)) = original_rom.info.variant
-            && language != self.access_config().preferred_language
-            && !was_used
-        {
-            return;
-        }
+        // if let Some(RomVariant::Language(language)) = original_rom.info.variant
+        //     && language != self.access_config().preferred_language
+        //     && !was_used
+        // {
+        //     return;
+        // }
 
         ui.vertical(|ui| {
             let title = match &original_rom.info.variant {
@@ -613,16 +667,10 @@ impl SystemConfigModal {
             );
         });
 
-        if available_rom.is_some() {
-            ui.colored_label(colors::FORREST_GREEN, "found");
-        } else {
-            ui.colored_label(colors::DARK_RED, "not found");
-        }
-
         if let Some(slot) = original_rom.info.slot {
             ui.label(format!("Slot: {}", slot));
         } else {
-            ui.label("No slot");
+            ui.label("Any slot");
         }
 
         if let Some(rom) = available_rom {
@@ -673,6 +721,86 @@ impl SystemConfigModal {
                     self.pending_commands.push(Command::UnassignRom { slot });
                 }
             }
+        } else {
+            ui.colored_label(colors::DARK_RED, "not found");
+        }
+
+        ui.end_row();
+    }
+
+    fn render_custom_rom(&mut self, ui: &mut egui::Ui, custom_rom: &AvailableRom) {
+        let was_used = self
+            .access_config()
+            .assigned_roms
+            .iter()
+            .any(|r| r.key == custom_rom.key);
+
+        ui.vertical(|ui| {
+            let title = match &custom_rom.info.variant {
+                Some(variant) => {
+                    format!("{} ({})", custom_rom.info.name, variant)
+                }
+                None => custom_rom.info.name.to_string(),
+            };
+            ui.add(egui::Label::new(title).extend());
+            ui.add(
+                egui::Label::new(format!("SHA3-256: {}", hex::encode(&custom_rom.info.hash)))
+                    .truncate(),
+            );
+        });
+
+        if let Some(slot) = custom_rom.info.slot {
+            ui.label(format!("Slot: {}", slot));
+        } else {
+            ui.label("Any slot");
+        }
+
+        let reassign_pending = self
+            .reassign_pending
+            .as_ref()
+            .is_some_and(|r| r.key == custom_rom.key);
+
+        // if reassign_pending {
+        //     egui::Modal::new("reassign_slot".into()).show(ui, |ui| {
+        //         let slot = rom.info.slot.expect("original ROMs should have a slot");
+        //
+        //         ui.label(format!("Slot \"{}\" is already occupied. Reassign?", slot));
+        //         ui.horizontal(|ui| {
+        //             if ui.button("Yes").clicked() {
+        //                 let rom = self
+        //                     .reassign_pending
+        //                     .take()
+        //                     .expect("reassign_pending should be Some");
+        //
+        //                 self.pending_commands.push(Command::UnassignRom { slot });
+        //                 self.pending_commands.push(Command::AssignRom { rom });
+        //             }
+        //             if ui.button("No").clicked() {
+        //                 self.reassign_pending = None;
+        //             }
+        //         });
+        //     });
+        // }
+
+        let mut used = was_used || reassign_pending;
+        if ui
+            .add_enabled(
+                !self.access_config().auto_config,
+                egui::Checkbox::new(&mut used, "Use"),
+            )
+            .clicked()
+        {
+            // let slot = rom.info.slot.expect("original ROMs should have a slot");
+            //
+            // if used {
+            //     let key = rom.key.clone();
+            //
+            //     self.pending_commands.push(Command::AssignRom {
+            //         rom: AssignedRom { key, slot },
+            //     });
+            // } else {
+            //     self.pending_commands.push(Command::UnassignRom { slot });
+            // }
         }
 
         ui.end_row();
@@ -695,6 +823,8 @@ impl SystemConfigModal {
         }
 
         for rom in walkdir::WalkDir::new(self.access_config().rom_folder.as_ref().unwrap()) {
+            use crate::system_config::known_roms::CUSTOM_ROMS;
+
             let entry = match rom {
                 Ok(entry) => entry,
                 Err(e) => {
@@ -748,6 +878,12 @@ impl SystemConfigModal {
                 info.slot = original.info.slot;
             }
 
+            if let Some(custom) = CUSTOM_ROMS.iter().find(|custom| custom.hash == info.hash) {
+                info.name = custom.name.clone();
+                info.variant = custom.variant.clone();
+                info.slot = custom.slot;
+            }
+
             roms.push(AvailableRom {
                 key: RomKey(entry.path().to_path_buf()),
                 info,
@@ -779,6 +915,22 @@ impl SystemConfigModal {
             .filter(|rom| !original_rom_hashes.contains(&rom.info.hash))
             .cloned()
             .collect();
+    }
+
+    fn required_by_auto_config(&self, original_rom: &OriginalRom) -> bool {
+        // TOTO: This is a bit of a hack, but it works for now. We should probably refactor this to
+        // be more robust.
+        let model = &self.access_config().model;
+        if !original_rom.auto_config_rule.models.contains(model) {
+            return false;
+        }
+
+        let has_disk_drive = !matches!(self.access_config().disk_drives, DiskDrives::None);
+        if original_rom.auto_config_rule.requires_disk_drive && !has_disk_drive {
+            return false;
+        }
+
+        true
     }
 
     fn apply_auto_config(&mut self) {
