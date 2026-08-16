@@ -491,11 +491,11 @@ impl SystemConfigModal {
                 .max_height(400.0)
                 .show(ui, |ui| {
                     ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                        // TODO: match column widths for original and custom ROMs
                         egui::Grid::new("required_original_roms_grid")
                             .num_columns(3)
                             .spacing([20.0, 20.0])
                             .show(ui, |ui| {
+                                ui.set_min_width(600.0);
                                 for original_rom in ORIGINAL_ROMS.iter() {
                                     if !self.required_by_auto_config(original_rom) {
                                         continue;
@@ -512,6 +512,7 @@ impl SystemConfigModal {
                                     .num_columns(3)
                                     .spacing([20.0, 20.0])
                                     .show(ui, |ui| {
+                                        ui.set_min_width(600.0);
                                         for original_rom in ORIGINAL_ROMS.iter() {
                                             if self.required_by_auto_config(original_rom) {
                                                 continue;
@@ -524,6 +525,10 @@ impl SystemConfigModal {
                 });
         });
 
+        if self.custom_roms.is_empty() {
+            return;
+        }
+
         ui.with_layout(egui::Layout::left_to_right(egui::Align::LEFT), |ui| {
             ui.label("Custom ROMs:");
         });
@@ -532,18 +537,17 @@ impl SystemConfigModal {
                 .id_salt("custom_roms_scroll_area")
                 .max_height(400.0)
                 .show(ui, |ui| {
-                    ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                        egui::Grid::new("custom_roms_grid")
-                            .num_columns(3)
-                            .spacing([20.0, 20.0])
-                            .show(ui, |ui| {
-                                let custom_roms = std::mem::take(&mut self.custom_roms);
-                                for custom_rom in &custom_roms {
-                                    self.render_custom_rom(ui, custom_rom);
-                                }
-                                self.custom_roms = custom_roms;
-                            });
-                    });
+                    egui::Grid::new("custom_roms_grid")
+                        .num_columns(3)
+                        .spacing([20.0, 20.0])
+                        .show(ui, |ui| {
+                            ui.set_min_width(600.0);
+                            let custom_roms = std::mem::take(&mut self.custom_roms);
+                            for custom_rom in &custom_roms {
+                                self.render_custom_rom(ui, custom_rom);
+                            }
+                            self.custom_roms = custom_roms;
+                        });
                 });
         });
     }
@@ -646,13 +650,6 @@ impl SystemConfigModal {
                 .any(|r| r.key == rom.key),
             None => false,
         };
-
-        // if let Some(RomVariant::Language(language)) = original_rom.info.variant
-        //     && language != self.access_config().preferred_language
-        //     && !was_used
-        // {
-        //     return;
-        // }
 
         ui.vertical(|ui| {
             let title = match &original_rom.info.variant {
@@ -862,7 +859,12 @@ impl SystemConfigModal {
                 }
             };
 
-            let name = entry.path().to_string_lossy().to_string();
+            let name = entry
+                .path()
+                .file_name()
+                .unwrap_or(std::ffi::OsStr::new("unknown"))
+                .to_string_lossy()
+                .to_string();
             let hash = sha3::Sha3_256::digest(&contents).to_vec();
             let variant = None;
             let slot = None;
