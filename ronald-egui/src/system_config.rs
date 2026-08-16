@@ -496,20 +496,18 @@ impl SystemConfigModal {
                             .num_columns(3)
                             .spacing([20.0, 20.0])
                             .show(ui, |ui| {
-                                // TODO: order by presence, slot, language, name
                                 for original_rom in ORIGINAL_ROMS.iter() {
                                     if !self.required_by_auto_config(original_rom) {
                                         continue;
                                     }
-                                    self.render_original_rom(ui, original_rom);
+                                    self.render_original_rom(ui, original_rom, false);
                                 }
                             });
 
                         ui.add_space(20.0);
 
-                        egui::CollapsingHeader::new("All detected original ROMs").show_unindented(
-                            ui,
-                            |ui| {
+                        egui::CollapsingHeader::new("Other detected original ROMs")
+                            .show_unindented(ui, |ui| {
                                 egui::Grid::new("other_original_roms_grid")
                                     .num_columns(3)
                                     .spacing([20.0, 20.0])
@@ -518,11 +516,10 @@ impl SystemConfigModal {
                                             if self.required_by_auto_config(original_rom) {
                                                 continue;
                                             }
-                                            self.render_original_rom(ui, original_rom);
+                                            self.render_original_rom(ui, original_rom, true);
                                         }
                                     });
-                            },
-                        );
+                            });
                     });
                 });
         });
@@ -626,11 +623,20 @@ impl SystemConfigModal {
         }
     }
 
-    fn render_original_rom(&mut self, ui: &mut egui::Ui, original_rom: &OriginalRom) {
+    fn render_original_rom(
+        &mut self,
+        ui: &mut egui::Ui,
+        original_rom: &OriginalRom,
+        skip_missing: bool,
+    ) {
         let available_rom = self
             .available_roms
             .iter()
             .find(|r| r.info.hash == original_rom.info.hash);
+
+        if skip_missing && available_rom.is_none() {
+            return;
+        }
 
         let was_used = match available_rom {
             Some(rom) => self
