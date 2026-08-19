@@ -703,11 +703,14 @@ impl SystemConfigModal {
     }
 
     fn render_custom_rom(&mut self, ui: &mut egui::Ui, custom_rom: &AvailableRom) {
-        let was_used = self
+        let assigned_slot = self
             .access_config()
             .assigned_roms
             .iter()
-            .any(|r| r.key == custom_rom.key);
+            .find(|r| r.key == custom_rom.key)
+            .map(|r| r.slot);
+
+        let was_used = assigned_slot.is_some();
 
         ui.vertical(|ui| {
             let title = match &custom_rom.info.variant {
@@ -723,7 +726,7 @@ impl SystemConfigModal {
             );
         });
 
-        if let Some(slot) = custom_rom.info.slot {
+        if let Some(slot) = custom_rom.info.slot.or(assigned_slot) {
             ui.label(format!("Slot: {}", slot));
         } else {
             ui.label("Any slot");
@@ -734,47 +737,27 @@ impl SystemConfigModal {
             .as_ref()
             .is_some_and(|r| r.0.key == custom_rom.key);
 
-        // if reassign_pending {
-        //     egui::Modal::new("reassign_slot".into()).show(ui, |ui| {
-        //         let slot = rom.info.slot.expect("original ROMs should have a slot");
-        //
-        //         ui.label(format!("Slot \"{}\" is already occupied. Reassign?", slot));
-        //         ui.horizontal(|ui| {
-        //             if ui.button("Yes").clicked() {
-        //                 let rom = self
-        //                     .reassign_pending
-        //                     .take()
-        //                     .expect("reassign_pending should be Some");
-        //
-        //                 self.pending_commands.push(Command::UnassignRom { slot });
-        //                 self.pending_commands.push(Command::AssignRom { rom });
-        //             }
-        //             if ui.button("No").clicked() {
-        //                 self.reassign_pending = None;
-        //             }
-        //         });
-        //     });
-        // }
-
         let mut used = was_used || reassign_pending;
-        if ui
-            .add_enabled(
-                !self.access_config().auto_config,
-                egui::Checkbox::new(&mut used, "Use"),
-            )
-            .clicked()
-        {
-            // let slot = rom.info.slot.expect("original ROMs should have a slot");
-            //
-            // if used {
-            //     let key = rom.key.clone();
-            //
-            //     self.pending_commands.push(Command::AssignRom {
-            //         rom: AssignedRom { key, slot },
-            //     });
-            // } else {
-            //     self.pending_commands.push(Command::UnassignRom { slot });
-            // }
+        if ui.checkbox(&mut used, "Use").clicked() {
+            if used {
+                let key = custom_rom.key.clone();
+
+                match custom_rom.info.slot {
+                    Some(slot) => {
+                        self.pending_commands.push(Command::AssignRom {
+                            rom: AssignedRom { key, slot },
+                            any_slot: false,
+                        });
+                    }
+                    None => {
+                        let slot = RomSlot::Lower;
+                        self.reassign_pending = Some((AssignedRom { key, slot }, true));
+                    }
+                }
+            } else {
+                let slot = assigned_slot.expect("assigned custom ROM should have slot");
+                self.pending_commands.push(Command::UnassignRom { slot });
+            }
         }
 
         ui.end_row();
@@ -786,13 +769,11 @@ impl SystemConfigModal {
         };
 
         egui::Modal::new("reassign_slot".into()).show(ui, |ui| {
-            let occupied = self
-                .access_config()
-                .assigned_roms
-                .iter()
-                .any(|r| r.slot == slot);
+            ui.set_min_width(400.0);
 
             if any_slot {
+                ui.label("Select a slot for the ROM:");
+
                 if ui
                     .radio(matches!(slot, RomSlot::Lower), "Lower ROM")
                     .clicked()
@@ -802,35 +783,46 @@ impl SystemConfigModal {
                     self.reassign_pending = Some((AssignedRom { key, slot }, true));
                 };
 
-                if ui
-                    .radio(matches!(slot, RomSlot::Upper(_)), "Upper ROM")
-                    .clicked()
-                    && let Some((AssignedRom { key, slot: _ }, _)) = self.reassign_pending.take()
-                {
-                    let slot = RomSlot::Upper(0);
-                    self.reassign_pending = Some((AssignedRom { key, slot }, true));
-                };
-
-                ui.add_enabled_ui(matches!(slot, RomSlot::Upper(_)), |ui| {
-                    let mut slot_number = match slot {
-                        RomSlot::Lower => 0,
-                        RomSlot::Upper(n) => n,
-                    };
+                ui.horizontal(|ui| {
                     if ui
-                        .add(egui::DragValue::new(&mut slot_number).range(0..=255))
-                        .changed()
+                        .radio(matches!(slot, RomSlot::Upper(_)), "Upper ROM")
+                        .clicked()
                         && let Some((AssignedRom { key, slot: _ }, _)) =
                             self.reassign_pending.take()
                     {
-                        let slot = RomSlot::Upper(slot_number);
+                        let slot = RomSlot::Upper(0);
                         self.reassign_pending = Some((AssignedRom { key, slot }, true));
-                    }
+                    };
+
+                    ui.add_enabled_ui(matches!(slot, RomSlot::Upper(_)), |ui| {
+                        let mut slot_number = match slot {
+                            RomSlot::Lower => 0,
+                            RomSlot::Upper(n) => n,
+                        };
+                        if ui
+                            .add(egui::DragValue::new(&mut slot_number).range(0..=255))
+                            .changed()
+                            && let Some((AssignedRom { key, slot: _ }, _)) =
+                                self.reassign_pending.take()
+                        {
+                            let slot = RomSlot::Upper(slot_number);
+                            self.reassign_pending = Some((AssignedRom { key, slot }, true));
+                        }
+                    });
                 });
             }
 
+            let occupied = self
+                .access_config()
+                .assigned_roms
+                .iter()
+                .any(|r| r.slot == slot);
             if occupied {
+                ui.add_space(20.0);
                 ui.label(format!("Slot \"{}\" is already occupied. Reassign?", slot));
             }
+
+            ui.add_space(20.0);
 
             ui.horizontal(|ui| {
                 if ui.button("Ok").clicked() {
@@ -1001,8 +993,6 @@ impl SystemConfigModal {
         if !self.access_config().auto_config {
             return;
         }
-
-        self.access_config_mut().assigned_roms.clear();
 
         for original_rom in ORIGINAL_ROMS.iter() {
             if !self.required_by_auto_config(original_rom) {
