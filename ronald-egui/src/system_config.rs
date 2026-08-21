@@ -960,8 +960,12 @@ impl SystemConfigModal {
 
         roms.sort_by(|a, b| a.info.hash.cmp(&b.info.hash));
         let changed = roms != self.available_roms;
-        self.available_roms = roms;
 
+        self.access_config_mut()
+            .assigned_roms
+            .retain(|assigned| roms.iter().any(|available| available.key == assigned.key));
+
+        self.available_roms = roms;
         changed
     }
 
