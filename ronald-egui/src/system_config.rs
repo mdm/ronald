@@ -771,6 +771,7 @@ impl SystemConfigModal {
         egui::Modal::new("reassign_slot".into()).show(ui, |ui| {
             ui.set_min_width(400.0);
 
+
             if any_slot {
                 ui.label("Select a slot for the ROM:");
 
@@ -812,20 +813,46 @@ impl SystemConfigModal {
                 });
             }
 
-            let occupied = self
+            let assigned_rom = self
                 .access_config()
                 .assigned_roms
                 .iter()
-                .any(|r| r.slot == slot);
-            if occupied {
+                .find(|r| r.slot == slot);
+            let mut required_by_auto_config = false;
+            if assigned_rom.is_some() {
+                required_by_auto_config = assigned_rom
+                    .and_then(|assigned| {
+                        self
+                            .available_roms
+                            .iter()
+                            .find(|available| available.key == assigned.key) })
+                    .and_then(|available| {
+                        ORIGINAL_ROMS
+                            .iter()
+                            .find(|original| original.info.hash == available.info.hash) })
+                    .is_some_and(|original| self.required_by_auto_config(original));
+
+
                 ui.add_space(20.0);
-                ui.label(format!("Slot \"{}\" is already occupied. Reassign?", slot));
+
+                if required_by_auto_config {
+                    ui.label(format!(
+                        "Slot \"{}\" is occupied by a ROM required by auto config. Disable auto config and reassign this slot?",
+                        slot
+                    ));
+                } else {
+                    ui.label(format!("Slot \"{}\" is already occupied. Reassign?", slot));
+                }
             }
 
             ui.add_space(20.0);
 
             ui.horizontal(|ui| {
                 if ui.button("Ok").clicked() {
+                    if required_by_auto_config {
+                        self.access_config_mut().auto_config = false;
+                    }
+
                     let (rom, _) = self
                         .reassign_pending
                         .take()
