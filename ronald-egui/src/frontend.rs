@@ -116,8 +116,7 @@ impl Frontend {
     pub fn pick_file_disk_a(&mut self) {
         pick_file(
             "Load DSK into Drive A:",
-            "DSK Disk Image",
-            "dsk",
+            &[("DSK Disk Image", "dsk")],
             self.picked_file_disk_a.clone(),
         );
     }
@@ -125,8 +124,7 @@ impl Frontend {
     pub fn pick_file_disk_b(&mut self) {
         pick_file(
             "Load DSK into Drive B:",
-            "DSK Disk Image",
-            "dsk",
+            &[("DSK Disk Image", "dsk")],
             self.picked_file_disk_b.clone(),
         );
     }
@@ -134,8 +132,7 @@ impl Frontend {
     pub fn pick_file_tape(&mut self) {
         pick_file(
             "Load Tape:",
-            "CDT Tape Image",
-            "cdt",
+            &[("CDT Tape Image", "cdt")],
             self.picked_file_tape.clone(),
         );
     }

@@ -9,22 +9,23 @@ pub struct File {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn pick_file(
-    title: &str,
-    filter_name: &str,
-    extension: &str,
-    picked_file: Shared<Option<File>>,
-) {
+pub fn pick_file(title: &str, filters: &[(&str, &str)], picked_file: Shared<Option<File>>) {
     use std::thread::spawn;
 
     let title = title.to_string();
-    let filter_name = filter_name.to_string();
-    let extension = extension.to_string();
+    let filters = filters
+        .iter()
+        .map(|(name, extension)| (name.to_string(), extension.to_string()))
+        .collect::<Vec<_>>();
+
     spawn(move || {
-        if let Some(file) = rfd::FileDialog::new()
-            .set_title(&title)
-            .add_filter(&filter_name, &[&extension])
-            .pick_file()
+        let mut dialog = rfd::FileDialog::new().set_title(title);
+
+        for (filter_name, extension) in filters.into_iter() {
+            dialog = dialog.add_filter(filter_name, &[extension]);
+        }
+
+        if let Some(file) = dialog.pick_file()
             && let Ok(image) = std::fs::read(&file)
         {
             picked_file.with_mut(|f| {
@@ -38,22 +39,21 @@ pub fn pick_file(
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn pick_file(
-    title: &str,
-    filter_name: &str,
-    extension: &str,
-    picked_file: Shared<Option<File>>,
-) {
+pub fn pick_file(title: &str, filters: &[(&str, &str)], picked_file: Shared<Option<File>>) {
     let title = title.to_string();
-    let filter_name = filter_name.to_string();
-    let extension = extension.to_string();
+    let filters = filters
+        .iter()
+        .map(|(name, extension)| (name.to_string(), extension.to_string()))
+        .collect::<Vec<_>>();
+
     wasm_bindgen_futures::spawn_local(async move {
-        if let Some(file) = rfd::AsyncFileDialog::new()
-            .set_title(&title)
-            .add_filter(&filter_name, &[&extension])
-            .pick_file()
-            .await
-        {
+        let mut dialog = rfd::AsyncFileDialog::new().set_title(title);
+
+        for (filter_name, extension) in filters.into_iter() {
+            dialog = dialog.add_filter(filter_name, &[extension]);
+        }
+
+        if let Some(file) = dialog.pick_file().await {
             let file_data = File {
                 path_buf: file.file_name().into(),
                 image: file.read().await,
