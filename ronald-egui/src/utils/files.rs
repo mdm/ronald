@@ -22,7 +22,7 @@ pub fn pick_file(title: &str, filters: &[(&str, &str)], picked_file: Shared<Opti
         let mut dialog = rfd::FileDialog::new().set_title(title);
 
         for (filter_name, extension) in filters.into_iter() {
-            dialog = dialog.add_filter(filter_name, &[extension]);
+            dialog = dialog.add_filter(filter_name, &[extension.to_uppercase(), extension]);
         }
 
         if let Some(file) = dialog.pick_file()
@@ -50,7 +50,7 @@ pub fn pick_file(title: &str, filters: &[(&str, &str)], picked_file: Shared<Opti
         let mut dialog = rfd::AsyncFileDialog::new().set_title(title);
 
         for (filter_name, extension) in filters.into_iter() {
-            dialog = dialog.add_filter(filter_name, &[extension]);
+            dialog = dialog.add_filter(filter_name, &[extension.to_uppercase(), extension]);
         }
 
         if let Some(file) = dialog.pick_file().await {
@@ -79,7 +79,7 @@ pub fn pick_multiple_files(title: &str, filters: &[(&str, &str)], picked_files: 
         let mut dialog = rfd::FileDialog::new().set_title(title);
 
         for (filter_name, extension) in filters.into_iter() {
-            dialog = dialog.add_filter(filter_name, &[extension]);
+            dialog = dialog.add_filter(filter_name, &[extension.to_uppercase(), extension]);
         }
 
         if let Some(files) = dialog.pick_files() {
@@ -111,7 +111,7 @@ pub fn pick_multiple_files(title: &str, filters: &[(&str, &str)], picked_files: 
         let mut dialog = rfd::FileDialog::new().set_title(title);
 
         for (filter_name, extension) in filters.into_iter() {
-            dialog = dialog.add_filter(filter_name, &[extension]);
+            dialog = dialog.add_filter(filter_name, &[extension.to_uppercase(), extension]);
         }
 
         if let Some(files) = dialog.pick_files().await {

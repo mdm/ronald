@@ -12,6 +12,7 @@ use sha3::Digest;
 
 use crate::colors;
 use crate::system_config::known_roms::ORIGINAL_ROMS;
+use crate::utils::files::{File, pick_multiple_files};
 use crate::utils::{
     files::pick_folder,
     sync::{Shared, SharedExt, shared},
@@ -192,6 +193,7 @@ pub struct SystemConfigModal {
     tab: Tab,
     changed_config: Option<SystemConfig>,
     picked_rom_folder: Shared<Option<PathBuf>>,
+    picked_import_roms: Shared<Vec<File>>,
     last_scan: Instant,
     available_roms: Vec<AvailableRom>,
     custom_roms: Vec<AvailableRom>,
@@ -206,6 +208,7 @@ impl Default for SystemConfigModal {
             tab: Tab::Hardware,
             changed_config: None,
             picked_rom_folder: shared(None),
+            picked_import_roms: shared(Vec::new()),
             last_scan: Instant::now(),
             available_roms: Vec::new(),
             custom_roms: Vec::new(),
@@ -230,6 +233,7 @@ impl SystemConfigModal {
         }
 
         self.handle_picked_rom_folder();
+        self.handle_rom_import();
 
         egui::Modal::new("system_config_modal".into()).show(ui, |ui| {
             ui.vertical_centered_justified(|ui| {
@@ -409,6 +413,7 @@ impl SystemConfigModal {
         }
 
         self.render_rom_folder(ui);
+        self.render_rom_import(ui);
         self.render_reassign_modal(ui);
 
         ui.add_space(15.0);
@@ -619,6 +624,93 @@ impl SystemConfigModal {
             self.access_config_mut().rom_folder = Some(picked_rom_folder);
             self.update_available_roms(true);
         }
+    }
+
+    fn render_rom_import(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Import Local ROMs:");
+            if ui.button("Select Files").clicked() {
+                pick_multiple_files(
+                    "Select ROMs to Import",
+                    &[("ROM Files", "rom"), ("Zipped ROM Files", "zip")],
+                    self.picked_import_roms.clone(),
+                );
+            }
+        });
+    }
+
+    fn handle_rom_import(&mut self) {
+        self.picked_import_roms.try_with_mut(|files| {
+            if files.is_empty() {
+                return;
+            }
+
+            let files = std::mem::take(files);
+
+            if self.access_config().rom_folder.is_none() {
+                log::warn!("ROM folder is not set, cannot import ROMs");
+                return;
+            };
+
+            for file in files {
+                let extension = file
+                    .path_buf
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .inspect(|ext| log::debug!("Importing file with extension: {:?}", ext))
+                    .map(|ext| ext.to_lowercase());
+                match extension.as_deref() {
+                    Some("rom") => {
+                        self.import_rom_file(&file);
+                    }
+                    Some("zip") => {
+                        log::info!("ZIP import not implemented yet: {:?}", file.path_buf);
+                    }
+                    _ => {
+                        log::warn!("Unsupported file type: {:?}", file.path_buf);
+                    }
+                }
+            }
+        });
+    }
+
+    fn import_rom_file(&self, file: &File) {
+        let Some(rom_folder) = self.access_config().rom_folder.as_ref() else {
+            return;
+        };
+
+        let hash = sha3::Sha3_256::digest(&file.image).to_vec();
+        if self.available_roms.iter().any(|r| r.info.hash == hash) {
+            log::info!("ROM already exists: {:?}", file.path_buf);
+            return;
+        }
+
+        match file.path_buf.metadata() {
+            Ok(metadata) => {
+                if metadata.len() != 16 * 1024 {
+                    log::info!("Skipping file {:?}: size is not 16KB", file.path_buf);
+                    return; // Skip files that are not 16KB
+                }
+            }
+            Err(_) => {
+                log::warn!("Failed to get metadata for file: {:?}", file.path_buf);
+                return;
+            }
+        }
+
+        let Some(file_name) = file.path_buf.file_name() else {
+            log::warn!("Failed to get file name for file: {:?}", file.path_buf);
+            return;
+        };
+        let destination = rom_folder.join(file_name);
+
+        std::fs::write(&destination, &file.image).unwrap_or_else(|err| {
+            log::error!(
+                "Failed to write ROM file {:?} to ROM folder: {}",
+                file.path_buf,
+                err
+            );
+        });
     }
 
     fn render_original_rom(
