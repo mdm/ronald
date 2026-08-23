@@ -682,7 +682,7 @@ impl SystemConfigModal {
                 let Ok(mut archive) = zip::ZipArchive::new(std::io::Cursor::new(&file.image))
                 else {
                     // Not a ZIP archive, treat it as a single ROM file
-                    self.import_rom_file(&file);
+                    self.import_rom_file(&file, false);
                     continue;
                 };
 
@@ -704,7 +704,7 @@ impl SystemConfigModal {
                                 image,
                             };
 
-                            self.import_rom_file(&rom_file);
+                            self.import_rom_file(&rom_file, true);
                         } else {
                             log::warn!("Failed to read ROM file from ZIP: {}", file.name());
                         }
@@ -718,7 +718,7 @@ impl SystemConfigModal {
         }
     }
 
-    fn import_rom_file(&self, file: &File) {
+    fn import_rom_file(&self, file: &File, preserve_path: bool) {
         let Some(rom_folder) = self.access_config().rom_folder.as_ref() else {
             return;
         };
@@ -734,7 +734,15 @@ impl SystemConfigModal {
             return; // Skip files that are not 16KB
         }
 
-        let destination = rom_folder.join(&file.path_buf);
+        let destination = if preserve_path {
+            rom_folder.join(&file.path_buf)
+        } else {
+            rom_folder.join(
+                file.path_buf
+                    .file_name()
+                    .expect("ROM file should have a file name"),
+            )
+        };
 
         if let Some(parent) = destination.parent()
             && parent != rom_folder
