@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use sha3::Digest;
+
 use crate::utils::sync::{Shared, SharedExt};
 
 #[derive(Debug)]
@@ -145,6 +147,40 @@ pub fn pick_multiple_files(
         }
     });
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn download_file(url: &str, downloaded_file: Shared<Option<File>>) {
+    use std::thread::spawn;
+
+    let url = url.to_string();
+
+    spawn(move || {
+        if let Ok(image) = reqwest::blocking::get(&url)
+            .and_then(|response| response.bytes())
+            .map(|bytes| bytes.to_vec())
+        {
+            let path_buf = url::Url::parse(&url)
+                .ok()
+                .and_then(|url| {
+                    url.path_segments()
+                        .and_then(|mut segments| segments.next_back().map(|s| s.to_string()))
+                })
+                .unwrap_or_else(|| {
+                    let hash = sha3::Sha3_256::digest(&image).to_vec();
+                    let encoded = hex::encode(&hash);
+                    format!("{encoded}.bin")
+                })
+                .into();
+
+            downloaded_file.with_mut(|f| {
+                *f = Some(File { path_buf, image });
+            });
+        }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn download_file(url: &str, downloaded_file: Shared<Option<File>>) {}
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn pick_folder(title: &str, picked_folder: Shared<Option<PathBuf>>) {

@@ -13,7 +13,7 @@ use sha3::Digest;
 
 use crate::colors;
 use crate::system_config::known_roms::ORIGINAL_ROMS;
-use crate::utils::files::{File, pick_multiple_files};
+use crate::utils::files::{File, download_file, pick_multiple_files};
 use crate::utils::{
     files::pick_folder,
     sync::{Shared, SharedExt, shared},
@@ -195,6 +195,8 @@ pub struct SystemConfigModal {
     changed_config: Option<SystemConfig>,
     picked_rom_folder: Shared<Option<PathBuf>>,
     picked_import_roms: Shared<Vec<File>>,
+    download_url: String,
+    downloaded_rom: Shared<Option<File>>,
     last_scan: Instant,
     available_roms: Vec<AvailableRom>,
     custom_roms: Vec<AvailableRom>,
@@ -210,6 +212,8 @@ impl Default for SystemConfigModal {
             changed_config: None,
             picked_rom_folder: shared(None),
             picked_import_roms: shared(Vec::new()),
+            download_url: "".to_string(),
+            downloaded_rom: shared(None),
             last_scan: Instant::now(),
             available_roms: Vec::new(),
             custom_roms: Vec::new(),
@@ -628,81 +632,90 @@ impl SystemConfigModal {
     }
 
     fn render_rom_import(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Import Local ROMs:");
-            if ui.button("Select Files").clicked() {
-                pick_multiple_files(
-                    "Select ROMs to Import",
-                    "ROM Files",
-                    &["rom", "zip"],
-                    self.picked_import_roms.clone(),
-                );
-            }
-        });
+        ui.add_space(20.0);
+
+        egui::Grid::new("rom_import_grid")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("Import local ROMs:");
+                if ui.button("Select Files").clicked() {
+                    pick_multiple_files(
+                        "Select ROMs to import",
+                        "ROM Files",
+                        &["rom", "zip"],
+                        self.picked_import_roms.clone(),
+                    );
+                }
+                ui.end_row();
+
+                ui.label("Import from URL:");
+                ui.horizontal(|ui| {
+                    ui.text_edit_singleline(&mut self.download_url);
+                    if ui.button("Download").clicked() {
+                        download_file(&self.download_url, self.downloaded_rom.clone());
+                    }
+                });
+                ui.end_row();
+            });
     }
 
     fn handle_rom_import(&mut self) {
+        let mut refresh = false;
         self.picked_import_roms.try_with_mut(|files| {
+            let mut files = std::mem::take(files);
+
+            if let Some(downloaded_rom) = self.downloaded_rom.try_with_mut(|f| f.take()).flatten() {
+                files.push(downloaded_rom);
+            }
+
             if files.is_empty() {
                 return;
             }
-
-            let files = std::mem::take(files);
 
             if self.access_config().rom_folder.is_none() {
                 log::warn!("ROM folder is not set, cannot import ROMs");
                 return;
             };
 
+            refresh = true;
             for file in files {
-                let extension = file
-                    .path_buf
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| ext.to_lowercase());
-                match extension.as_deref() {
-                    Some("rom") => {
-                        self.import_rom_file(&file);
-                    }
-                    Some("zip") => {
-                        let Ok(mut archive) =
-                            zip::ZipArchive::new(std::io::Cursor::new(&file.image))
-                        else {
-                            log::warn!("Failed to read ZIP archive: {:?}", file.path_buf);
+                let Ok(mut archive) = zip::ZipArchive::new(std::io::Cursor::new(&file.image))
+                else {
+                    // Not a ZIP archive, treat it as a single ROM file
+                    self.import_rom_file(&file);
+                    continue;
+                };
+
+                for i in 0..archive.len() {
+                    if let Ok(mut file) = archive.by_index(i) {
+                        if file.is_dir() {
                             continue;
-                        };
-
-                        for i in 0..archive.len() {
-                            if let Ok(mut file) = archive.by_index(i) {
-                                if file.is_dir() {
-                                    continue;
-                                }
-
-                                if !file.name().to_lowercase().ends_with(".rom") {
-                                    log::info!("Skipping non-ROM file in ZIP: {}", file.name());
-                                    continue;
-                                }
-
-                                let mut image = Vec::new();
-                                if file.read_to_end(&mut image).is_ok() {
-                                    let rom_file = File {
-                                        path_buf: PathBuf::from(file.name()),
-                                        image,
-                                    };
-
-                                    self.import_rom_file(&rom_file);
-                                } else {
-                                    log::warn!("Failed to read ROM file from ZIP: {}", file.name());
-                                }
-                            }
                         }
-                    }
-                    _ => {
-                        log::warn!("Unsupported file type: {:?}", file.path_buf);
+
+                        if !file.name().to_lowercase().ends_with(".rom") {
+                            log::info!("Skipping non-ROM file in ZIP: {}", file.name());
+                            continue;
+                        }
+
+                        let mut image = Vec::new();
+                        if file.read_to_end(&mut image).is_ok() {
+                            let rom_file = File {
+                                path_buf: PathBuf::from(file.name()),
+                                image,
+                            };
+
+                            self.import_rom_file(&rom_file);
+                        } else {
+                            log::warn!("Failed to read ROM file from ZIP: {}", file.name());
+                        }
                     }
                 }
             }
         });
+
+        if refresh {
+            self.update_available_roms(false);
+        }
     }
 
     fn import_rom_file(&self, file: &File) {
