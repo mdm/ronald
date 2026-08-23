@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -657,14 +658,43 @@ impl SystemConfigModal {
                     .path_buf
                     .extension()
                     .and_then(|ext| ext.to_str())
-                    .inspect(|ext| log::debug!("Importing file with extension: {:?}", ext))
                     .map(|ext| ext.to_lowercase());
                 match extension.as_deref() {
                     Some("rom") => {
                         self.import_rom_file(&file);
                     }
                     Some("zip") => {
-                        log::info!("ZIP import not implemented yet: {:?}", file.path_buf);
+                        let Ok(mut archive) =
+                            zip::ZipArchive::new(std::io::Cursor::new(&file.image))
+                        else {
+                            log::warn!("Failed to read ZIP archive: {:?}", file.path_buf);
+                            continue;
+                        };
+
+                        for i in 0..archive.len() {
+                            if let Ok(mut file) = archive.by_index(i) {
+                                if file.is_dir() {
+                                    continue;
+                                }
+
+                                if !file.name().to_lowercase().ends_with(".rom") {
+                                    log::info!("Skipping non-ROM file in ZIP: {}", file.name());
+                                    continue;
+                                }
+
+                                let mut image = Vec::new();
+                                if file.read_to_end(&mut image).is_ok() {
+                                    let rom_file = File {
+                                        path_buf: PathBuf::from(file.name()),
+                                        image,
+                                    };
+
+                                    self.import_rom_file(&rom_file);
+                                } else {
+                                    log::warn!("Failed to read ROM file from ZIP: {}", file.name());
+                                }
+                            }
+                        }
                     }
                     _ => {
                         log::warn!("Unsupported file type: {:?}", file.path_buf);
@@ -685,24 +715,24 @@ impl SystemConfigModal {
             return;
         }
 
-        match file.path_buf.metadata() {
-            Ok(metadata) => {
-                if metadata.len() != 16 * 1024 {
-                    log::info!("Skipping file {:?}: size is not 16KB", file.path_buf);
-                    return; // Skip files that are not 16KB
-                }
-            }
-            Err(_) => {
-                log::warn!("Failed to get metadata for file: {:?}", file.path_buf);
-                return;
-            }
+        if file.image.len() != 16 * 1024 {
+            log::info!("Skipping file {:?}: size is not 16KB", file.path_buf);
+            return; // Skip files that are not 16KB
         }
 
-        let Some(file_name) = file.path_buf.file_name() else {
-            log::warn!("Failed to get file name for file: {:?}", file.path_buf);
-            return;
-        };
-        let destination = rom_folder.join(file_name);
+        let destination = rom_folder.join(&file.path_buf);
+
+        if let Some(parent) = destination.parent()
+            && parent != rom_folder
+        {
+            std::fs::create_dir_all(parent).unwrap_or_else(|err| {
+                log::error!(
+                    "Failed to create directories for ROM file {:?}: {}",
+                    file.path_buf,
+                    err
+                );
+            });
+        }
 
         std::fs::write(&destination, &file.image).unwrap_or_else(|err| {
             log::error!(
