@@ -44,7 +44,7 @@ impl Default for SystemConfig {
         Self {
             model: CpcModel::Cpc464,
             crtc: CrtcType::Type0,
-            disk_drives: DiskDrives::One,
+            disk_drives: DiskDrives::None,
             rom_folder,
             preferred_language: RomLanguage::English,
             auto_config: true,
@@ -62,7 +62,7 @@ impl Default for SystemConfig {
         Self {
             model: CpcModel::Cpc464,
             crtc: CrtcType::Type0,
-            disk_drives: DiskDrives::One,
+            disk_drives: DiskDrives::None,
             rom_folder,
             preferred_language: RomLanguage::English,
             auto_config: true,
@@ -633,7 +633,8 @@ impl SystemConfigModal {
             if ui.button("Select Files").clicked() {
                 pick_multiple_files(
                     "Select ROMs to Import",
-                    &[("ROM Files", "rom"), ("Zipped ROM Files", "zip")],
+                    "ROM Files",
+                    &["rom", "zip"],
                     self.picked_import_roms.clone(),
                 );
             }

@@ -9,23 +9,26 @@ pub struct File {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn pick_file(title: &str, filters: &[(&str, &str)], picked_file: Shared<Option<File>>) {
+pub fn pick_file(
+    title: &str,
+    filter_name: &str,
+    extensions: &[&str],
+    picked_file: Shared<Option<File>>,
+) {
     use std::thread::spawn;
 
     let title = title.to_string();
-    let filters = filters
+    let filter_name = filter_name.to_string();
+    let extensions = extensions
         .iter()
-        .map(|(name, extension)| (name.to_string(), extension.to_string()))
+        .flat_map(|extension| [extension.to_uppercase(), extension.to_string()])
         .collect::<Vec<_>>();
 
     spawn(move || {
-        let mut dialog = rfd::FileDialog::new().set_title(title);
-
-        for (filter_name, extension) in filters.into_iter() {
-            dialog = dialog.add_filter(filter_name, &[extension.to_uppercase(), extension]);
-        }
-
-        if let Some(file) = dialog.pick_file()
+        if let Some(file) = rfd::FileDialog::new()
+            .set_title(title)
+            .add_filter(filter_name, &extensions)
+            .pick_file()
             && let Ok(image) = std::fs::read(&file)
         {
             picked_file.with_mut(|f| {
@@ -39,21 +42,26 @@ pub fn pick_file(title: &str, filters: &[(&str, &str)], picked_file: Shared<Opti
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn pick_file(title: &str, filters: &[(&str, &str)], picked_file: Shared<Option<File>>) {
+pub fn pick_file(
+    title: &str,
+    filter_name: &str,
+    extensions: &[&str],
+    picked_file: Shared<Option<File>>,
+) {
     let title = title.to_string();
-    let filters = filters
+    let filter_name = filter_name.to_string();
+    let extensions = extensions
         .iter()
-        .map(|(name, extension)| (name.to_string(), extension.to_string()))
+        .flat_map(|extension| [extension.to_uppercase(), extension.to_string()])
         .collect::<Vec<_>>();
 
     wasm_bindgen_futures::spawn_local(async move {
-        let mut dialog = rfd::AsyncFileDialog::new().set_title(title);
-
-        for (filter_name, extension) in filters.into_iter() {
-            dialog = dialog.add_filter(filter_name, &[extension.to_uppercase(), extension]);
-        }
-
-        if let Some(file) = dialog.pick_file().await {
+        if let Some(file) = rfd::AsyncFileDialog::new()
+            .set_title(title)
+            .add_filter(filter_name, &extensions)
+            .pick_file()
+            .await
+        {
             let file_data = File {
                 path_buf: file.file_name().into(),
                 image: file.read().await,
@@ -66,23 +74,27 @@ pub fn pick_file(title: &str, filters: &[(&str, &str)], picked_file: Shared<Opti
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn pick_multiple_files(title: &str, filters: &[(&str, &str)], picked_files: Shared<Vec<File>>) {
+pub fn pick_multiple_files(
+    title: &str,
+    filter_name: &str,
+    extensions: &[&str],
+    picked_files: Shared<Vec<File>>,
+) {
     use std::thread::spawn;
 
     let title = title.to_string();
-    let filters = filters
+    let filter_name = filter_name.to_string();
+    let extensions = extensions
         .iter()
-        .map(|(name, extension)| (name.to_string(), extension.to_string()))
+        .flat_map(|extension| [extension.to_uppercase(), extension.to_string()])
         .collect::<Vec<_>>();
 
     spawn(move || {
-        let mut dialog = rfd::FileDialog::new().set_title(title);
-
-        for (filter_name, extension) in filters.into_iter() {
-            dialog = dialog.add_filter(filter_name, &[extension.to_uppercase(), extension]);
-        }
-
-        if let Some(files) = dialog.pick_files() {
+        if let Some(files) = rfd::FileDialog::new()
+            .set_title(title)
+            .add_filter(filter_name, &extensions)
+            .pick_files()
+        {
             let files = files
                 .into_iter()
                 .filter_map(|file| {
@@ -100,21 +112,26 @@ pub fn pick_multiple_files(title: &str, filters: &[(&str, &str)], picked_files: 
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn pick_multiple_files(title: &str, filters: &[(&str, &str)], picked_files: Shared<Vec<File>>) {
+pub fn pick_multiple_files(
+    title: &str,
+    filter_name: &str,
+    extensions: &[&str],
+    picked_files: Shared<Vec<File>>,
+) {
     let title = title.to_string();
-    let filters = filters
+    let filter_name = filter_name.to_string();
+    let extensions = extensions
         .iter()
-        .map(|(name, extension)| (name.to_string(), extension.to_string()))
+        .flat_map(|extension| [extension.to_uppercase(), extension.to_string()])
         .collect::<Vec<_>>();
 
     wasm_bindgen_futures::spawn_local(async move {
-        let mut dialog = rfd::FileDialog::new().set_title(title);
-
-        for (filter_name, extension) in filters.into_iter() {
-            dialog = dialog.add_filter(filter_name, &[extension.to_uppercase(), extension]);
-        }
-
-        if let Some(files) = dialog.pick_files().await {
+        if let Some(files) = rfd::AsyncFileDialog::new()
+            .set_title(title)
+            .add_filter(filter_name, &extensions)
+            .pick_files()
+            .await
+        {
             let files = files
                 .into_iter()
                 .map(|file| File {
