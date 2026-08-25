@@ -331,14 +331,16 @@ impl SystemConfigModal {
                 });
                 ui.group(|ui| {
                     ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                        if let Some(config) = &mut self.changed_config {
-                            ui.radio_value(&mut config.model, CpcModel::Cpc464, "Amstrad CPC 464");
-                            ui.radio_value(&mut config.model, CpcModel::Cpc664, "Amstrad CPC 664");
-                            ui.radio_value(
-                                &mut config.model,
-                                CpcModel::Cpc6128,
-                                "Amstrad CPC 6128",
-                            );
+                        let mut model = self.access_config().model;
+
+                        ui.radio_value(&mut model, CpcModel::Cpc464, "Amstrad CPC 464");
+                        ui.radio_value(&mut model, CpcModel::Cpc664, "Amstrad CPC 664");
+                        ui.radio_value(&mut model, CpcModel::Cpc6128, "Amstrad CPC 6128");
+
+                        if model != self.access_config().model {
+                            self.access_config_mut().model = model;
+                            self.access_config_mut().assigned_roms.clear(); // TODO: clear only roms set by auto config
+                            self.apply_auto_config();
                         }
                     });
                 });
@@ -352,31 +354,36 @@ impl SystemConfigModal {
                 });
                 ui.group(|ui| {
                     ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                        if let Some(config) = &mut self.changed_config {
-                            let none_enabled = config.model == CpcModel::Cpc464;
+                        let mut disk_drives = self.access_config().disk_drives;
 
-                            // Ensure we don't have None selected for models that require at least one drive
-                            if !none_enabled && config.disk_drives == DiskDrives::None {
-                                config.disk_drives = DiskDrives::One;
-                            }
+                        let none_enabled = self.access_config().model == CpcModel::Cpc464;
+                        // Ensure we don't have None selected for models that require at least one drive
+                        if !none_enabled && disk_drives == DiskDrives::None {
+                            disk_drives = DiskDrives::One;
+                        }
 
-                            ui.add_enabled_ui(none_enabled, |ui| {
-                                ui.radio_value(
-                                    &mut config.disk_drives,
-                                    DiskDrives::None,
-                                    DiskDrives::None.to_string(),
-                                );
-                            });
+                        ui.add_enabled_ui(none_enabled, |ui| {
                             ui.radio_value(
-                                &mut config.disk_drives,
-                                DiskDrives::One,
-                                DiskDrives::One.to_string(),
+                                &mut disk_drives,
+                                DiskDrives::None,
+                                DiskDrives::None.to_string(),
                             );
-                            ui.radio_value(
-                                &mut config.disk_drives,
-                                DiskDrives::Two,
-                                DiskDrives::Two.to_string(),
-                            );
+                        });
+                        ui.radio_value(
+                            &mut disk_drives,
+                            DiskDrives::One,
+                            DiskDrives::One.to_string(),
+                        );
+                        ui.radio_value(
+                            &mut disk_drives,
+                            DiskDrives::Two,
+                            DiskDrives::Two.to_string(),
+                        );
+
+                        if disk_drives != self.access_config().disk_drives {
+                            self.access_config_mut().disk_drives = disk_drives;
+                            self.access_config_mut().assigned_roms.clear(); // TODO: clear only roms set by auto config
+                            self.apply_auto_config();
                         }
                     });
                 });
