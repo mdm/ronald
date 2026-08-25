@@ -229,21 +229,22 @@ pub struct MemoryCpcX64 {
 }
 
 impl MemoryCpcX64 {
-    pub fn new() -> Self {
-        // TODO: receive rom paths as parameters
+    pub fn new(roms: HashMap<RomSlot, Vec<u8>>) -> Self {
+        let lower_rom = match roms.get(&RomSlot::Lower) {
+            Some(lower_rom_bytes) => Rom::from_bytes(lower_rom_bytes),
+            None => Rom::from_bytes(&vec![0; 0x4000]),
+        };
+
         let mut upper_roms = HashMap::new();
-        upper_roms.insert(
-            0,
-            Rom::from_bytes(include_bytes!("../../rom/basic_1.0.rom")),
-        );
-        upper_roms.insert(
-            7,
-            Rom::from_bytes(include_bytes!("../../rom/amsdos_0.5.rom")),
-        );
+        for (slot, image) in roms {
+            if let RomSlot::Upper(n) = slot {
+                upper_roms.insert(n, Rom::from_bytes(&image));
+            }
+        }
 
         MemoryCpcX64 {
             ram: Ram::new(0x10000),
-            lower_rom: Rom::from_bytes(include_bytes!("../../rom/os_464.rom")),
+            lower_rom,
             lower_rom_enabled: true,
             upper_roms,
             selected_upper_rom: 0,
@@ -255,7 +256,7 @@ impl MemoryCpcX64 {
 
 impl Default for MemoryCpcX64 {
     fn default() -> Self {
-        Self::new()
+        Self::new(HashMap::new())
     }
 }
 
@@ -364,16 +365,16 @@ pub struct MemoryCpc6128 {
 }
 
 impl MemoryCpc6128 {
-    pub fn new() -> Self {
+    pub fn new(roms: HashMap<RomSlot, Vec<u8>>) -> Self {
         MemoryCpc6128 {
-            memory: MemoryCpcX64::new(),
+            memory: MemoryCpcX64::new(roms),
         }
     }
 }
 
 impl Default for MemoryCpc6128 {
     fn default() -> Self {
-        Self::new()
+        Self::new(HashMap::new())
     }
 }
 

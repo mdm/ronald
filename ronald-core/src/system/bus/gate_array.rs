@@ -260,7 +260,6 @@ impl GateArray for Amstrad40007 {
                 // ROM banking (only available in CPC 6128)
                 // TODO: show error message to user
                 log::error!("Gate Array ROM banking not supported: {value:#010b}");
-                unimplemented!();
             }
             _ => {
                 unreachable!();

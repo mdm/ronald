@@ -71,11 +71,24 @@ impl Default for SystemConfig {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl TryFrom<SystemConfig> for CoreSystemConfig {
     type Error = anyhow::Error;
 
     fn try_from(value: SystemConfig) -> Result<Self, Self::Error> {
-        let roms = HashMap::new();
+        let mut roms = HashMap::new();
+
+        for rom in value.assigned_roms {
+            let image = std::fs::read(&rom.key.0).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to read ROM file {:?} for slot {}: {}",
+                    rom.key.0,
+                    rom.slot,
+                    e
+                )
+            })?;
+            roms.insert(rom.slot, image);
+        }
 
         Ok(Self {
             model: value.model,
@@ -1014,7 +1027,8 @@ impl SystemConfigModal {
     }
 
     fn update_available_roms(&mut self, force: bool) {
-        if force || self.scan_available_roms() {
+        let roms_changed = self.scan_available_roms();
+        if force || roms_changed {
             self.filter_custom_roms();
             self.apply_auto_config();
         }

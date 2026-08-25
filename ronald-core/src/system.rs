@@ -232,9 +232,9 @@ where
     fn from(config: SystemConfig) -> Self {
         // Select memory implementation based on model
         let memory = match config.model {
-            CpcModel::Cpc464 => AnyMemory::CpcX64(MemoryCpcX64::default()),
-            CpcModel::Cpc664 => AnyMemory::CpcX64(MemoryCpcX64::default()),
-            CpcModel::Cpc6128 => AnyMemory::Cpc6128(MemoryCpc6128::default()),
+            CpcModel::Cpc464 => AnyMemory::CpcX64(MemoryCpcX64::new(config.roms)),
+            CpcModel::Cpc664 => AnyMemory::CpcX64(MemoryCpcX64::new(config.roms)),
+            CpcModel::Cpc6128 => AnyMemory::Cpc6128(MemoryCpc6128::new(config.roms)),
         };
 
         // Create CPU using Default trait
