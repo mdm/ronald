@@ -338,8 +338,8 @@ impl SystemConfigModal {
                         ui.radio_value(&mut model, CpcModel::Cpc6128, "Amstrad CPC 6128");
 
                         if model != self.access_config().model {
+                            self.unapply_auto_config();
                             self.access_config_mut().model = model;
-                            self.access_config_mut().assigned_roms.clear(); // TODO: clear only roms set by auto config
                             self.apply_auto_config();
                         }
                     });
@@ -381,8 +381,8 @@ impl SystemConfigModal {
                         );
 
                         if disk_drives != self.access_config().disk_drives {
+                            self.unapply_auto_config();
                             self.access_config_mut().disk_drives = disk_drives;
-                            self.access_config_mut().assigned_roms.clear(); // TODO: clear only roms set by auto config
                             self.apply_auto_config();
                         }
                     });
@@ -1216,6 +1216,24 @@ impl SystemConfigModal {
             self.access_config_mut()
                 .assigned_roms
                 .push(AssignedRom { key, slot });
+        }
+    }
+
+    fn unapply_auto_config(&mut self) {
+        for original in ORIGINAL_ROMS.iter() {
+            if !self.required_by_auto_config(original) {
+                continue;
+            }
+
+            let key = self
+                .available_roms
+                .iter()
+                .find(|available| available.info.hash == original.info.hash)
+                .map(|available| available.key.clone());
+
+            self.access_config_mut()
+                .assigned_roms
+                .retain(|assigned| key.as_ref().is_some_and(|key| *key != assigned.key));
         }
     }
 
