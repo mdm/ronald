@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::Read;
 use std::path::PathBuf;
-use std::time::Instant;
 
 use eframe::egui;
+use web_time::Instant;
 
 use ronald_core::system::memory::RomSlot;
 pub use ronald_core::system::{CpcModel, CrtcType, DiskDrives, SystemConfig as CoreSystemConfig};
@@ -12,14 +12,15 @@ use serde::{Deserialize, Serialize};
 use sha3::Digest;
 
 use crate::colors;
-use crate::system_config::known_roms::ORIGINAL_ROMS;
+use crate::system_config::known_roms::{ORIGINAL_ROMS, enriched_rom_info};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::utils::files::pick_folder;
 use crate::utils::files::{File, download_file, pick_multiple_files};
-use crate::utils::{
-    files::pick_folder,
-    sync::{Shared, SharedExt, shared},
-};
+use crate::utils::sync::{Shared, SharedExt, shared};
 
 mod known_roms;
+#[cfg(target_arch = "wasm32")]
+mod rom_store;
 
 const SCAN_INTERVAL_SECS: u64 = 3;
 
@@ -72,13 +73,13 @@ impl Default for SystemConfig {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl TryFrom<SystemConfig> for CoreSystemConfig {
+impl TryFrom<&SystemConfig> for CoreSystemConfig {
     type Error = anyhow::Error;
 
-    fn try_from(value: SystemConfig) -> Result<Self, Self::Error> {
+    fn try_from(value: &SystemConfig) -> Result<Self, Self::Error> {
         let mut roms = HashMap::new();
 
-        for rom in value.assigned_roms {
+        for rom in &value.assigned_roms {
             let image = std::fs::read(&rom.key.0).map_err(|e| {
                 anyhow::anyhow!(
                     "Failed to read ROM file {:?} for slot {}: {}",
@@ -97,6 +98,59 @@ impl TryFrom<SystemConfig> for CoreSystemConfig {
             roms,
         })
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystemConfig>>) {
+    match CoreSystemConfig::try_from(config) {
+        Ok(core_config) => result.with_mut(|r| *r = Some(core_config)),
+        Err(e) => log::error!("Failed to build system config: {}", e),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystemConfig>>) {
+    let model = config.model;
+    let crtc = config.crtc;
+    let disk_drives = config.disk_drives;
+    let assigned_roms = config.assigned_roms.clone();
+
+    wasm_bindgen_futures::spawn_local(async move {
+        let stored = match rom_store::load_roms().await {
+            Ok(stored) => stored,
+            Err(e) => {
+                log::error!("Failed to load ROMs from IndexedDB: {}", e);
+                return;
+            }
+        };
+
+        let images = stored
+            .into_iter()
+            .map(|rom| (rom.hash, rom.image))
+            .collect::<HashMap<_, _>>();
+
+        let mut roms = HashMap::new();
+        for assigned in &assigned_roms {
+            let Some(image) = images.get(&assigned.key.0).cloned() else {
+                log::error!(
+                    "ROM image for slot {} is missing (hash {})",
+                    assigned.slot,
+                    hex::encode(&assigned.key.0)
+                );
+                return;
+            };
+            roms.insert(assigned.slot, image);
+        }
+
+        result.with_mut(|r| {
+            *r = Some(CoreSystemConfig {
+                model,
+                crtc,
+                disk_drives,
+                roms,
+            })
+        });
+    });
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -201,6 +255,15 @@ enum Command {
     UnassignRom { slot: RomSlot },
 }
 
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Default)]
+enum ScanState {
+    #[default]
+    Idle,
+    Scanning,
+    Ready(Vec<rom_store::StoredRom>),
+}
+
 #[derive(Debug)]
 pub struct SystemConfigModal {
     pub show: bool,
@@ -211,6 +274,8 @@ pub struct SystemConfigModal {
     download_url: String,
     downloaded_rom: Shared<Option<File>>,
     last_scan: Instant,
+    #[cfg(target_arch = "wasm32")]
+    scan_state: Shared<ScanState>,
     available_roms: Vec<AvailableRom>,
     custom_roms: Vec<AvailableRom>,
     pending_commands: Vec<Command>,
@@ -228,6 +293,8 @@ impl Default for SystemConfigModal {
             download_url: "".to_string(),
             downloaded_rom: shared(None),
             last_scan: Instant::now(),
+            #[cfg(target_arch = "wasm32")]
+            scan_state: shared(ScanState::Idle),
             available_roms: Vec::new(),
             custom_roms: Vec::new(),
             pending_commands: Vec::new(),
@@ -433,9 +500,7 @@ impl SystemConfigModal {
     }
 
     fn render_rom_config(&mut self, ui: &mut egui::Ui) {
-        if self.last_scan.elapsed().as_secs() > SCAN_INTERVAL_SECS {
-            self.update_available_roms(false);
-        }
+        self.update_available_roms(false);
 
         self.render_rom_folder(ui);
         self.render_rom_import(ui);
@@ -734,7 +799,7 @@ impl SystemConfigModal {
         });
 
         if refresh {
-            self.update_available_roms(false);
+            self.update_available_roms(true);
         }
     }
 
@@ -1034,7 +1099,7 @@ impl SystemConfigModal {
     }
 
     fn update_available_roms(&mut self, force: bool) {
-        let roms_changed = self.scan_available_roms();
+        let roms_changed = self.scan_available_roms(force);
         if force || roms_changed {
             self.filter_custom_roms();
             self.apply_auto_config();
@@ -1042,7 +1107,11 @@ impl SystemConfigModal {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn scan_available_roms(&mut self) -> bool {
+    fn scan_available_roms(&mut self, force: bool) -> bool {
+        if !force && self.last_scan.elapsed().as_secs() <= SCAN_INTERVAL_SECS {
+            return false;
+        }
+
         self.last_scan = Instant::now();
         let mut roms = Vec::with_capacity(256);
         if self.access_config().rom_folder.is_none() {
@@ -1051,8 +1120,6 @@ impl SystemConfigModal {
         }
 
         for rom in walkdir::WalkDir::new(self.access_config().rom_folder.as_ref().unwrap()) {
-            use crate::system_config::known_roms::CUSTOM_ROMS;
-
             let entry = match rom {
                 Ok(entry) => entry,
                 Err(e) => {
@@ -1093,37 +1160,14 @@ impl SystemConfigModal {
                 .to_string_lossy()
                 .to_string();
             let hash = sha3::Sha3_256::digest(&contents).to_vec();
-            let variant = None;
-            let slot = None;
-
-            let mut info = RomInfo {
-                name,
-                variant,
-                hash,
-                slot,
-            };
-
-            if let Some(original) = ORIGINAL_ROMS
-                .iter()
-                .find(|original| original.info.hash == info.hash)
-            {
-                info.variant = original.info.variant.clone();
-                info.slot = original.info.slot;
-            }
-
-            if let Some(custom) = CUSTOM_ROMS.iter().find(|custom| custom.hash == info.hash) {
-                info.name = custom.name.clone();
-                info.variant = custom.variant.clone();
-                info.slot = custom.slot;
-            }
 
             roms.push(AvailableRom {
                 key: RomKey(entry.path().to_path_buf()),
-                info,
+                info: enriched_rom_info(name, hash),
             });
         }
 
-        roms.sort_by(|a, b| a.info.hash.cmp(&b.info.hash));
+        roms.sort_by(|a, b| a.info.name.cmp(&b.info.name));
         let changed = roms != self.available_roms;
 
         self.access_config_mut()
@@ -1135,9 +1179,70 @@ impl SystemConfigModal {
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn scan_available_roms(&self) -> bool {
-        let mut roms = Vec::with_capacity(256);
-        false
+    fn scan_available_roms(&mut self, force: bool) -> bool {
+        let scanned = self
+            .scan_state
+            .try_with_mut(|state| match std::mem::replace(state, ScanState::Idle) {
+                ScanState::Ready(stored) => Some(stored),
+                other => {
+                    *state = other;
+                    None
+                }
+            })
+            .flatten();
+
+        let Some(stored) = scanned else {
+            if force || self.last_scan.elapsed().as_secs() > SCAN_INTERVAL_SECS {
+                self.last_scan = Instant::now();
+                self.start_scan();
+            }
+
+            return false;
+        };
+        self.last_scan = Instant::now();
+
+        let mut roms = stored
+            .into_iter()
+            .map(|stored| AvailableRom {
+                key: RomKey(stored.hash.clone()),
+                info: enriched_rom_info(stored.name, stored.hash),
+            })
+            .collect::<Vec<_>>();
+
+        roms.sort_by(|a, b| a.info.name.cmp(&b.info.name));
+        let changed = roms != self.available_roms;
+
+        self.access_config_mut()
+            .assigned_roms
+            .retain(|assigned| roms.iter().any(|available| available.key == assigned.key));
+
+        self.available_roms = roms;
+        changed
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn start_scan(&self) {
+        let state = self.scan_state.clone();
+        let busy = state
+            .try_with_mut(|state| match state {
+                ScanState::Idle => {
+                    *state = ScanState::Scanning;
+                    false
+                }
+                _ => true,
+            })
+            .unwrap_or(true);
+        if busy {
+            return;
+        }
+
+        wasm_bindgen_futures::spawn_local(async move {
+            let stored = rom_store::load_roms().await.unwrap_or_else(|e| {
+                log::error!("Failed to scan ROMs from IndexedDB: {}", e);
+                Vec::new()
+            });
+            state.with_mut(|state| *state = ScanState::Ready(stored));
+        });
     }
 
     fn filter_custom_roms(&mut self) {

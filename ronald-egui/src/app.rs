@@ -8,7 +8,8 @@ use crate::debug::{
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
-use crate::system_config::{SystemConfig, SystemConfigModal};
+use crate::system_config::{CoreSystemConfig, SystemConfig, SystemConfigModal, build_core_config};
+use crate::utils::sync::{Shared, SharedExt, shared};
 
 pub use crate::key_mapper::KeyMapStore;
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
@@ -22,6 +23,8 @@ where
     workbench: bool,
     dark_mode: bool,
     system_config: SystemConfig,
+    #[serde(skip)]
+    core_config: Shared<Option<CoreSystemConfig>>,
     #[serde(skip)]
     frontend: Option<Frontend>,
     #[serde(skip)]
@@ -46,6 +49,7 @@ where
             workbench: false,
             dark_mode: true,
             system_config: SystemConfig::default(),
+            core_config: shared(None),
             frontend: None,
             key_map_editor: KeyMapEditor::default(),
             key_mapper: KeyMapper::default(),
@@ -85,14 +89,22 @@ where
         egui_extras::install_image_loaders(ui.ctx());
 
         self.render_menu_bar(ui);
-        self.initialize_frontend(ui, frame);
+        self.initialize_frontend(ui);
         self.render_emulator_only_mode(ui);
         self.render_workbench_mode(ui);
         self.key_map_editor.ui(ui, &mut self.key_mapper);
         let config_changed = self.system_config_modal.ui(ui, &mut self.system_config);
-        if config_changed && let Some(render_state) = frame.wgpu_render_state() {
-            let new_frontend = Frontend::with_config(render_state, self.system_config.clone());
-            self.frontend = new_frontend.ok();
+        if config_changed {
+            build_core_config(&self.system_config, self.core_config.clone());
+        }
+
+        if let Some(core_config) = self
+            .core_config
+            .try_with_mut(|config| config.take())
+            .flatten()
+            && let Some(render_state) = frame.wgpu_render_state()
+        {
+            self.frontend = Some(Frontend::with_config(render_state, core_config));
         }
 
         if self.workbench
@@ -240,11 +252,17 @@ where
     }
 
     #[allow(unused_variables)]
-    fn initialize_frontend(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend) {
-            // On WASM, show a welcome modal to work around the fact that browser audio contexts
-            // cannot be started without user interaction.
-            #[cfg(target_arch = "wasm32")]
+    fn initialize_frontend(&mut self, ui: &mut egui::Ui) {
+        if self.frontend.is_some() {
+            return;
+        }
+
+        // On WASM, show a welcome modal to work around the fact that browser audio contexts
+        // cannot be started without user interaction.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let system_config = &self.system_config;
+            let core_config = &self.core_config;
             egui::Modal::new("welcome_modal".into()).show(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(10.0);
@@ -253,18 +271,15 @@ where
                     ui.label("This emulator recreates the classic Amstrad CPC.");
                     ui.add_space(20.0);
                     if ui.button("Start Emulator").clicked() {
-                        let frontend = Frontend::with_config(render_state, &self.system_config);
-                        self.frontend = Some(frontend);
+                        build_core_config(system_config, core_config.clone());
                     }
                     ui.add_space(10.0);
                 });
             });
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                let frontend = Frontend::with_config(render_state, self.system_config.clone());
-                self.frontend = frontend.ok();
-            }
         }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        build_core_config(&self.system_config, self.core_config.clone());
     }
 
     fn render_emulator_only_mode(&mut self, ui: &mut egui::Ui) {

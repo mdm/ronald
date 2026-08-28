@@ -128,19 +128,19 @@ pub fn pick_multiple_files(
         .collect::<Vec<_>>();
 
     wasm_bindgen_futures::spawn_local(async move {
-        if let Some(files) = rfd::AsyncFileDialog::new()
+        if let Some(handles) = rfd::AsyncFileDialog::new()
             .set_title(title)
             .add_filter(filter_name, &extensions)
             .pick_files()
             .await
         {
-            let files = files
-                .into_iter()
-                .map(|file| File {
-                    path_buf: file.file_name().into(),
-                    image: file.read().await,
-                })
-                .collect::<Vec<_>>();
+            let mut files = Vec::with_capacity(handles.len());
+            for handle in handles {
+                files.push(File {
+                    path_buf: handle.file_name().into(),
+                    image: handle.read().await,
+                });
+            }
             picked_files.with_mut(|f| {
                 *f = files;
             });

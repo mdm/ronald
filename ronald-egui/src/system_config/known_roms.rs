@@ -4,6 +4,32 @@ use ronald_core::system::{CpcModel, memory::RomSlot};
 
 use crate::system_config::{AutoConfigRule, OriginalRom, RomInfo, RomLanguage, RomVariant};
 
+pub fn enriched_rom_info(name: String, hash: Vec<u8>) -> RomInfo {
+    let mut info = RomInfo {
+        name,
+        variant: None,
+        hash,
+        slot: None,
+    };
+
+    if let Some(original) = ORIGINAL_ROMS
+        .iter()
+        .find(|original| original.info.hash == info.hash)
+    {
+        info.name = original.info.name.clone();
+        info.variant = original.info.variant.clone();
+        info.slot = original.info.slot;
+    }
+
+    if let Some(custom) = CUSTOM_ROMS.iter().find(|custom| custom.hash == info.hash) {
+        info.name = custom.name.clone();
+        info.variant = custom.variant.clone();
+        info.slot = custom.slot;
+    }
+
+    info
+}
+
 pub static ORIGINAL_ROMS: LazyLock<[OriginalRom; 17]> = LazyLock::new(|| {
     [
         OriginalRom {

@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+use std::path::PathBuf;
+
 use eframe::{egui, egui_wgpu};
 use egui::Vec2;
 use web_time::Instant;
@@ -12,9 +15,10 @@ use ronald_core::{
         breakpoint::{AnyBreakpoint, BreakpointManager},
         view::SystemDebugView,
     },
-    system::instruction::DecodedInstruction,
+    system::{SystemConfig, instruction::DecodedInstruction},
 };
 
+use crate::utils::sync::{Shared, SharedExt, shared};
 use crate::{
     debug::Debugger,
     frontend::{audio::CpalAudio, video::EguiWgpuVideo},
@@ -22,10 +26,6 @@ use crate::{
 use crate::{
     key_mapper::{KeyEvent, KeyMapStore, KeyMapper},
     utils::files::{File, pick_file},
-};
-use crate::{
-    system_config::SystemConfig,
-    utils::sync::{Shared, SharedExt, shared},
 };
 
 mod audio;
@@ -48,12 +48,9 @@ pub struct Frontend {
 }
 
 impl Frontend {
-    pub fn with_config(
-        render_state: &egui_wgpu::RenderState,
-        config: SystemConfig,
-    ) -> Result<Self, anyhow::Error> {
-        let driver = Driver::with_config(config.try_into()?);
-        Ok(Self::with_driver_and_render_state(driver, render_state))
+    pub fn with_config(render_state: &egui_wgpu::RenderState, config: SystemConfig) -> Self {
+        let driver = Driver::with_config(config);
+        Self::with_driver_and_render_state(driver, render_state)
     }
 
     fn with_driver_and_render_state(driver: Driver, render_state: &egui_wgpu::RenderState) -> Self {
