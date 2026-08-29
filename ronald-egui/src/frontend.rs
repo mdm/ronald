@@ -5,9 +5,6 @@ use eframe::{egui, egui_wgpu};
 use egui::Vec2;
 use web_time::Instant;
 
-#[cfg(target_arch = "wasm32")]
-use web_sys;
-
 use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
@@ -369,11 +366,12 @@ impl Frontend {
 
     #[cfg(target_arch = "wasm32")]
     fn has_window_focus(&self) -> bool {
-        if let Some(window) = web_sys::window() {
-            if let Some(document) = window.document() {
-                return document.has_focus().unwrap_or(true);
-            }
+        if let Some(window) = web_sys::window()
+            && let Some(document) = window.document()
+        {
+            return document.has_focus().unwrap_or(true);
         }
+
         true
     }
 

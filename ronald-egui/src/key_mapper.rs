@@ -1,6 +1,6 @@
+use std::{collections::HashMap, fmt::Display};
+#[cfg(not(target_arch = "wasm32"))]
 use std::{
-    collections::HashMap,
-    fmt::Display,
     fs::File,
     io::{BufReader, BufWriter},
 };

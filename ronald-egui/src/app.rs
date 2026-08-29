@@ -12,6 +12,7 @@ use crate::system_config::{CoreSystemConfig, SystemConfig, SystemConfigModal, bu
 use crate::utils::sync::{Shared, SharedExt, shared};
 
 pub use crate::key_mapper::KeyMapStore;
+#[cfg(not(target_arch = "wasm32"))]
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 
 #[derive(Deserialize, Serialize)]
