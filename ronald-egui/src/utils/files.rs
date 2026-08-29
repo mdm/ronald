@@ -180,7 +180,37 @@ pub fn download_file(url: &str, downloaded_file: Shared<Option<File>>) {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn download_file(url: &str, downloaded_file: Shared<Option<File>>) {}
+pub fn download_file(url: &str, downloaded_file: Shared<Option<File>>) {
+    let url = url.to_string();
+
+    wasm_bindgen_futures::spawn_local(async move {
+        let Ok(response) = reqwest::get(&url).await else {
+            return;
+        };
+
+        let Ok(bytes) = response.bytes().await else {
+            return;
+        };
+
+        let image = bytes.to_vec();
+        let path_buf = url::Url::parse(&url)
+            .ok()
+            .and_then(|url| {
+                url.path_segments()
+                    .and_then(|mut segments| segments.next_back().map(|s| s.to_string()))
+            })
+            .unwrap_or_else(|| {
+                let hash = sha3::Sha3_256::digest(&image).to_vec();
+                let encoded = hex::encode(&hash);
+                format!("{encoded}.bin")
+            })
+            .into();
+
+        downloaded_file.with_mut(|f| {
+            *f = Some(File { path_buf, image });
+        });
+    });
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn pick_folder(title: &str, picked_folder: Shared<Option<PathBuf>>) {
