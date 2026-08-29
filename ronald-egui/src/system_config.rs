@@ -706,8 +706,6 @@ impl SystemConfigModal {
     #[cfg(target_arch = "wasm32")]
     fn render_rom_folder(&mut self, ui: &mut egui::Ui) {
         ui.label("ROMs are stored in the browser's IndexedDB.");
-        ui.button("Clear ROMs")
-            .on_hover_text("Clears all ROMs stored in the browser's IndexedDB.");
     }
 
     fn handle_picked_rom_folder(&mut self) {
