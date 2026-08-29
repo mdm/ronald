@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::Read;
+#[cfg(target_arch = "wasm32")]
+use std::path::Path;
 use std::path::PathBuf;
 
 use eframe::egui;
@@ -744,6 +746,7 @@ impl SystemConfigModal {
             });
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn handle_rom_import(&mut self) {
         let mut refresh = false;
         self.picked_import_roms.try_with_mut(|files| {
@@ -803,6 +806,7 @@ impl SystemConfigModal {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn import_rom_file(&self, file: &File, preserve_path: bool) {
         let Some(rom_folder) = self.access_config().rom_folder.as_ref() else {
             return;
@@ -847,6 +851,99 @@ impl SystemConfigModal {
                 file.path_buf,
                 err
             );
+        });
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn handle_rom_import(&mut self) {
+        let mut roms = Vec::new();
+
+        self.picked_import_roms.try_with_mut(|files| {
+            let mut files = std::mem::take(files);
+
+            if let Some(downloaded_rom) = self.downloaded_rom.try_with_mut(|f| f.take()).flatten() {
+                files.push(downloaded_rom);
+            }
+
+            for file in files {
+                let Ok(mut archive) = zip::ZipArchive::new(std::io::Cursor::new(&file.image))
+                else {
+                    // Not a ZIP archive, treat it as a single ROM file
+                    roms.extend(self.import_rom_file(&file, false));
+                    continue;
+                };
+
+                for i in 0..archive.len() {
+                    if let Ok(mut file) = archive.by_index(i) {
+                        if file.is_dir() {
+                            continue;
+                        }
+
+                        if !file.name().to_lowercase().ends_with(".rom") {
+                            log::info!("Skipping non-ROM file in ZIP: {}", file.name());
+                            continue;
+                        }
+
+                        let mut image = Vec::new();
+                        if file.read_to_end(&mut image).is_ok() {
+                            let rom_file = File {
+                                path_buf: PathBuf::from(file.name()),
+                                image,
+                            };
+
+                            roms.extend(self.import_rom_file(&rom_file, true));
+                        } else {
+                            log::warn!("Failed to read ROM file from ZIP: {}", file.name());
+                        }
+                    }
+                }
+            }
+        });
+
+        if !roms.is_empty() {
+            // Two separate transactions are created by store_imported_roms() and
+            // update_available_roms() and IndexedDB guarantees their order.
+            self.store_imported_roms(roms);
+            self.update_available_roms(true);
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn import_rom_file(&self, file: &File, preserve_path: bool) -> Option<rom_store::StoredRom> {
+        let hash = sha3::Sha3_256::digest(&file.image).to_vec();
+        if self.available_roms.iter().any(|r| r.info.hash == hash) {
+            log::info!("ROM already exists: {:?}", file.path_buf);
+            return None;
+        }
+
+        if file.image.len() != 16 * 1024 {
+            log::info!("Skipping file {:?}: size is not 16KB", file.path_buf);
+            return None; // Skip files that are not 16KB
+        }
+
+        let path = if preserve_path {
+            file.path_buf.as_path()
+        } else {
+            Path::new(
+                file.path_buf
+                    .file_name()
+                    .expect("ROM file should have a file name"),
+            )
+        };
+
+        Some(rom_store::StoredRom {
+            hash,
+            name: path.to_string_lossy().to_string(),
+            image: file.image.clone(),
+        })
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn store_imported_roms(&self, roms: Vec<rom_store::StoredRom>) {
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Err(e) = rom_store::store_roms(&roms).await {
+                log::error!("Failed to store imported ROMs in IndexedDB: {}", e);
+            }
         });
     }
 
