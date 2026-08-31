@@ -1,7 +1,7 @@
 {
   "name": "Ronald - An Amstrad CPC Emulator",
   "short_name": "Ronald",
-  "description": "An Amstrad CPC (464 model) emulator written in Rust",
+  "description": "An Amstrad CPC emulator written in Rust",
   "start_url": "./",
   "display": "standalone",
   "orientation": "landscape",

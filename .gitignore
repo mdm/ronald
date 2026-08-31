@@ -9,14 +9,16 @@ keymap.backup.json
 
 # Local Netlify folder
 .netlify
+justfile
 
 /ronald-core/rom/*.rom
 !/ronald-core/rom/zexdoc.rom
 !/ronald-core/rom/zexall.rom
 
 /ronald-egui/assets/keys/examples
+/ronald-egui/roms/*.rom
+/ronald-egui/roms/*.zip
 /ronald-egui/dist
-/ronald-egui/*.zip
 /ronald-egui/tests/snapshots/*.old.png
 /ronald-egui/tests/snapshots/*.new.png
 /ronald-egui/tests/snapshots/*.diff.png

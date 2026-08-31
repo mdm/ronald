@@ -292,7 +292,7 @@ impl Default for SystemConfigModal {
             changed_config: None,
             picked_rom_folder: shared(None),
             picked_import_roms: shared(Vec::new()),
-            download_url: "".to_string(),
+            download_url: option_env!("RONALD_ROM_URL").unwrap_or("").to_string(),
             downloaded_rom: shared(None),
             last_scan: Instant::now(),
             #[cfg(target_arch = "wasm32")]
