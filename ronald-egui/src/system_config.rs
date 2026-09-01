@@ -49,11 +49,10 @@ impl Default for SystemConfig {
         let rom_folder = directories::ProjectDirs::from("dev", "int82", "ronald")
             .map(|dirs| dirs.data_dir().join("roms"));
 
-        // TODO: change defaults
         Self {
-            model: CpcModel::Cpc464,
+            model: CpcModel::Cpc6128,
             crtc: CrtcType::Type0,
-            disk_drives: DiskDrives::None,
+            disk_drives: DiskDrives::Two,
             rom_folder,
             preferred_language: RomLanguage::English,
             auto_config: true,
@@ -67,11 +66,10 @@ impl Default for SystemConfig {
     fn default() -> Self {
         let rom_folder = None;
 
-        // TODO: change defaults
         Self {
-            model: CpcModel::Cpc464,
+            model: CpcModel::Cpc6128,
             crtc: CrtcType::Type0,
-            disk_drives: DiskDrives::None,
+            disk_drives: DiskDrives::Two,
             rom_folder,
             preferred_language: RomLanguage::English,
             auto_config: true,
