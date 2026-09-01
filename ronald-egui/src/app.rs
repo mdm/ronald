@@ -258,6 +258,11 @@ where
             return;
         }
 
+        if !self.system_config.is_valid() {
+            self.system_config_modal.show = true;
+            return;
+        }
+
         // On WASM, show a welcome modal to work around the fact that browser audio contexts
         // cannot be started without user interaction.
         #[cfg(target_arch = "wasm32")]

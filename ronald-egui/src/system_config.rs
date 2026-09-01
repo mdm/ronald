@@ -37,6 +37,12 @@ pub struct SystemConfig {
     assigned_roms: Vec<AssignedRom>,
 }
 
+impl SystemConfig {
+    pub fn is_valid(&self) -> bool {
+        !self.assigned_roms.is_empty()
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl Default for SystemConfig {
     fn default() -> Self {
@@ -288,7 +294,7 @@ impl Default for SystemConfigModal {
     fn default() -> Self {
         Self {
             show: false,
-            tab: Tab::Hardware,
+            tab: Tab::Rom,
             changed_config: None,
             picked_rom_folder: shared(None),
             picked_import_roms: shared(Vec::new()),
@@ -330,16 +336,16 @@ impl SystemConfigModal {
 
                 ui.horizontal(|ui| {
                     if ui
-                        .selectable_label(matches!(self.tab, Tab::Hardware), "Hardware")
-                        .clicked()
-                    {
-                        self.tab = Tab::Hardware;
-                    }
-                    if ui
                         .selectable_label(matches!(self.tab, Tab::Rom), "System ROMs")
                         .clicked()
                     {
                         self.tab = Tab::Rom;
+                    }
+                    if ui
+                        .selectable_label(matches!(self.tab, Tab::Hardware), "Hardware")
+                        .clicked()
+                    {
+                        self.tab = Tab::Hardware;
                     }
                 });
                 ui.separator();
@@ -503,6 +509,14 @@ impl SystemConfigModal {
 
     fn render_rom_config(&mut self, ui: &mut egui::Ui) {
         self.update_available_roms(false);
+
+        if self.access_config().assigned_roms.is_empty() {
+            ui.colored_label(
+                colors::DARK_RED,
+                "No system ROMs are assigned. The emulator will not start.",
+            );
+            ui.add_space(15.0);
+        }
 
         self.render_rom_folder(ui);
         self.render_rom_import(ui);
