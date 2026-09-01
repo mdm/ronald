@@ -1483,6 +1483,11 @@ mod gui_tests {
     use egui_kittest::{Harness, kittest::Queryable};
     use kittest::NodeT;
 
+    fn open_hardware_tab(harness: &mut Harness<'_>) {
+        harness.get_by_label("Hardware").click();
+        harness.run();
+    }
+
     #[test]
     fn test_system_config_modal_opens_and_closes() {
         let mut modal = SystemConfigModal {
@@ -1528,6 +1533,7 @@ mod gui_tests {
 
         let mut harness = Harness::new_ui(app);
         harness.run();
+        open_hardware_tab(&mut harness);
 
         // Initially None should be selected for CPC 464
         let none_option = harness.get_by_label("None");
@@ -1555,9 +1561,9 @@ mod gui_tests {
             ..Default::default()
         };
         let mut config = SystemConfig {
-            model: CpcModel::Cpc6128,
+            model: CpcModel::Cpc464,
             crtc: CrtcType::Type4,
-            disk_drives: DiskDrives::Two,
+            disk_drives: DiskDrives::None,
             ..Default::default()
         };
 
@@ -1567,11 +1573,12 @@ mod gui_tests {
 
         let mut harness = Harness::new_ui(app);
         harness.run();
+        open_hardware_tab(&mut harness);
 
-        // Verify initial state - CPC 6128 should be selected
-        let cpc6128_option = harness.get_by_label("Amstrad CPC 6128");
+        // Verify initial state - CPC 464 should be selected
+        let cpc464_option = harness.get_by_label("Amstrad CPC 464");
         assert_eq!(
-            cpc6128_option.accesskit_node().toggled(),
+            cpc464_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
@@ -1579,10 +1586,10 @@ mod gui_tests {
         harness.get_by_label("Restore Defaults").click();
         harness.run();
 
-        // Verify UI shows defaults - CPC 464 should now be selected
-        let cpc464_option = harness.get_by_label("Amstrad CPC 464");
+        // Verify UI shows defaults - CPC 6128 should now be selected
+        let cpc6128_option = harness.get_by_label("Amstrad CPC 6128");
         assert_eq!(
-            cpc464_option.accesskit_node().toggled(),
+            cpc6128_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
 
@@ -1592,9 +1599,9 @@ mod gui_tests {
             Some(egui::accesskit::Toggled::True)
         );
 
-        let none_option = harness.get_by_label("None");
+        let drives_ab_option = harness.get_by_label("Drives A and B");
         assert_eq!(
-            none_option.accesskit_node().toggled(),
+            drives_ab_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
     }
@@ -1613,6 +1620,7 @@ mod gui_tests {
 
         let mut harness = Harness::new_ui(app);
         harness.run();
+        open_hardware_tab(&mut harness);
 
         // Initially Type 0 should be selected
         let type0_option = harness.get_by_label("Type 0 (HD6845S/UM6845)");
@@ -1652,6 +1660,7 @@ mod gui_tests {
 
         let mut harness = Harness::new_ui(app);
         harness.run();
+        open_hardware_tab(&mut harness);
 
         // Verify initial UI state - CPC 6128 should be selected
         let cpc6128_option = harness.get_by_label("Amstrad CPC 6128");
@@ -1681,6 +1690,7 @@ mod gui_tests {
 
         let mut harness = Harness::new_ui(app);
         harness.run();
+        open_hardware_tab(&mut harness);
 
         // Verify original values are still selected in UI
         let cpc6128_option = harness.get_by_label("Amstrad CPC 6128");

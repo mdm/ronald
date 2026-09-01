@@ -24,11 +24,34 @@ pub trait Debugger {
 #[cfg(test)]
 mod mock {
     use super::*;
-    use ronald_core::Driver;
 
-    #[derive(Default)]
+    use std::collections::HashMap;
+
+    use ronald_core::{
+        Driver,
+        system::{SystemConfig, memory::RomSlot},
+    };
+
+    const ROM_SIZE: usize = 0x4000;
+
     pub struct TestDebugger {
         driver: Driver,
+    }
+
+    impl Default for TestDebugger {
+        fn default() -> Self {
+            let roms = HashMap::from([
+                (RomSlot::Lower, vec![0; ROM_SIZE]),
+                (RomSlot::Upper(0), vec![0; ROM_SIZE]),
+            ]);
+
+            Self {
+                driver: Driver::with_config(SystemConfig {
+                    roms,
+                    ..Default::default()
+                }),
+            }
+        }
     }
 
     impl Debugger for TestDebugger {
