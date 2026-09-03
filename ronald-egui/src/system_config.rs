@@ -1222,17 +1222,12 @@ impl SystemConfigModal {
         self.last_scan = Instant::now();
         let mut roms = Vec::with_capacity(256);
         if self.access_config().rom_folder.is_none() {
-            log::error!("No ROM folder specified");
             return true;
         }
 
         for rom in walkdir::WalkDir::new(self.access_config().rom_folder.as_ref().unwrap()) {
-            let entry = match rom {
-                Ok(entry) => entry,
-                Err(e) => {
-                    log::error!("Error reading ROM folder: {}", e);
-                    continue;
-                }
+            let Ok(entry) = rom else {
+                continue;
             };
 
             if !entry.file_type().is_file() {
@@ -1710,5 +1705,324 @@ mod gui_tests {
             drives_ab_option.accesskit_node().toggled(),
             Some(egui::accesskit::Toggled::True)
         );
+    }
+
+    #[test]
+    fn test_rom_tab_warns_while_no_roms_are_assigned() {
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+        let mut config = SystemConfig {
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("No system ROMs are assigned")
+                )
+                .is_some()
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_rom_folder_warns_when_folder_does_not_exist() {
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+        let mut config = SystemConfig {
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        let open_button = harness.get_by_label("Open");
+        assert!(open_button.accesskit_node().is_disabled());
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("does not exist or is not writable")
+                )
+                .is_some()
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_rom_folder_create_button_creates_the_folder() {
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+
+        let rom_folder = std::env::temp_dir().join("ronald_test_rom_folder");
+        std::fs::remove_dir_all(&rom_folder).unwrap();
+
+        let mut config = SystemConfig {
+            rom_folder: Some(rom_folder.clone()),
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        harness.get_by_label("Create").click();
+        harness.run();
+
+        assert!(rom_folder.exists());
+        std::fs::remove_dir_all(rom_folder).unwrap();
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_picked_rom_folder_is_applied_to_the_config() {
+        let rom_folder = std::env::temp_dir().join("ronald_test_rom_folder");
+        let mut modal = SystemConfigModal {
+            show: true,
+            picked_rom_folder: shared(Some(rom_folder.clone())),
+            ..Default::default()
+        };
+        let mut config = SystemConfig {
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        drop(harness);
+        assert_eq!(modal.access_config().rom_folder, Some(rom_folder));
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    #[ignore = "not implemented yet"]
+    fn test_local_rom_import_copies_the_file_into_the_rom_folder() {
+        // A picked ROM file is written to the ROM folder and shows up as
+        // available afterwards.
+        todo!()
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    #[ignore = "not implemented yet"]
+    fn test_zip_import_extracts_the_contained_rom_files() {
+        // ".rom" entries of a picked ZIP archive are imported with their
+        // archive-relative path preserved, while directories and other entries
+        // are skipped.
+        todo!()
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    #[ignore = "not implemented yet"]
+    fn test_import_skips_files_that_are_not_16k() {
+        // An image of the wrong size is rejected and nothing is written to the
+        // ROM folder.
+        todo!()
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    #[ignore = "not implemented yet"]
+    fn test_import_skips_roms_that_are_already_available() {
+        // An image whose hash is already known is not imported a second time.
+        todo!()
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    #[ignore = "not implemented yet"]
+    fn test_downloaded_rom_is_imported() {
+        // A ROM arriving from the URL download follows the same import path as a
+        // picked file.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_required_original_roms_are_listed_for_the_selected_model() {
+        // The list of required ROMs holds exactly those original ROMs whose auto
+        // config rule names the configured model.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_amsdos_is_only_required_when_a_disk_drive_is_enabled() {
+        // Enabling and disabling the disk drives moves AMSDOS in and out of the
+        // list of required ROMs.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_missing_original_rom_is_marked_as_not_found() {
+        // A required ROM without a matching available ROM is marked "not found"
+        // and offers no "Use" checkbox.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_other_detected_original_roms_lists_only_available_roms() {
+        // The "Other detected original ROMs" section hides ROMs that are not
+        // required and not available.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_auto_config_assigns_the_required_original_roms() {
+        // With auto config enabled, every required ROM is assigned to the slot
+        // declared for it.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_auto_config_disables_the_use_checkboxes() {
+        // Auto config takes manual assignment of original ROMs out of the user's
+        // hands.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_preferred_language_selects_the_matching_rom_variant() {
+        // Changing the preferred language reassigns the OS and BASIC ROMs to the
+        // variants of that language.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_preferred_language_falls_back_to_english() {
+        // A slot with no ROM in the preferred language falls back to the English
+        // variant.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_changing_the_model_reassigns_auto_configured_roms() {
+        // Switching the model unassigns the ROMs required by the previous model
+        // and assigns those required by the new one.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_manual_assignment_uses_the_slot_declared_by_the_rom() {
+        // With auto config disabled, checking "Use" assigns the ROM to its own
+        // slot.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_unchecking_use_unassigns_the_rom() {
+        // Unchecking "Use" clears the assignment for that slot.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_custom_roms_section_is_hidden_when_none_are_available() {
+        // The custom ROM section is absent while every available ROM is a known
+        // original ROM.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_custom_rom_without_a_known_slot_prompts_for_a_slot() {
+        // A custom ROM with no known slot is listed as "Any slot" and checking
+        // "Use" opens the slot selection.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_custom_rom_can_be_assigned_to_a_numbered_upper_slot() {
+        // Picking "Upper ROM" and a slot number assigns the custom ROM to that
+        // upper slot.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_assigning_to_an_occupied_slot_asks_before_reassigning() {
+        // Assigning to a slot that is already taken asks for confirmation and
+        // replaces the previous ROM once confirmed.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_cancelling_a_reassignment_keeps_the_previous_rom() {
+        // Cancelling the confirmation drops the pending assignment and leaves the
+        // slot as it was.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_reassigning_an_auto_configured_slot_turns_auto_config_off() {
+        // Taking over a slot held by a ROM required by auto config is confirmed
+        // separately and disables auto config.
+        todo!()
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    #[ignore = "not implemented yet"]
+    fn test_roms_that_disappear_from_the_folder_are_unassigned() {
+        // A rescan drops the assignments of ROMs that are no longer available.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_ok_persists_rom_assignments() {
+        // Confirming the modal writes the ROM assignments back to the caller's
+        // config.
+        todo!()
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_cancel_discards_rom_assignments() {
+        // Cancelling the modal leaves the caller's ROM assignments untouched.
+        todo!()
     }
 }
