@@ -356,7 +356,7 @@ impl SystemConfigModal {
                 ui.add_space(20.0);
 
                 ui.horizontal(|ui| {
-                    if ui.button("OK").clicked() {
+                    if ui.button("Ok").clicked() {
                         if let Some(changed) = self.changed_config.take() {
                             config_changed = *config != changed;
                             *config = changed;
@@ -664,10 +664,9 @@ impl SystemConfigModal {
                 Some(path_buf) => (true, path_buf.as_os_str().to_string_lossy().to_string()),
                 None => (false, "".to_string()),
             };
-            ui.add_enabled(enabled, egui::TextEdit::singleline(&mut path));
-            let rom_folder = Some(PathBuf::from(path));
-            if self.access_config_mut().rom_folder != rom_folder {
-                self.access_config_mut().rom_folder = rom_folder;
+            let response = ui.add_enabled(enabled, egui::TextEdit::singleline(&mut path));
+            if response.changed() {
+                self.access_config_mut().rom_folder = Some(PathBuf::from(path));
                 self.update_available_roms(true);
             }
 
@@ -1464,6 +1463,11 @@ mod gui_tests {
         harness.run();
     }
 
+    fn open_rom_tab(harness: &mut Harness<'_>) {
+        harness.get_by_label("System ROMs").click();
+        harness.run();
+    }
+
     #[test]
     fn test_system_config_modal_opens_and_closes() {
         let mut modal = SystemConfigModal {
@@ -1482,8 +1486,8 @@ mod gui_tests {
         // Check that the modal heading is actually rendered
         harness.get_by_label("System Configuration");
 
-        // Click OK button to close
-        harness.get_by_label("OK").click();
+        // Click Ok button to close
+        harness.get_by_label("Ok").click();
         harness.run();
 
         // Modal should no longer be visible
@@ -2016,160 +2020,1248 @@ mod gui_tests {
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
-    fn test_required_original_roms_are_listed_for_the_selected_model() {
-        // The list of required ROMs holds exactly those original ROMs whose auto
-        // config rule names the configured model.
-        todo!()
+    fn test_required_original_roms_are_listed_for_the_cpc_464_without_disk() {
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc464,
+            disk_drives: DiskDrives::None,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        let required_roms = [
+            "b57872c97d569a1968816fcaf359de4b6bf5c188e7dbd0954761cc552b25d327", // 464 OS
+            "ff6fbb6e12808e7d32c9217813d730df7321b4b5e499a45e3eac21b421dcf729", // BASIC 1.0
+        ];
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("SHA3-256")
+                )
+                .count(),
+            required_roms.len()
+        );
+
+        for hash in required_roms.iter() {
+            assert!(
+                harness
+                    .query(
+                        kittest::by()
+                            .role(egui::accesskit::Role::Label)
+                            .label_contains(hash),
+                    )
+                    .is_some(),
+                "missing required ROM with hash {}",
+                hash
+            )
+        }
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
-    fn test_amsdos_is_only_required_when_a_disk_drive_is_enabled() {
-        // Enabling and disabling the disk drives moves AMSDOS in and out of the
-        // list of required ROMs.
-        todo!()
+    fn test_required_original_roms_are_listed_for_the_cpc_464_with_disk() {
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc464,
+            disk_drives: DiskDrives::One,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        let required_roms = [
+            "b57872c97d569a1968816fcaf359de4b6bf5c188e7dbd0954761cc552b25d327", // 464 OS
+            "ff6fbb6e12808e7d32c9217813d730df7321b4b5e499a45e3eac21b421dcf729", // BASIC 1.0
+            "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7", // AMSDOS
+        ];
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("SHA3-256")
+                )
+                .count(),
+            required_roms.len()
+        );
+
+        for hash in required_roms.iter() {
+            assert!(
+                harness
+                    .query(
+                        kittest::by()
+                            .role(egui::accesskit::Role::Label)
+                            .label_contains(hash),
+                    )
+                    .is_some(),
+                "missing required ROM with hash {}",
+                hash
+            )
+        }
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
+    fn test_required_original_roms_are_listed_for_the_cpc_664() {
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc664,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        let required_roms = [
+            "31e57547f5405e6216345a7d6d059791208ce62e483ec7d023c7b6bcc80981f9", // 664 OS
+            "1260317b7b631d36bccc8b08c93b0f99a530bddc2ff21e858d71224b4d7dab7c", // BASIC 1.1
+            "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7", // AMSDOS
+        ];
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("SHA3-256")
+                )
+                .count(),
+            required_roms.len()
+        );
+
+        for hash in required_roms.iter() {
+            assert!(
+                harness
+                    .query(
+                        kittest::by()
+                            .role(egui::accesskit::Role::Label)
+                            .label_contains(hash),
+                    )
+                    .is_some(),
+                "missing required ROM with hash {}",
+                hash
+            )
+        }
+    }
+
+    #[test]
+    fn test_required_original_roms_are_listed_for_the_cpc_6128() {
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        let required_roms = [
+            "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520", // 6128 OS
+            "7630682a0fd8deaa4514954c1a256224d3ae4cb6e3dd4da8e5ad8e1c5c55adc7", // BASIC 1.1
+            "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7", // AMSDOS
+        ];
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("SHA3-256")
+                )
+                .count(),
+            required_roms.len()
+        );
+
+        for hash in required_roms.iter() {
+            assert!(
+                harness
+                    .query(
+                        kittest::by()
+                            .role(egui::accesskit::Role::Label)
+                            .label_contains(hash),
+                    )
+                    .is_some(),
+                "missing required ROM with hash {}",
+                hash
+            )
+        }
+    }
+
+    #[test]
     fn test_missing_original_rom_is_marked_as_not_found() {
-        // A required ROM without a matching available ROM is marked "not found"
-        // and offers no "Use" checkbox.
-        todo!()
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("not found")
+                )
+                .count(),
+            3
+        );
+
+        assert_eq!(harness.query_all_by_label("Use").count(), 0);
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_other_detected_original_roms_lists_only_available_roms() {
-        // The "Other detected original ROMs" section hides ROMs that are not
-        // required and not available.
-        todo!()
+        let available_roms = vec![AvailableRom {
+            key: RomKey(PathBuf::from("os6128_french.rom")),
+            info: RomInfo::from((
+                "CPC 6128 OS",
+                "bf87e68ff847052fecc98f84f286b23edc49d607ea8b140fc93e90259cc98ffb",
+                Some(RomVariant::Language(RomLanguage::French)),
+                Some(RomSlot::Lower),
+            )),
+        }];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("CPC 6128 OS (French)")
+                )
+                .is_none(),
+            "other detected original ROMs should be hidden"
+        );
+
+        harness.get_by_label("Other detected original ROMs").click();
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("CPC 6128 OS (French)")
+                )
+                .is_some(),
+            "detected original ROM should be listed"
+        );
+
+        assert_eq!(harness.query_all_by_label("Use").count(), 1);
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_auto_config_assigns_the_required_original_roms() {
-        // With auto config enabled, every required ROM is assigned to the slot
-        // declared for it.
-        todo!()
+        let available_roms = vec![
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("basic.rom")),
+                info: RomInfo::from((
+                    "Locomotive BASIC 1.1",
+                    "7630682a0fd8deaa4514954c1a256224d3ae4cb6e3dd4da8e5ad8e1c5c55adc7",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    Some(RomSlot::Upper(0)),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("amsdos.rom")),
+                info: RomInfo::from((
+                    "AMSDOS 0.5",
+                    "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
+                    None,
+                    Some(RomSlot::Upper(7)),
+                )),
+            },
+        ];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("not found")
+                )
+                .count(),
+            0
+        );
+
+        assert_eq!(
+            harness
+                .query_all_by_label("Use")
+                .filter(|node| node.accesskit_node().is_disabled()
+                    && node.accesskit_node().toggled() == Some(egui::accesskit::Toggled::True))
+                .count(),
+            3
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
-    fn test_auto_config_disables_the_use_checkboxes() {
-        // Auto config takes manual assignment of original ROMs out of the user's
-        // hands.
-        todo!()
-    }
-
-    #[test]
-    #[ignore = "not implemented yet"]
     fn test_preferred_language_selects_the_matching_rom_variant() {
-        // Changing the preferred language reassigns the OS and BASIC ROMs to the
-        // variants of that language.
-        todo!()
+        let available_roms = vec![
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_fr.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "bf87e68ff847052fecc98f84f286b23edc49d607ea8b140fc93e90259cc98ffb",
+                    Some(RomVariant::Language(RomLanguage::French)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_es.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "95ee6b221aa48f2f04641948463372f6daa7ac3b56206598e5de01a49d37a071",
+                    Some(RomVariant::Language(RomLanguage::Spanish)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("basic_fr.rom")),
+                info: RomInfo::from((
+                    "Locomotive BASIC 1.1",
+                    "fc9f747896664b6c89f6fd382691cf22d0840dbf8579b35af531b55b60f54aa5",
+                    Some(RomVariant::Language(RomLanguage::French)),
+                    Some(RomSlot::Upper(0)),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("basic_es.rom")),
+                info: RomInfo::from((
+                    "Locomotive BASIC 1.1",
+                    "8050045437f5127452ee51ac7cf762c748b180e27cea7884226f9d7594b7843e",
+                    Some(RomVariant::Language(RomLanguage::Spanish)),
+                    Some(RomSlot::Upper(0)),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("amsdos.rom")),
+                info: RomInfo::from((
+                    "AMSDOS 0.5",
+                    "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
+                    None,
+                    Some(RomSlot::Upper(7)),
+                )),
+            },
+        ];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            preferred_language: RomLanguage::Spanish,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("not found")
+                )
+                .is_none(),
+            "all required ROMs should be listed"
+        );
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("Spanish")
+                )
+                .count(),
+            2
+        );
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("French")
+                )
+                .count(),
+            0
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_preferred_language_falls_back_to_english() {
-        // A slot with no ROM in the preferred language falls back to the English
-        // variant.
-        todo!()
+        let available_roms = vec![
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_fr.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "bf87e68ff847052fecc98f84f286b23edc49d607ea8b140fc93e90259cc98ffb",
+                    Some(RomVariant::Language(RomLanguage::French)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_da.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "c9b740d79546a988e12b86b16beb3dbd164b740cac64fe61afa2fcc8e591009c",
+                    Some(RomVariant::Language(RomLanguage::Danish)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("basic_fr.rom")),
+                info: RomInfo::from((
+                    "Locomotive BASIC 1.1",
+                    "fc9f747896664b6c89f6fd382691cf22d0840dbf8579b35af531b55b60f54aa5",
+                    Some(RomVariant::Language(RomLanguage::French)),
+                    Some(RomSlot::Upper(0)),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("basic_en.rom")),
+                info: RomInfo::from((
+                    "Locomotive BASIC 1.1",
+                    "7630682a0fd8deaa4514954c1a256224d3ae4cb6e3dd4da8e5ad8e1c5c55adc7",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    Some(RomSlot::Upper(0)),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("amsdos.rom")),
+                info: RomInfo::from((
+                    "AMSDOS 0.5",
+                    "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
+                    None,
+                    Some(RomSlot::Upper(7)),
+                )),
+            },
+        ];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            preferred_language: RomLanguage::Danish,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("CPC 6128 OS (Danish)")
+                )
+                .is_some(),
+            "OS ROM in the preferred language should be listed"
+        );
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("Locomotive BASIC 1.1 (English)")
+                )
+                .is_some(),
+            "BASIC ROM should fall back to English"
+        );
+
+        assert_eq!(
+            harness
+                .query_all(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("French")
+                )
+                .count(),
+            0
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_changing_the_model_reassigns_auto_configured_roms() {
-        // Switching the model unassigns the ROMs required by the previous model
-        // and assigns those required by the new one.
-        todo!()
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        open_hardware_tab(&mut harness);
+
+        harness.get_by_label("Amstrad CPC 464").click();
+        harness.run();
+
+        open_rom_tab(&mut harness);
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("CPC 464 OS")
+                )
+                .is_some(),
+            "CPC 464 OS should be assigned after changing the model"
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_manual_assignment_uses_the_slot_declared_by_the_rom() {
-        // With auto config disabled, checking "Use" assigns the ROM to its own
-        // slot.
-        todo!()
+        let available_roms = vec![AvailableRom {
+            key: RomKey(PathBuf::from("os6128_fr.rom")),
+            info: RomInfo::from((
+                "CPC 6128 OS",
+                "bf87e68ff847052fecc98f84f286b23edc49d607ea8b140fc93e90259cc98ffb",
+                Some(RomVariant::Language(RomLanguage::French)),
+                Some(RomSlot::Lower),
+            )),
+        }];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        harness
+            .get_by_label("Automatically configure based on selected hardware model")
+            .click();
+        harness.run();
+
+        harness.get_by_label("Other detected original ROMs").click();
+        harness.run();
+
+        harness.get_by_label("Use").click();
+        harness.run();
+
+        drop(harness);
+        assert_eq!(modal.access_config().assigned_roms.len(), 1);
+        assert!(modal.access_config().assigned_roms.contains(&AssignedRom {
+            key: RomKey(PathBuf::from("os6128_fr.rom")),
+            slot: RomSlot::Lower
+        }));
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_unchecking_use_unassigns_the_rom() {
-        // Unchecking "Use" clears the assignment for that slot.
-        todo!()
+        let available_roms = vec![AvailableRom {
+            key: RomKey(PathBuf::from("os6128_en.rom")),
+            info: RomInfo::from((
+                "CPC 6128 OS",
+                "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Lower),
+            )),
+        }];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        harness
+            .get_by_label("Automatically configure based on selected hardware model")
+            .click();
+        harness.run();
+
+        assert_eq!(
+            harness
+                .query_all_by_label("Use")
+                .filter(
+                    |node| node.accesskit_node().toggled() == Some(egui::accesskit::Toggled::True)
+                )
+                .count(),
+            1
+        );
+
+        harness.get_by_label("Use").click();
+        harness.run();
+
+        drop(harness);
+        assert!(
+            modal.access_config().assigned_roms.is_empty(),
+            "ROM should be unassigned after unchecking 'Use'"
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_custom_roms_section_is_hidden_when_none_are_available() {
-        // The custom ROM section is absent while every available ROM is a known
-        // original ROM.
-        todo!()
+        let mut modal = SystemConfigModal {
+            show: true,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("Custom ROMs")
+                )
+                .is_none(),
+            "Custom ROMs section should be hidden when no custom ROMs are available"
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_custom_rom_without_a_known_slot_prompts_for_a_slot() {
-        // A custom ROM with no known slot is listed as "Any slot" and checking
-        // "Use" opens the slot selection.
-        todo!()
+        let available_roms = vec![AvailableRom {
+            key: RomKey(PathBuf::from("custom.rom")),
+            info: RomInfo::from((
+                "My Custom ROM",
+                // "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                Some(RomVariant::Language(RomLanguage::English)),
+                None,
+            )),
+        }];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("Custom ROMs")
+                )
+                .is_some(),
+            "Custom ROMs section should be visible"
+        );
+
+        harness.get_by_label("Use").click();
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("Select a slot for the ROM")
+                )
+                .is_some(),
+            "assignment should prompt for a slot"
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_custom_rom_can_be_assigned_to_a_numbered_upper_slot() {
-        // Picking "Upper ROM" and a slot number assigns the custom ROM to that
-        // upper slot.
-        todo!()
+        let available_roms = vec![AvailableRom {
+            key: RomKey(PathBuf::from("custom.rom")),
+            info: RomInfo::from((
+                "My Custom ROM",
+                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                Some(RomVariant::Language(RomLanguage::English)),
+                None,
+            )),
+        }];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        harness.get_by_label("Use").click();
+        harness.run();
+
+        harness.get_by_label("Upper ROM").click();
+        harness.run();
+
+        let reassign_modal = harness
+            .get_by_label("Upper ROM")
+            .parent()
+            .expect("should have a parent radio button")
+            .parent()
+            .expect("should have a parent modal");
+
+        reassign_modal
+            .get_by_role(egui::accesskit::Role::SpinButton)
+            .click();
+        harness.run();
+
+        harness
+            .get_by_role(egui::accesskit::Role::SpinButton)
+            .type_text("42");
+        harness.run();
+
+        harness.key_press(egui::Key::Enter);
+        harness.run();
+
+        let reassign_modal = harness
+            .get_by_label("Upper ROM")
+            .parent()
+            .expect("should have a parent radio button")
+            .parent()
+            .expect("should have a parent modal");
+
+        reassign_modal.get_by_label("Ok").click();
+        harness.run();
+
+        drop(harness);
+        assert_eq!(
+            modal.access_config().assigned_roms,
+            vec![AssignedRom {
+                key: RomKey(PathBuf::from("custom.rom")),
+                slot: RomSlot::Upper(42)
+            }]
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_assigning_to_an_occupied_slot_asks_before_reassigning() {
-        // Assigning to a slot that is already taken asks for confirmation and
-        // replaces the previous ROM once confirmed.
-        todo!()
+        let available_roms = vec![
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_en.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("custom.rom")),
+                info: RomInfo::from((
+                    "My Custom ROM",
+                    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    None,
+                )),
+            },
+        ];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        let grid_row = harness
+            .get_by_label("My Custom ROM (English)")
+            .parent()
+            .expect("should have a parent vertical group")
+            .parent()
+            .expect("should have a parent grid row");
+
+        grid_row.get_by_label("Use").click();
+        harness.run();
+
+        harness.get_by_label("Lower ROM").click();
+        harness.run();
+
+        assert!(
+            harness
+                .query(
+                    kittest::by()
+                        .role(egui::accesskit::Role::Label)
+                        .label_contains("occupied")
+                )
+                .is_some(),
+            "assignment should warn the slot is occupied"
+        );
+
+        drop(harness);
+        assert_eq!(
+            modal.access_config().assigned_roms,
+            vec![AssignedRom {
+                key: RomKey(PathBuf::from("os6128_en.rom")),
+                slot: RomSlot::Lower
+            }]
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_cancelling_a_reassignment_keeps_the_previous_rom() {
-        // Cancelling the confirmation drops the pending assignment and leaves the
-        // slot as it was.
-        todo!()
+        let available_roms = vec![
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_en.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("custom.rom")),
+                info: RomInfo::from((
+                    "My Custom ROM",
+                    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    None,
+                )),
+            },
+        ];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        let grid_row = harness
+            .get_by_label("My Custom ROM (English)")
+            .parent()
+            .expect("should have a parent vertical group")
+            .parent()
+            .expect("should have a parent grid row");
+
+        grid_row.get_by_label("Use").click();
+        harness.run();
+
+        harness.get_by_label("Lower ROM").click();
+        harness.run();
+
+        let reassign_modal = harness
+            .get_by_label("Select a slot for the ROM:")
+            .parent()
+            .expect("should have a parent modal");
+
+        reassign_modal.get_by_label("Cancel").click();
+        harness.run();
+
+        drop(harness);
+        assert_eq!(
+            modal.access_config().assigned_roms,
+            vec![AssignedRom {
+                key: RomKey(PathBuf::from("os6128_en.rom")),
+                slot: RomSlot::Lower
+            }]
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_reassigning_an_auto_configured_slot_turns_auto_config_off() {
-        // Taking over a slot held by a ROM required by auto config is confirmed
-        // separately and disables auto config.
-        todo!()
+        let available_roms = vec![
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_en.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("custom.rom")),
+                info: RomInfo::from((
+                    "My Custom ROM",
+                    "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                    Some(RomVariant::Language(RomLanguage::English)),
+                    None,
+                )),
+            },
+        ];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        let grid_row = harness
+            .get_by_label("My Custom ROM (English)")
+            .parent()
+            .expect("should have a parent vertical group")
+            .parent()
+            .expect("should have a parent grid row");
+
+        grid_row.get_by_label("Use").click();
+        harness.run();
+
+        harness.get_by_label("Lower ROM").click();
+        harness.run();
+
+        let reassign_modal = harness
+            .get_by_label("Select a slot for the ROM:")
+            .parent()
+            .expect("should have a parent modal");
+
+        reassign_modal.get_by_label("Ok").click();
+        harness.run();
+
+        drop(harness);
+        assert!(
+            !modal.access_config().auto_config,
+            "auto config should be turned off after a manual assignment"
+        );
+        assert_eq!(
+            modal.access_config().assigned_roms,
+            vec![AssignedRom {
+                key: RomKey(PathBuf::from("custom.rom")),
+                slot: RomSlot::Lower
+            }]
+        );
     }
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    #[ignore = "not implemented yet"]
     fn test_roms_that_disappear_from_the_folder_are_unassigned() {
-        // A rescan drops the assignments of ROMs that are no longer available.
-        todo!()
+        let available_roms = vec![AvailableRom {
+            key: RomKey(PathBuf::from("os6128_en.rom")),
+            info: RomInfo::from((
+                "CPC 6128 OS",
+                "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Lower),
+            )),
+        }];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let rom_folder = std::env::temp_dir()
+            .join("ronald_test_roms_that_disappear_from_the_folder_are_unassigned");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: Some(rom_folder.clone()),
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        drop(harness);
+        assert!(
+            modal.access_config().assigned_roms.is_empty(),
+            "ROM should be unassigned after it disappears from the folder"
+        );
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_ok_persists_rom_assignments() {
-        // Confirming the modal writes the ROM assignments back to the caller's
-        // config.
-        todo!()
+        let available_roms = vec![AvailableRom {
+            key: RomKey(PathBuf::from("os6128_en.rom")),
+            info: RomInfo::from((
+                "CPC 6128 OS",
+                "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Lower),
+            )),
+        }];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        harness.get_by_label("Ok").click();
+        harness.run();
+
+        drop(harness);
+        assert_eq!(config.assigned_roms.len(), 1);
+        assert_eq!(
+            config.assigned_roms[0],
+            AssignedRom {
+                key: RomKey(PathBuf::from("os6128_en.rom")),
+                slot: RomSlot::Lower
+            }
+        );
     }
 
     #[test]
-    #[ignore = "not implemented yet"]
     fn test_cancel_discards_rom_assignments() {
-        // Cancelling the modal leaves the caller's ROM assignments untouched.
-        todo!()
+        let available_roms = vec![AvailableRom {
+            key: RomKey(PathBuf::from("os6128_en.rom")),
+            info: RomInfo::from((
+                "CPC 6128 OS",
+                "4b2aab13cb56e315be29efc6e0f041b58145e8a63522da69eb119b9bb4bf7520",
+                Some(RomVariant::Language(RomLanguage::English)),
+                Some(RomSlot::Lower),
+            )),
+        }];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            assigned_roms: vec![AssignedRom {
+                key: RomKey(PathBuf::from("os6128_fr.rom")),
+                slot: RomSlot::Lower,
+            }],
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        harness.get_by_label("Cancel").click();
+        harness.run();
+
+        drop(harness);
+        assert_eq!(config.assigned_roms.len(), 1);
+        assert_eq!(
+            config.assigned_roms[0],
+            AssignedRom {
+                key: RomKey(PathBuf::from("os6128_fr.rom")),
+                slot: RomSlot::Lower
+            }
+        );
     }
 }
