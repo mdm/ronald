@@ -822,17 +822,6 @@ impl SystemConfigModal {
             return;
         };
 
-        let hash = sha3::Sha3_256::digest(&file.image).to_vec();
-        if self.available_roms.iter().any(|r| r.info.hash == hash) {
-            log::info!("ROM already exists: {:?}", file.path_buf);
-            return;
-        }
-
-        if file.image.len() != 16 * 1024 {
-            log::info!("Skipping file {:?}: size is not 16KB", file.path_buf);
-            return; // Skip files that are not 16KB
-        }
-
         let destination = if preserve_path {
             rom_folder.join(&file.path_buf)
         } else {
@@ -920,17 +909,6 @@ impl SystemConfigModal {
 
     #[cfg(target_arch = "wasm32")]
     fn import_rom_file(&self, file: &File, preserve_path: bool) -> Option<rom_store::StoredRom> {
-        let hash = sha3::Sha3_256::digest(&file.image).to_vec();
-        if self.available_roms.iter().any(|r| r.info.hash == hash) {
-            log::info!("ROM already exists: {:?}", file.path_buf);
-            return None;
-        }
-
-        if file.image.len() != 16 * 1024 {
-            log::info!("Skipping file {:?}: size is not 16KB", file.path_buf);
-            return None; // Skip files that are not 16KB
-        }
-
         let path = if preserve_path {
             file.path_buf.as_path()
         } else {
@@ -940,6 +918,7 @@ impl SystemConfigModal {
                     .expect("ROM file should have a file name"),
             )
         };
+        let hash = sha3::Sha3_256::digest(&file.image).to_vec();
 
         Some(rom_store::StoredRom {
             hash,
@@ -1237,7 +1216,6 @@ impl SystemConfigModal {
             match entry.metadata() {
                 Ok(metadata) => {
                     if metadata.len() != 16 * 1024 {
-                        log::info!("Skipping file {:?}: size is not 16KB", entry.path());
                         continue; // Skip files that are not 16KB
                     }
                 }
@@ -1269,6 +1247,7 @@ impl SystemConfigModal {
             });
         }
 
+        roms.dedup_by(|a, b| a.info.hash == b.info.hash);
         roms.sort_by(|a, b| a.info.name.cmp(&b.info.name));
         let changed = roms != self.available_roms;
 
@@ -1305,12 +1284,14 @@ impl SystemConfigModal {
 
         let mut roms = stored
             .into_iter()
+            .filter(|stored| stored.image.len() == 16 * 1024) // Skip files that are not 16KB
             .map(|stored| AvailableRom {
                 key: RomKey(stored.hash.clone()),
                 info: enriched_rom_info(stored.name, stored.hash),
             })
             .collect::<Vec<_>>();
 
+        roms.dedup_by(|a, b| a.info.hash == b.info.hash);
         roms.sort_by(|a, b| a.info.name.cmp(&b.info.name));
         let changed = roms != self.available_roms;
 
@@ -1777,8 +1758,9 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let rom_folder = std::env::temp_dir().join("ronald_test_rom_folder");
-        std::fs::remove_dir_all(&rom_folder).unwrap();
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_rom_folder_create_button_creates_the_folder");
+        let _ = std::fs::remove_dir_all(&rom_folder);
 
         let mut config = SystemConfig {
             rom_folder: Some(rom_folder.clone()),
@@ -1796,13 +1778,14 @@ mod gui_tests {
         harness.run();
 
         assert!(rom_folder.exists());
-        std::fs::remove_dir_all(rom_folder).unwrap();
+        let _ = std::fs::remove_dir_all(&rom_folder);
     }
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
     fn test_picked_rom_folder_is_applied_to_the_config() {
-        let rom_folder = std::env::temp_dir().join("ronald_test_rom_folder");
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_picked_rom_folder_is_applied_to_the_config");
         let mut modal = SystemConfigModal {
             show: true,
             picked_rom_folder: shared(Some(rom_folder.clone())),
@@ -1825,47 +1808,211 @@ mod gui_tests {
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    #[ignore = "not implemented yet"]
     fn test_local_rom_import_copies_the_file_into_the_rom_folder() {
-        // A picked ROM file is written to the ROM folder and shows up as
-        // available afterwards.
-        todo!()
+        let mut modal = SystemConfigModal {
+            show: true,
+            picked_import_roms: shared(vec![File {
+                path_buf: PathBuf::from("test.rom"),
+                image: vec![0u8; 16 * 1024],
+            }]),
+            ..Default::default()
+        };
+
+        let rom_folder = std::env::temp_dir()
+            .join("ronald_test_local_rom_import_copies_the_file_into_the_rom_folder");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        let mut config = SystemConfig {
+            rom_folder: Some(rom_folder.clone()),
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(rom_folder.join("test.rom").exists());
+
+        drop(harness);
+        assert!(modal.available_roms.len() == 1);
+        assert!(modal.available_roms[0].info.name == "test.rom");
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
     }
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    #[ignore = "not implemented yet"]
     fn test_zip_import_extracts_the_contained_rom_files() {
-        // ".rom" entries of a picked ZIP archive are imported with their
-        // archive-relative path preserved, while directories and other entries
-        // are skipped.
-        todo!()
+        let image = {
+            use std::io::Write;
+
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+            let options = zip::write::SimpleFileOptions::default();
+            zip.add_directory("subdir/", options).unwrap();
+            zip.start_file("subdir/test.rom", options).unwrap();
+            zip.write_all(&vec![0u8; 16 * 1024]).unwrap();
+            zip.finish().unwrap().into_inner()
+        };
+
+        let mut modal = SystemConfigModal {
+            show: true,
+            picked_import_roms: shared(vec![File {
+                path_buf: PathBuf::from("test.zip"),
+                image,
+            }]),
+            ..Default::default()
+        };
+
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_zip_import_extracts_the_contained_rom_files");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        let mut config = SystemConfig {
+            rom_folder: Some(rom_folder.clone()),
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(rom_folder.join("subdir/test.rom").exists());
+
+        drop(harness);
+        assert!(modal.available_roms.len() == 1);
+        assert!(modal.available_roms[0].info.name == "test.rom");
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
     }
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    #[ignore = "not implemented yet"]
     fn test_import_skips_files_that_are_not_16k() {
-        // An image of the wrong size is rejected and nothing is written to the
-        // ROM folder.
-        todo!()
+        let mut modal = SystemConfigModal {
+            show: true,
+            picked_import_roms: shared(vec![File {
+                path_buf: PathBuf::from("test.rom"),
+                image: vec![0u8; 16 * 1024 - 1],
+            }]),
+            ..Default::default()
+        };
+
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_import_skips_files_that_are_not_16k");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        let mut config = SystemConfig {
+            rom_folder: Some(rom_folder.clone()),
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        // If files are not 16KB they are copied, ...
+        assert!(rom_folder.join("test.rom").exists());
+
+        drop(harness);
+        // ...but not picked up when scanning for available ROMs.
+        assert!(modal.available_roms.is_empty());
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
     }
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    #[ignore = "not implemented yet"]
     fn test_import_skips_roms_that_are_already_available() {
-        // An image whose hash is already known is not imported a second time.
-        todo!()
+        let mut modal = SystemConfigModal {
+            show: true,
+            picked_import_roms: shared(vec![
+                File {
+                    path_buf: PathBuf::from("test.rom"),
+                    image: vec![0u8; 16 * 1024],
+                },
+                File {
+                    path_buf: PathBuf::from("duplicate.rom"),
+                    image: vec![0u8; 16 * 1024],
+                },
+            ]),
+            ..Default::default()
+        };
+
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_import_skips_roms_that_are_already_available");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        let mut config = SystemConfig {
+            rom_folder: Some(rom_folder.clone()),
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        // Duplicates are copies, ...
+        assert!(rom_folder.join("test.rom").exists());
+        assert!(rom_folder.join("duplicate.rom").exists());
+
+        drop(harness);
+        // ...but only one of them is picked up when scanning for available ROMs.
+        assert!(modal.available_roms.len() == 1);
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
     }
 
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
-    #[ignore = "not implemented yet"]
     fn test_downloaded_rom_is_imported() {
-        // A ROM arriving from the URL download follows the same import path as a
-        // picked file.
-        todo!()
+        let mut modal = SystemConfigModal {
+            show: true,
+            downloaded_rom: shared(Some(File {
+                path_buf: PathBuf::from("test.rom"),
+                image: vec![0u8; 16 * 1024],
+            })),
+            ..Default::default()
+        };
+
+        let rom_folder = std::env::temp_dir().join("ronald_test_downloaded_rom_is_imported");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        let mut config = SystemConfig {
+            rom_folder: Some(rom_folder.clone()),
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        assert!(rom_folder.join("test.rom").exists());
+
+        drop(harness);
+        assert!(modal.available_roms.len() == 1);
+        assert!(modal.available_roms[0].info.name == "test.rom");
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
     }
 
     #[test]
