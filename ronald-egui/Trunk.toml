@@ -4,3 +4,10 @@ release = true
 
 [serve]
 port = 8000
+
+# Give sw.js a cache name derived from the built assets, so a new release
+# actually replaces the previous one in the browser.
+[[hooks]]
+stage = "post_build"
+command = "sh"
+command_arguments = ["scripts/version-sw.sh"]

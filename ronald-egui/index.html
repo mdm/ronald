@@ -18,6 +18,7 @@
 
 
     <link data-trunk rel="copy-file" href="assets/sw.js"/>
+    <link data-trunk rel="copy-file" href="assets/_headers"/>
     <link data-trunk rel="copy-file" href="assets/manifest.json"/>
     <link data-trunk rel="copy-file" href="assets/icon-1024.png" data-target-path="assets"/>
     <link data-trunk rel="copy-file" href="assets/icon-256.png" data-target-path="assets"/>
@@ -139,8 +140,26 @@
         // We disable caching during development so that we always view the latest version.
         if ('serviceWorker' in navigator && window.location.hash !== "#dev") {
             console.log('Registering service worker');
+
+            // A new service worker claims this page as soon as it activates. That
+            // only happens when a new release has been deployed, in which case the
+            // page is still showing the previous release and has to be reloaded.
+            var hadController = navigator.serviceWorker.controller !== null;
+            var reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+                if (!hadController || reloading) {
+                    return;
+                }
+                reloading = true;
+                console.log('New version activated, reloading');
+                window.location.reload();
+            });
+
             window.addEventListener('load', function () {
-                navigator.serviceWorker.register('sw.js');
+                navigator.serviceWorker.register('sw.js').then(function (registration) {
+                    // Long-running sessions should not stay on an old release.
+                    registration.update();
+                });
             });
         } else {
             console.log('Service worker not supported or disabled for development');

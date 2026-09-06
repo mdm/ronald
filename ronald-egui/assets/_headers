@@ -1,0 +1,9 @@
+# Never let a proxy or the browser HTTP cache pin the app shell or the service
+# worker to an old release. Everything else is revalidated by the service
+# worker's cache version instead.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+/manifest.json
+  Cache-Control: public, max-age=0, must-revalidate
