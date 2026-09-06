@@ -79,12 +79,12 @@ impl GateArrayDebugWindow {
         colors
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         let mut open = self.show;
         egui::Window::new("Gate Array Internals")
             .resizable(false)
             .open(&mut open)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 self.render_gate_array_state(ui, debugger);
                 ui.separator();
                 self.render_breakpoints_section(ui, debugger);
@@ -438,11 +438,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Check that the window title is rendered
@@ -464,11 +465,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         let i = 0;
@@ -518,11 +520,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         let i = 0;
@@ -574,11 +577,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         let i = 0;
@@ -626,11 +630,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Select "Pen 8"
@@ -682,11 +687,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Select "Border"
@@ -695,6 +701,10 @@ mod gui_tests {
             .nth(1)
             .unwrap()
             .click();
+        harness.run();
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Border")
+            .scroll_to_me();
         harness.run();
         harness
             .get_by_role_and_label(accesskit::Role::Button, "Border")
@@ -736,11 +746,12 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
 
         // Check any pen
@@ -800,14 +811,13 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
+        harness.fit_contents();
         harness.run();
-
-        let i = 0;
 
         // Add breakpoint
         harness

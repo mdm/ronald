@@ -89,20 +89,21 @@ impl Amstrad40007 {
     }
 
     fn update_screen_mode(&mut self, crtc: &impl crtc::CrtController) {
-        if !self.hsync_active && crtc.read_horizontal_sync() {
-            if let Some(requested) = self.requested_screen_mode.take() {
-                let was = self.current_screen_mode;
-                self.current_screen_mode = requested;
-                log::trace!("New screen mode: {}", self.current_screen_mode);
-                self.emit_debug_event(
-                    GateArrayDebugEvent::ScreenModeChanged {
-                        is: self.current_screen_mode,
-                        was,
-                        applied: true,
-                    },
-                    self.master_clock,
-                );
-            }
+        if !self.hsync_active
+            && crtc.read_horizontal_sync()
+            && let Some(requested) = self.requested_screen_mode.take()
+        {
+            let was = self.current_screen_mode;
+            self.current_screen_mode = requested;
+            log::trace!("New screen mode: {}", self.current_screen_mode);
+            self.emit_debug_event(
+                GateArrayDebugEvent::ScreenModeChanged {
+                    is: self.current_screen_mode,
+                    was,
+                    applied: true,
+                },
+                self.master_clock,
+            );
         }
     }
 
@@ -184,7 +185,7 @@ impl Amstrad40007 {
 }
 
 impl GateArray for Amstrad40007 {
-    fn write_byte(&mut self, memory: &mut impl MemManage, port: u16, value: u8) {
+    fn write_byte(&mut self, memory: &mut impl MemManage, _port: u16, value: u8) {
         // TODO: remove port parameter?
         let function = (value >> 6) & 0x03;
 
@@ -259,7 +260,6 @@ impl GateArray for Amstrad40007 {
                 // ROM banking (only available in CPC 6128)
                 // TODO: show error message to user
                 log::error!("Gate Array ROM banking not supported: {value:#010b}");
-                unimplemented!();
             }
             _ => {
                 unreachable!();

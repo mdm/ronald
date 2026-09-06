@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +38,21 @@ pub trait MemManage {
     fn select_upper_rom(&mut self, upper_rom_nr: u8);
 
     fn force_ram_read(&mut self, force: bool);
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
+pub enum RomSlot {
+    Lower,
+    Upper(u8),
+}
+
+impl Display for RomSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RomSlot::Lower => write!(f, "Lower ROM"),
+            RomSlot::Upper(nr) => write!(f, "Upper ROM {}", nr),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -170,13 +186,13 @@ impl MemWrite for Ram {
 
 // TODO: can we get rid of this empty impl? Currently required for bus writes.
 impl MemManage for Ram {
-    fn enable_lower_rom(&mut self, enable: bool) {}
+    fn enable_lower_rom(&mut self, _enable: bool) {}
 
-    fn enable_upper_rom(&mut self, enable: bool) {}
+    fn enable_upper_rom(&mut self, _enable: bool) {}
 
-    fn select_upper_rom(&mut self, upper_rom_nr: u8) {}
+    fn select_upper_rom(&mut self, _upper_rom_nr: u8) {}
 
-    fn force_ram_read(&mut self, force: bool) {}
+    fn force_ram_read(&mut self, _force: bool) {}
 }
 
 pub struct RamDebugView {
@@ -213,21 +229,22 @@ pub struct MemoryCpcX64 {
 }
 
 impl MemoryCpcX64 {
-    pub fn new() -> Self {
-        // TODO: receive rom paths as parameters
+    pub fn new(roms: HashMap<RomSlot, Vec<u8>>) -> Self {
+        let lower_rom = match roms.get(&RomSlot::Lower) {
+            Some(lower_rom_bytes) => Rom::from_bytes(lower_rom_bytes),
+            None => Rom::from_bytes(&vec![0; 0x4000]),
+        };
+
         let mut upper_roms = HashMap::new();
-        upper_roms.insert(
-            0,
-            Rom::from_bytes(include_bytes!("../../rom/basic_1.0.rom")),
-        );
-        upper_roms.insert(
-            7,
-            Rom::from_bytes(include_bytes!("../../rom/amsdos_0.5.rom")),
-        );
+        for (slot, image) in roms {
+            if let RomSlot::Upper(n) = slot {
+                upper_roms.insert(n, Rom::from_bytes(&image));
+            }
+        }
 
         MemoryCpcX64 {
             ram: Ram::new(0x10000),
-            lower_rom: Rom::from_bytes(include_bytes!("../../rom/os_464.rom")),
+            lower_rom,
             lower_rom_enabled: true,
             upper_roms,
             selected_upper_rom: 0,
@@ -239,7 +256,7 @@ impl MemoryCpcX64 {
 
 impl Default for MemoryCpcX64 {
     fn default() -> Self {
-        Self::new()
+        Self::new(HashMap::new())
     }
 }
 
@@ -319,10 +336,8 @@ impl Snapshottable for MemoryCpcX64 {
             composite_rom_ram[0x0000..0x4000].copy_from_slice(&lower_rom);
         }
 
-        if upper_rom_enabled {
-            if let Some(upper_rom_data) = upper_roms.get(&selected_upper_rom) {
-                composite_rom_ram[0xC000..0x10000].copy_from_slice(upper_rom_data);
-            }
+        if upper_rom_enabled && let Some(upper_rom_data) = upper_roms.get(&selected_upper_rom) {
+            composite_rom_ram[0xC000..0x10000].copy_from_slice(upper_rom_data);
         }
 
         MemoryDebugView {
@@ -350,16 +365,16 @@ pub struct MemoryCpc6128 {
 }
 
 impl MemoryCpc6128 {
-    pub fn new() -> Self {
+    pub fn new(roms: HashMap<RomSlot, Vec<u8>>) -> Self {
         MemoryCpc6128 {
-            memory: MemoryCpcX64::new(),
+            memory: MemoryCpcX64::new(roms),
         }
     }
 }
 
 impl Default for MemoryCpc6128 {
     fn default() -> Self {
-        Self::new()
+        Self::new(HashMap::new())
     }
 }
 

@@ -15,7 +15,7 @@ pub mod debug;
 pub mod system;
 
 pub trait VideoSink {
-    fn draw_frame(&mut self, buffer: &Vec<u8>);
+    fn draw_frame(&mut self, buffer: &[u8]);
 }
 
 pub trait AudioSink {
@@ -47,10 +47,10 @@ impl Driver {
         }
     }
 
-    pub fn with_config(config: &SystemConfig) -> Self {
+    pub fn with_config(config: SystemConfig) -> Self {
         let keys = HashMap::from(constants::KEYS);
         Self {
-            system: config.clone().into(),
+            system: config.into(),
             keys,
             breakpoint_manager: BreakpointManager::default(),
             cached_debug_view: None,
@@ -104,7 +104,7 @@ impl Driver {
         todo!()
     }
 
-    pub fn load_snapshot(&self, rom: Vec<u8>) {
+    pub fn load_snapshot(&self, _rom: Vec<u8>) {
         todo!()
     }
 

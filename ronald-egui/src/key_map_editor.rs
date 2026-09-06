@@ -123,7 +123,7 @@ pub struct KeyMapEditor {
 }
 
 impl KeyMapEditor {
-    pub fn ui<K>(&mut self, ctx: &egui::Context, key_mapper: &mut KeyMapper<K>)
+    pub fn ui<K>(&mut self, ui: &mut egui::Ui, key_mapper: &mut KeyMapper<K>)
     where
         K: KeyMapStore,
     {
@@ -131,8 +131,8 @@ impl KeyMapEditor {
             return;
         }
 
-        egui::Modal::new("key_bindings_modal".into()).show(ctx, |ui| {
-            self.render_binding_listener_modal(ctx, key_mapper);
+        egui::Modal::new("key_bindings_modal".into()).show(ui, |ui| {
+            self.render_binding_listener_modal(ui, key_mapper);
 
             ui.add_space(10.0);
             ui.heading("Key Bindings");
@@ -144,7 +144,7 @@ impl KeyMapEditor {
             let svg = self.generate_keyboard_svg(ui);
             let image_response = self.render_keyboard_image(ui, svg);
 
-            self.handle_key_interactions(ctx, ui, image_response);
+            self.handle_key_interactions(ui, image_response);
 
             ui.add_space(15.0);
             if ui.button("Close").clicked() {
@@ -153,15 +153,12 @@ impl KeyMapEditor {
         });
     }
 
-    fn render_binding_listener_modal<K>(
-        &mut self,
-        ctx: &egui::Context,
-        key_mapper: &mut KeyMapper<K>,
-    ) where
+    fn render_binding_listener_modal<K>(&mut self, ui: &mut egui::Ui, key_mapper: &mut KeyMapper<K>)
+    where
         K: KeyMapStore,
     {
         if let Some((hovered_key, shifted)) = self.listening {
-            egui::Modal::new("key_binding_listener".into()).show(ctx, |ui| {
+            egui::Modal::new("key_binding_listener".into()).show(ui, |ui| {
                 ui.set_max_width(350.0);
                 if shifted {
                     ui.label(format!(
@@ -188,10 +185,10 @@ impl KeyMapEditor {
                         self.listening = None;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if let Some(host_key) = key_mapper.binding(hovered_key, shifted) {
-                            if ui.button("Clear Binding").clicked() {
-                                let _ = key_mapper.clear_binding(hovered_key, shifted);
-                            }
+                        if let Some(_host_key) = key_mapper.binding(hovered_key, shifted)
+                            && ui.button("Clear Binding").clicked()
+                        {
+                            let _ = key_mapper.clear_binding(hovered_key, shifted);
                         }
                     });
                 });
@@ -277,12 +274,7 @@ impl KeyMapEditor {
         )
     }
 
-    fn handle_key_interactions(
-        &mut self,
-        ctx: &egui::Context,
-        ui: &mut egui::Ui,
-        image_response: egui::Response,
-    ) {
+    fn handle_key_interactions(&mut self, ui: &mut egui::Ui, image_response: egui::Response) {
         let image_rect = image_response.rect;
         let scale_x = image_rect.width() / 2200.0; // SVG viewBox is 2200x500
         let scale_y = image_rect.height() / 500.0;
@@ -315,7 +307,7 @@ impl KeyMapEditor {
 
             // For Enter key, use precise L-shaped hit detection
             let is_valid_hit = if key_layout.name == "Enter" {
-                if let Some(cursor_pos) = ctx.pointer_interact_pos() {
+                if let Some(cursor_pos) = ui.pointer_interact_pos() {
                     // Convert cursor position back to SVG coordinates
                     let svg_x = (cursor_pos.x - image_rect.left()) / scale_x;
                     let svg_y = (cursor_pos.y - image_rect.top()) / scale_y;
@@ -415,8 +407,10 @@ mod gui_tests {
             repeat: false,
             modifiers,
         }];
-        let mut raw_input = egui::RawInput::default();
-        raw_input.events = events;
+        let raw_input = egui::RawInput {
+            events,
+            ..Default::default()
+        };
         let mut input_state = egui::InputState::default();
         input_state.raw = raw_input;
         input_state
@@ -430,11 +424,11 @@ mod gui_tests {
         // Initially modal should not be shown
         key_map_editor.show = false;
 
-        let app = move |ctx: &egui::Context| {
-            key_map_editor.ui(ctx, &mut key_mapper);
+        let app = |ui: &mut egui::Ui| {
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let harness = Harness::new_ui(app);
 
         // Modal should not be visible initially
         assert!(
@@ -452,11 +446,11 @@ mod gui_tests {
         // Modal should be shown
         key_map_editor.show = true;
 
-        let app = move |ctx: &egui::Context| {
-            key_map_editor.ui(ctx, &mut key_mapper);
+        let app = |ui: &mut egui::Ui| {
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Modal should be visible
@@ -476,15 +470,17 @@ mod gui_tests {
 
     #[test]
     fn test_key_binding_dialog_opens_on_click() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
-            key_map_editor.ui(ctx, &mut key_mapper);
+        let app = |ui: &mut egui::Ui| {
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Get the A key by its accessibility label
@@ -502,23 +498,24 @@ mod gui_tests {
 
     #[test]
     fn test_shifted_key_binding_dialog() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
-            key_map_editor.ui(ctx, &mut key_mapper);
+        let app = |ui: &mut egui::Ui| {
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Get the A key by its accessibility label
         let a_key = harness.get_by_label("A key");
 
         // Press shift and click on the A key
-        a_key.key_down(egui_kittest::kittest::Key::Shift);
-        a_key.click();
+        a_key.click_modifiers(egui::Modifiers::SHIFT);
         harness.run();
 
         // Verify shifted binding dialog opened
@@ -529,15 +526,17 @@ mod gui_tests {
 
     #[test]
     fn test_key_binding_dialog_cancellation() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
-            key_map_editor.ui(ctx, &mut key_mapper);
+        let app = |ui: &mut egui::Ui| {
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Open binding dialog
@@ -568,8 +567,10 @@ mod gui_tests {
 
     #[test]
     fn test_clear_existing_binding() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
         // Pre-set a binding for A key to Q
@@ -578,11 +579,11 @@ mod gui_tests {
             .try_set_binding("A", false, &input_state)
             .unwrap();
 
-        let app = move |ctx: &egui::Context| {
-            key_map_editor.ui(ctx, &mut key_mapper);
+        let app = |ui: &mut egui::Ui| {
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Get the A key by its accessibility label
@@ -606,15 +607,17 @@ mod gui_tests {
 
     #[test]
     fn test_shift_key_exclusion() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
-            key_map_editor.ui(ctx, &mut key_mapper);
+        let app = |ui: &mut egui::Ui| {
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Verify the instruction text mentions that Shift keys cannot be bound
@@ -630,27 +633,27 @@ mod gui_tests {
 
     #[test]
     fn test_keyboard_navigation() {
-        let mut key_map_editor = KeyMapEditor::default();
-        key_map_editor.show = true;
+        let mut key_map_editor = KeyMapEditor {
+            show: true,
+            ..Default::default()
+        };
         let mut key_mapper = KeyMapper::<MockKeyMapStore>::default();
 
-        let app = move |ctx: &egui::Context| {
-            key_map_editor.ui(ctx, &mut key_mapper);
+        let app = |ui: &mut egui::Ui| {
+            key_map_editor.ui(ui, &mut key_mapper);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Tab once to highlight the first key (should be Escape key)
-        harness
-            .get_by_role(Role::Image)
-            .key_down(egui_kittest::kittest::Key::Tab);
+        harness.get_by_role(Role::Image).focus();
+        harness.key_down(egui::Key::Tab);
         harness.run();
 
         // Press Enter to activate the focused key
-        harness
-            .get_by_role(Role::Image)
-            .key_down(egui_kittest::kittest::Key::Enter);
+        harness.get_by_role(Role::Image).focus();
+        harness.key_down(egui::Key::Enter);
         harness.run();
 
         // Verify binding dialog opened for Escape key

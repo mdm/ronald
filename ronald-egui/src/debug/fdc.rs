@@ -47,11 +47,11 @@ pub struct FdcDebugWindow {
 }
 
 impl FdcDebugWindow {
-    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         let mut open = self.show;
         egui::Window::new("FDC Internals")
             .open(&mut open)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 self.render_fdc_state(ui, debugger);
                 ui.separator();
                 self.render_breakpoints_section(ui, debugger);
@@ -1216,11 +1216,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Check that the window title is rendered
@@ -1242,11 +1242,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 0;
@@ -1262,11 +1262,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "0x42"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("0x42");
+            .unwrap();
+        input.focus();
+        input.type_text("0x42");
         harness.run();
 
         // Add breakpoint
@@ -1296,11 +1297,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 0;
@@ -1314,11 +1315,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "0x42"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("0x42");
+            .unwrap();
+        input.focus();
+        input.type_text("0x42");
         harness.run();
 
         // Add breakpoint
@@ -1361,11 +1363,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 0;
@@ -1429,11 +1431,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 0;
@@ -1449,11 +1451,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "invalid"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("invalid");
+            .unwrap();
+        input.focus();
+        input.type_text("invalid");
         harness.run();
 
         // Add breakpoint
@@ -1476,11 +1479,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -1496,11 +1499,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "0x42"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("0x42");
+            .unwrap();
+        input.focus();
+        input.type_text("0x42");
         harness.run();
 
         // Add breakpoint
@@ -1530,11 +1534,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -1548,11 +1552,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "0x42"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("0x42");
+            .unwrap();
+        input.focus();
+        input.type_text("0x42");
         harness.run();
 
         // Add breakpoint
@@ -1595,11 +1600,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -1663,11 +1668,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 1;
@@ -1683,11 +1688,12 @@ mod gui_tests {
         harness.run();
 
         // Enter value "invalid"
-        harness
+        let input = harness
             .get_all_by_role_and_label(accesskit::Role::TextInput, "Value:")
             .nth(i)
-            .unwrap()
-            .type_text("invalid");
+            .unwrap();
+        input.focus();
+        input.type_text("invalid");
         harness.run();
 
         // Add breakpoint
@@ -1710,11 +1716,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 2;
@@ -1780,11 +1786,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 2;
@@ -1840,11 +1846,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         let i = 2;

@@ -8,11 +8,11 @@ use crate::debug::{
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
-use crate::system_config::SystemConfigModal;
-
-pub use ronald_core::system::SystemConfig;
+use crate::system_config::{CoreSystemConfig, SystemConfig, SystemConfigModal, build_core_config};
+use crate::utils::sync::{Shared, SharedExt, shared};
 
 pub use crate::key_mapper::KeyMapStore;
+#[cfg(not(target_arch = "wasm32"))]
 pub use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 
 #[derive(Deserialize, Serialize)]
@@ -24,6 +24,8 @@ where
     workbench: bool,
     dark_mode: bool,
     system_config: SystemConfig,
+    #[serde(skip)]
+    core_config: Shared<Option<CoreSystemConfig>>,
     #[serde(skip)]
     frontend: Option<Frontend>,
     #[serde(skip)]
@@ -48,6 +50,7 @@ where
             workbench: false,
             dark_mode: true,
             system_config: SystemConfig::default(),
+            core_config: shared(None),
             frontend: None,
             key_map_editor: KeyMapEditor::default(),
             key_mapper: KeyMapper::default(),
@@ -83,32 +86,39 @@ where
     S: KeyMapStore,
 {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        let ctx = ui.ctx();
         let start = Instant::now();
-        egui_extras::install_image_loaders(ctx);
+        egui_extras::install_image_loaders(ui.ctx());
 
-        self.render_menu_bar(ctx);
-        self.initialize_frontend(ctx, frame);
-        self.render_emulator_only_mode(ctx);
-        self.render_workbench_mode(ctx);
-        self.key_map_editor.ui(ctx, &mut self.key_mapper);
-        let config_changed = self.system_config_modal.ui(ctx, &mut self.system_config);
-        if config_changed && let Some(render_state) = frame.wgpu_render_state() {
-            let new_frontend = Frontend::with_config(render_state, &self.system_config);
-            self.frontend = Some(new_frontend);
+        self.render_menu_bar(ui);
+        self.initialize_frontend(ui);
+        self.render_emulator_only_mode(ui);
+        self.render_workbench_mode(ui);
+        self.key_map_editor.ui(ui, &mut self.key_mapper);
+        let config_changed = self.system_config_modal.ui(ui, &mut self.system_config);
+        if config_changed {
+            build_core_config(&self.system_config, self.core_config.clone());
+        }
+
+        if let Some(core_config) = self
+            .core_config
+            .try_with_mut(|config| config.take())
+            .flatten()
+            && let Some(render_state) = frame.wgpu_render_state()
+        {
+            self.frontend = Some(Frontend::with_config(render_state, core_config));
         }
 
         if self.workbench
             && let Some(frontend) = &mut self.frontend
         {
-            self.cpu_debug_window.ui(ctx, frontend);
-            self.crtc_debug_window.ui(ctx, frontend);
-            self.fdc_debug_window.ui(ctx, frontend);
-            self.gate_array_debug_window.ui(ctx, frontend);
-            self.memory_debug_window.ui(ctx, frontend);
+            self.cpu_debug_window.ui(ui, frontend);
+            self.crtc_debug_window.ui(ui, frontend);
+            self.fdc_debug_window.ui(ui, frontend);
+            self.gate_array_debug_window.ui(ui, frontend);
+            self.memory_debug_window.ui(ui, frontend);
         }
 
-        ctx.request_repaint();
+        ui.ctx().request_repaint();
         let elapsed = Instant::now() - start;
         log::debug!("Frame time: {} us", elapsed.as_micros());
     }
@@ -122,23 +132,23 @@ impl<S> RonaldApp<S>
 where
     S: KeyMapStore,
 {
-    fn render_menu_bar(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+    fn render_menu_bar(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::top("menu_bar").show_inside(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("View", |ui| {
                     if ui
                         .add(egui::Button::new("Emulator Only").selected(!self.workbench))
                         .clicked()
                     {
                         self.workbench = false;
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui
                         .add(egui::Button::new("Workbench").selected(self.workbench))
                         .clicked()
                     {
                         self.workbench = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                     if self.workbench {
                         ui.separator();
@@ -147,7 +157,7 @@ where
                             .clicked()
                         {
                             self.cpu_debug_window.show = !self.cpu_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(
@@ -156,21 +166,21 @@ where
                             .clicked()
                         {
                             self.memory_debug_window.show = !self.memory_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(egui::Button::new("CRTC").selected(self.crtc_debug_window.show))
                             .clicked()
                         {
                             self.crtc_debug_window.show = !self.crtc_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(egui::Button::new("FDC").selected(self.fdc_debug_window.show))
                             .clicked()
                         {
                             self.fdc_debug_window.show = !self.fdc_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(
@@ -180,30 +190,30 @@ where
                             .clicked()
                         {
                             self.gate_array_debug_window.show = !self.gate_array_debug_window.show;
-                            ui.close_menu();
+                            ui.close();
                         }
                         ui.separator();
                         if ui.button("Organize Windows").clicked() {
                             ui.ctx().memory_mut(|mem| mem.reset_areas());
-                            ui.close_menu();
+                            ui.close();
                         }
                     }
                 });
                 ui.menu_button("Media", |ui| {
                     if ui.button("Drive A: Load DSK").clicked() {
-                        ui.close_menu();
+                        ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_disk_a();
                         }
                     }
                     if ui.button("Drive B: Load DSK").clicked() {
-                        ui.close_menu();
+                        ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_disk_b();
                         }
                     }
                     if ui.button("Tape: Load CDT").clicked() {
-                        ui.close_menu();
+                        ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_tape();
                         }
@@ -217,7 +227,7 @@ where
                         {
                             self.dark_mode = false;
                             ui.ctx().set_theme(egui::Theme::Light);
-                            ui.close_menu();
+                            ui.close();
                         }
                         if ui
                             .add(egui::Button::new("Dark").selected(self.dark_mode))
@@ -225,29 +235,41 @@ where
                         {
                             self.dark_mode = true;
                             ui.ctx().set_theme(egui::Theme::Dark);
-                            ui.close_menu();
+                            ui.close();
                         }
                     });
                     ui.separator();
                     if ui.button("System Configuration").clicked() {
                         self.system_config_modal.show = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.button("Key Bindings").clicked() {
                         self.key_map_editor.show = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
             });
         });
     }
 
-    fn initialize_frontend(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        if let (Some(render_state), None) = (&frame.wgpu_render_state, &self.frontend) {
-            // On WASM, show a welcome modal to work around the fact that browser audio contexts
-            // cannot be started without user interaction.
-            #[cfg(target_arch = "wasm32")]
-            egui::Modal::new("welcome_modal".into()).show(ctx, |ui| {
+    #[allow(unused_variables)]
+    fn initialize_frontend(&mut self, ui: &mut egui::Ui) {
+        if self.frontend.is_some() {
+            return;
+        }
+
+        if !self.system_config.is_valid() {
+            self.system_config_modal.show = true;
+            return;
+        }
+
+        // On WASM, show a welcome modal to work around the fact that browser audio contexts
+        // cannot be started without user interaction.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let system_config = &self.system_config;
+            let core_config = &self.core_config;
+            egui::Modal::new("welcome_modal".into()).show(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(10.0);
                     ui.label(format!("Welcome to Ronald {}", env!("CARGO_PKG_VERSION")));
@@ -255,22 +277,19 @@ where
                     ui.label("This emulator recreates the classic Amstrad CPC.");
                     ui.add_space(20.0);
                     if ui.button("Start Emulator").clicked() {
-                        let frontend = Frontend::with_config(render_state, &self.system_config);
-                        self.frontend = Some(frontend);
+                        build_core_config(system_config, core_config.clone());
                     }
                     ui.add_space(10.0);
                 });
             });
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                let frontend = Frontend::with_config(render_state, &self.system_config);
-                self.frontend = Some(frontend);
-            }
         }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        build_core_config(&self.system_config, self.core_config.clone());
     }
 
-    fn render_emulator_only_mode(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn render_emulator_only_mode(&mut self, ui: &mut egui::Ui) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             if let Some(frontend) = &mut self.frontend
                 && !self.workbench
             {
@@ -279,8 +298,8 @@ where
                         .with_cross_align(egui::Align::TOP),
                     |ui| {
                         frontend.ui(
-                            ctx,
-                            Some(ui),
+                            ui,
+                            false,
                             &mut self.key_mapper,
                             !self.key_map_editor.show && !self.system_config_modal.show,
                         );
@@ -290,13 +309,13 @@ where
         });
     }
 
-    fn render_workbench_mode(&mut self, ctx: &egui::Context) {
+    fn render_workbench_mode(&mut self, ui: &mut egui::Ui) {
         if let Some(frontend) = &mut self.frontend
             && self.workbench
         {
             frontend.ui(
-                ctx,
-                None,
+                ui,
+                true,
                 &mut self.key_mapper,
                 !self.key_map_editor.show && !self.system_config_modal.show,
             );

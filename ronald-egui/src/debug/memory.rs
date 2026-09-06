@@ -214,7 +214,7 @@ impl MemoryDebugWindow {
         });
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, debugger: &mut impl Debugger) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         if !self.show {
             return;
         }
@@ -222,7 +222,7 @@ impl MemoryDebugWindow {
         let mut open = self.show;
         egui::Window::new("Memory Internals")
             .open(&mut open)
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.heading("View Config");
                 self.render_view_mode_selector(ui, debugger);
                 self.render_color_configuration(ui);
@@ -696,8 +696,9 @@ mod gui_tests {
 
     use egui::accesskit;
     use egui_kittest::{Harness, kittest::Queryable};
+    use kittest::NodeT;
 
-    use ronald_core::debug::breakpoint::{CpuRegister16Breakpoint, GateArrayScreenModeBreakpoint};
+    use ronald_core::debug::breakpoint::CpuRegister16Breakpoint;
 
     use crate::debug::mock::TestDebugger;
 
@@ -709,11 +710,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Check that the window title is rendered
@@ -735,11 +736,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select "Disassembly" view mode
@@ -753,6 +754,9 @@ mod gui_tests {
         harness.run();
 
         // Type in PC address
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
+            .focus();
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
             .type_text("0x0000");
@@ -783,11 +787,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select "Disassembly" view mode
@@ -801,6 +805,9 @@ mod gui_tests {
         harness.run();
 
         // Type in PC address
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
+            .focus();
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "PC:")
             .type_text("0x0000");
@@ -843,11 +850,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select "Disassembly" view mode
@@ -881,11 +888,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select "Disassembly" view mode
@@ -899,6 +906,9 @@ mod gui_tests {
         harness.run();
 
         // Type 0xc000
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
             .type_text("0xc000");
@@ -930,11 +940,11 @@ mod gui_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Select view mode
@@ -950,17 +960,29 @@ mod gui_tests {
         // Type 0x2000
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
             .type_text("0x2000");
         harness.run();
 
-        let scroll_area = harness
+        // egui 0.34 no longer sets a bounding box on the label's immediate
+        // container, so walk up to the nearest ancestor that has one (the
+        // visible window area) to check whether the target row is on-screen.
+        let mut ancestor = harness.get_by_label("2000:").accesskit_node().parent();
+        let scroll_area = loop {
+            let node = ancestor.expect("no ancestor with a bounding box");
+            if let Some(bounding_box) = node.bounding_box() {
+                break bounding_box;
+            }
+            ancestor = node.parent();
+        };
+
+        let address_label = harness
             .get_by_label("2000:")
-            .parent()
-            .unwrap()
+            .accesskit_node()
             .bounding_box()
             .unwrap();
-
-        let address_label = harness.get_by_label("2000:").bounding_box().unwrap();
         assert!(!scroll_area.contains(address_label.origin()));
 
         // Jump to address
@@ -969,7 +991,11 @@ mod gui_tests {
             .click();
         harness.run();
 
-        let address_label = harness.get_by_label("2000:").bounding_box().unwrap();
+        let address_label = harness
+            .get_by_label("2000:")
+            .accesskit_node()
+            .bounding_box()
+            .unwrap();
         assert!(scroll_area.contains(address_label.origin()));
     }
 
@@ -1010,7 +1036,7 @@ mod snapshot_tests {
     use super::*;
 
     use egui::accesskit;
-    use egui_kittest::{Harness, kittest, kittest::Queryable};
+    use egui_kittest::{Harness, kittest::Queryable};
 
     use crate::debug::mock::TestDebugger;
 
@@ -1021,11 +1047,11 @@ mod snapshot_tests {
             ..Default::default()
         };
 
-        let app = |ctx: &egui::Context| {
-            window.ui(ctx, &mut debugger);
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
         };
 
-        let mut harness = Harness::new(app);
+        let mut harness = Harness::new_ui(app);
         harness.run();
 
         // Show color configuration
@@ -1070,7 +1096,7 @@ mod snapshot_tests {
             .unwrap();
         value.click();
         value.type_text("255");
-        value.key_press(kittest::Key::Escape); // close color picker
+        harness.key_press(egui::Key::Escape); // close color picker
         harness.run();
 
         // Jump to address of memory region

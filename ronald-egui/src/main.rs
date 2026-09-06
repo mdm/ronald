@@ -7,17 +7,18 @@ mod key_mapper;
 mod system_config;
 mod utils;
 
-use app::{RonaldApp, SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
+use app::RonaldApp;
 
 #[cfg(not(target_arch = "wasm32"))]
 use key_mapper::NativeKeyMapStore;
 #[cfg(target_arch = "wasm32")]
 use key_mapper::WebKeyMapStore;
 
-const SCALE_FACTOR: f32 = 1.5;
-
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
+    use app::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
+
+    const SCALE_FACTOR: f32 = 1.5;
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let native_options = eframe::NativeOptions {

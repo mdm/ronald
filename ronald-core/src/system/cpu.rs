@@ -921,7 +921,7 @@ where
 
         let (instruction, next_address) = self.decoder.decode(memory, pc as usize);
 
-        log::trace!("{:#06X}: {}", pc, &instruction);
+        log::trace!("{:#06X}: {}", pc, instruction);
 
         let mut timing_in_nops = instruction.timing();
 

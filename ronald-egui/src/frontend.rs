@@ -1,38 +1,32 @@
-use std::{path::PathBuf, thread::spawn};
+#[cfg(target_arch = "wasm32")]
+use std::path::PathBuf;
 
 use eframe::{egui, egui_wgpu};
 use egui::Vec2;
-use serde::{Deserialize, Serialize};
 use web_time::Instant;
-
-#[cfg(target_arch = "wasm32")]
-use web_sys;
 
 use ronald_core::{
     AudioSink, Driver,
     constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH},
     debug::{
-        breakpoint::{AnyBreakpoint, Breakpoint, BreakpointManager},
+        breakpoint::{AnyBreakpoint, BreakpointManager},
         view::SystemDebugView,
     },
     system::{SystemConfig, instruction::DecodedInstruction},
 };
 
-use crate::key_mapper::{KeyEvent, KeyMapStore, KeyMapper};
 use crate::utils::sync::{Shared, SharedExt, shared};
 use crate::{
     debug::Debugger,
     frontend::{audio::CpalAudio, video::EguiWgpuVideo},
 };
+use crate::{
+    key_mapper::{KeyEvent, KeyMapStore, KeyMapper},
+    utils::files::{File, pick_file},
+};
 
 mod audio;
 mod video;
-
-#[derive(Debug)]
-struct File {
-    path_buf: PathBuf,
-    image: Vec<u8>,
-}
 
 pub struct Frontend {
     initialized: bool,
@@ -51,7 +45,7 @@ pub struct Frontend {
 }
 
 impl Frontend {
-    pub fn with_config(render_state: &egui_wgpu::RenderState, config: &SystemConfig) -> Self {
+    pub fn with_config(render_state: &egui_wgpu::RenderState, config: SystemConfig) -> Self {
         let driver = Driver::with_config(config);
         Self::with_driver_and_render_state(driver, render_state)
     }
@@ -81,126 +75,64 @@ impl Frontend {
 
     pub fn ui<K>(
         &mut self,
-        ctx: &egui::Context,
-        ui: Option<&mut egui::Ui>,
+        ui: &mut egui::Ui,
+        workbench: bool,
         key_mapper: &mut KeyMapper<K>,
         can_interact: bool,
     ) where
         K: KeyMapStore,
     {
-        match ui {
-            Some(ui) => {
-                let size = self.calculate_emulator_display_size(ui);
-                self.run_frame(ctx, ui, size, false, can_interact, key_mapper);
-            }
-            None => {
-                let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
+        if workbench {
+            let size = egui::Vec2::new(SCREEN_BUFFER_WIDTH as f32, SCREEN_BUFFER_HEIGHT as f32);
 
-                if let Some(window) = egui::Window::new("Screen")
-                    .collapsible(false)
-                    .resizable(false)
-                    .default_size(size)
-                    .show(ctx, |ui| {
-                        self.run_frame(ctx, ui, size, true, can_interact, key_mapper);
-                    })
-                    && !self.initialized
-                {
-                    let layer_id = window.response.layer_id;
-                    ctx.move_to_top(layer_id);
-                    self.initialized = true;
-                }
+            if let Some(window) = egui::Window::new("Screen")
+                .collapsible(false)
+                .resizable(false)
+                .default_size(size)
+                .show(ui, |ui| {
+                    self.run_frame(ui, size, true, can_interact, key_mapper);
+                })
+                && !self.initialized
+            {
+                let layer_id = window.response.layer_id;
+                ui.move_to_top(layer_id);
+                self.initialized = true;
             }
+        } else {
+            let size = self.calculate_emulator_display_size(ui);
+            self.run_frame(ui, size, false, can_interact, key_mapper);
         }
     }
 
     pub fn pick_file_disk_a(&mut self) {
-        self.pick_file_internal(
+        pick_file(
             "Load DSK into Drive A:",
             "DSK Disk Image",
-            "dsk",
+            &["dsk"],
             self.picked_file_disk_a.clone(),
         );
     }
 
     pub fn pick_file_disk_b(&mut self) {
-        self.pick_file_internal(
+        pick_file(
             "Load DSK into Drive B:",
             "DSK Disk Image",
-            "dsk",
+            &["dsk"],
             self.picked_file_disk_b.clone(),
         );
     }
 
     pub fn pick_file_tape(&mut self) {
-        self.pick_file_internal(
+        pick_file(
             "Load Tape:",
             "CDT Tape Image",
-            "cdt",
+            &["cdt"],
             self.picked_file_tape.clone(),
         );
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    fn pick_file_internal(
-        &mut self,
-        title: &str,
-        filter_name: &str,
-        extension: &str,
-        picked_file: Shared<Option<File>>,
-    ) {
-        let title = title.to_string();
-        let filter_name = filter_name.to_string();
-        let extension = extension.to_string();
-        spawn(move || {
-            if let Some(file) = rfd::FileDialog::new()
-                .set_title(&title)
-                .add_filter(&filter_name, &[&extension])
-                .pick_file()
-            {
-                if let Ok(image) = std::fs::read(&file) {
-                    picked_file.with_mut(|f| {
-                        *f = Some(File {
-                            path_buf: file,
-                            image,
-                        });
-                    });
-                }
-            }
-        });
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn pick_file_internal(
-        &mut self,
-        title: &str,
-        filter_name: &str,
-        extension: &str,
-        picked_file: Shared<Option<File>>,
-    ) {
-        let title = title.to_string();
-        let filter_name = filter_name.to_string();
-        let extension = extension.to_string();
-        wasm_bindgen_futures::spawn_local(async move {
-            if let Some(file) = rfd::AsyncFileDialog::new()
-                .set_title(&title)
-                .add_filter(&filter_name, &[&extension])
-                .pick_file()
-                .await
-            {
-                let file_data = File {
-                    path_buf: file.file_name().into(),
-                    image: file.read().await,
-                };
-                picked_file.with_mut(|f| {
-                    *f = Some(file_data);
-                });
-            }
-        });
-    }
-
     fn run_frame<K>(
         &mut self,
-        ctx: &egui::Context,
         ui: &mut egui::Ui,
         size: egui::Vec2,
         workbench: bool,
@@ -212,18 +144,18 @@ impl Frontend {
     {
         self.can_interact = if workbench {
             // Workbench mode - check if window is active
-            let is_active_window = ctx.top_layer_id() == Some(ui.layer_id());
+            let is_active_window = ui.top_layer_id() == Some(ui.layer_id());
             is_active_window && can_interact && self.dropped_files.is_empty()
         } else {
             // Emulator only mode
             can_interact && self.dropped_files.is_empty()
         };
 
-        if !ctx.wants_keyboard_input() {
+        if !ui.egui_wants_keyboard_input() {
             ui.input(|input| self.handle_input(input, key_mapper));
         }
 
-        self.handle_dropped_files(ctx);
+        self.handle_dropped_files(ui);
         self.handle_picked_files();
 
         #[cfg(target_arch = "wasm32")]
@@ -236,8 +168,9 @@ impl Frontend {
         }
 
         self.step_emulation();
-        self.draw_framebuffer(ctx, ui, size, workbench)
+        self.draw_framebuffer(ui, size, workbench)
     }
+
     fn handle_input<K>(&mut self, input: &egui::InputState, key_mapper: &mut KeyMapper<K>)
     where
         K: KeyMapStore,
@@ -276,7 +209,7 @@ impl Frontend {
         }
     }
 
-    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
+    fn handle_dropped_files(&mut self, ui: &mut egui::Ui) {
         if let Some(dropped_file) = self.dropped_files.last() {
             let extension = dropped_file
                 .path_buf
@@ -285,7 +218,7 @@ impl Frontend {
                 .and_then(|s| s.into_string().ok());
             match extension.as_deref() {
                 Some("dsk") => {
-                    egui::Modal::new("drive_selection_modal".into()).show(ctx, |ui| {
+                    egui::Modal::new("drive_selection_modal".into()).show(ui, |ui| {
                         let filename = self
                             .dropped_files
                             .last()
@@ -332,7 +265,7 @@ impl Frontend {
                 .load_disk(1, picked_file.image, picked_file.path_buf);
         }
 
-        if let Some(picked_file) = self.picked_file_tape.try_with_mut(|f| f.take()).flatten() {
+        if let Some(_picked_file) = self.picked_file_tape.try_with_mut(|f| f.take()).flatten() {
             todo!("handle tape loading");
         }
     }
@@ -381,7 +314,6 @@ impl Frontend {
 
     fn draw_framebuffer(
         &mut self,
-        ctx: &egui::Context,
         ui: &mut egui::Ui,
         size: egui::Vec2,
         workbench: bool,
@@ -391,9 +323,9 @@ impl Frontend {
 
         let hovered = response
             .rect
-            .contains(ctx.input(|i| i.pointer.hover_pos()).unwrap_or_default());
+            .contains(ui.input(|i| i.pointer.hover_pos()).unwrap_or_default());
 
-        let moved = ctx.input(|i| i.pointer.delta() != Vec2::new(0.0, 0.0)) || response.clicked();
+        let moved = ui.input(|i| i.pointer.delta() != Vec2::new(0.0, 0.0)) || response.clicked();
 
         if hovered && moved {
             self.hovered = Some(Instant::now());
@@ -431,11 +363,12 @@ impl Frontend {
 
     #[cfg(target_arch = "wasm32")]
     fn has_window_focus(&self) -> bool {
-        if let Some(window) = web_sys::window() {
-            if let Some(document) = window.document() {
-                return document.has_focus().unwrap_or(true);
-            }
+        if let Some(window) = web_sys::window()
+            && let Some(document) = window.document()
+        {
+            return document.has_focus().unwrap_or(true);
         }
+
         true
     }
 

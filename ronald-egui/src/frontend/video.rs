@@ -8,7 +8,6 @@ use ronald_core::constants::{SCREEN_BUFFER_HEIGHT, SCREEN_BUFFER_WIDTH};
 pub struct EguiWgpuVideo {
     queue: wgpu::Queue,
     texture: wgpu::Texture,
-    texture_view: wgpu::TextureView,
     framebuffer_texture_id: egui::TextureId,
 }
 
@@ -44,7 +43,6 @@ impl EguiWgpuVideo {
         Self {
             queue: render_state.queue.clone(),
             texture,
-            texture_view,
             framebuffer_texture_id,
         }
     }
@@ -55,7 +53,7 @@ impl EguiWgpuVideo {
 }
 
 impl VideoSink for EguiWgpuVideo {
-    fn draw_frame(&mut self, buffer: &Vec<u8>) {
+    fn draw_frame(&mut self, buffer: &[u8]) {
         let texture_extent = wgpu::Extent3d {
             width: SCREEN_BUFFER_WIDTH as u32,
             height: SCREEN_BUFFER_HEIGHT as u32,

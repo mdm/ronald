@@ -1,6 +1,6 @@
+use std::{collections::HashMap, fmt::Display};
+#[cfg(not(target_arch = "wasm32"))]
 use std::{
-    collections::HashMap,
-    fmt::Display,
     fs::File,
     io::{BufReader, BufWriter},
 };
@@ -162,7 +162,7 @@ where
         guest_key: &str,
         shifted: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        for (_, guest_keys) in self.key_map.host_to_guest.iter_mut() {
+        for guest_keys in self.key_map.host_to_guest.values_mut() {
             guest_keys.retain(|old_binding| {
                 !(old_binding.iter().any(|old_key| old_key == guest_key)
                     && (!shifted || old_binding.iter().any(|old_key| old_key == "Shift")))
@@ -195,6 +195,7 @@ where
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn reset_all_bindings(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let key_map = self.key_map_store.reset_key_map()?;
 
@@ -338,12 +339,12 @@ impl<'a> KeyMapStore for NativeKeyMapStore<'a> {
                 }
             })
             .inspect_err(|err| {
-                log::error!("Failed to save key map: {}", &err);
-                if backup {
-                    if let Ok(()) = std::fs::rename(self.key_map_backup_path, self.key_map_path) {
-                        log::info!("Old key map restored successfully.");
-                    };
-                }
+                log::error!("Failed to save key map: {}", err);
+                if backup
+                    && let Ok(()) = std::fs::rename(self.key_map_backup_path, self.key_map_path)
+                {
+                    log::info!("Old key map restored successfully.");
+                };
             })
     }
 
@@ -559,8 +560,10 @@ mod tests {
 
     #[test]
     fn test_record_host_key_with_alt_gr_pressed() {
-        let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        mapper.alt_gr_pressed = true;
+        let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper {
+            alt_gr_pressed: true,
+            ..Default::default()
+        };
         let result = mapper.record_host_key(egui::Key::Q, true, egui::Modifiers::NONE);
         let host_key = result.unwrap();
         assert!(host_key.alt_gr);
@@ -568,8 +571,10 @@ mod tests {
 
     #[test]
     fn test_record_host_key_alt_right_release_clears_flag() {
-        let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
-        mapper.alt_gr_pressed = true;
+        let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper {
+            alt_gr_pressed: true,
+            ..Default::default()
+        };
         mapper.record_host_key(egui::Key::AltRight, false, egui::Modifiers::NONE);
         assert!(!mapper.alt_gr_pressed);
     }
@@ -622,8 +627,10 @@ mod tests {
             repeat: false,
             modifiers,
         }];
-        let mut raw_input = egui::RawInput::default();
-        raw_input.events = events;
+        let raw_input = egui::RawInput {
+            events,
+            ..Default::default()
+        };
         let mut input_state = egui::InputState::default();
         input_state.raw = raw_input;
         input_state
@@ -634,7 +641,7 @@ mod tests {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
         let input_state = egui::InputState::default();
         let result = mapper.try_set_binding("A", false, &input_state);
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]
@@ -642,7 +649,7 @@ mod tests {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
         let input_state = create_input_state_with_key(egui::Key::Q, egui::Modifiers::NONE, true);
         let result = mapper.try_set_binding("A", false, &input_state);
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
         assert_eq!(mapper.binding("A", false), Some("Q"));
 
         // Verify the binding works by testing key mapping
@@ -662,7 +669,7 @@ mod tests {
         let mut mapper: KeyMapper<MockKeyMapStore> = KeyMapper::default();
         let input_state = create_input_state_with_key(egui::Key::Q, egui::Modifiers::SHIFT, true);
         let result = mapper.try_set_binding("A", true, &input_state);
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
         assert_eq!(mapper.binding("A", true), Some("Shift + Q"));
 
         // Verify the binding works by testing key mapping
@@ -840,7 +847,7 @@ mod tests {
         // Rebind A to W (leaving B still bound to Q)
         let input_state = create_input_state_with_key(egui::Key::W, egui::Modifiers::NONE, true);
         let result = mapper.try_set_binding("A", false, &input_state);
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
 
         // Verify A is now bound to W
         assert_eq!(mapper.binding("A", false), Some("W"));

@@ -4,15 +4,17 @@ pub mod cpu;
 pub mod instruction;
 pub mod memory;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::debug::view::{CpuDebugView, GateArrayDebugView, MemoryDebugView, SystemDebugView};
+use crate::debug::view::{CpuDebugView, MemoryDebugView, SystemDebugView};
 use crate::debug::{Snapshottable, record_debug_events};
 use crate::system::bus::BusDebugView;
 use crate::system::clock::{MasterClock, MasterClockTick};
-use crate::system::instruction::{DecodedInstruction, Instruction};
+use crate::system::instruction::DecodedInstruction;
+use crate::system::memory::RomSlot;
 use crate::{AudioSink, VideoSink};
 
 use bus::crtc::AnyCrtController;
@@ -149,12 +151,13 @@ where
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(default)]
 pub struct SystemConfig {
     pub model: CpcModel,
     pub crtc: CrtcType,
     pub disk_drives: DiskDrives,
+    pub roms: HashMap<RomSlot, Vec<u8>>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -186,6 +189,7 @@ impl Default for SystemConfig {
             model: CpcModel::Cpc464,
             crtc: CrtcType::Type0,
             disk_drives: DiskDrives::None,
+            roms: HashMap::new(),
         }
     }
 }
@@ -228,9 +232,9 @@ where
     fn from(config: SystemConfig) -> Self {
         // Select memory implementation based on model
         let memory = match config.model {
-            CpcModel::Cpc464 => AnyMemory::CpcX64(MemoryCpcX64::default()),
-            CpcModel::Cpc664 => AnyMemory::CpcX64(MemoryCpcX64::default()),
-            CpcModel::Cpc6128 => AnyMemory::Cpc6128(MemoryCpc6128::default()),
+            CpcModel::Cpc464 => AnyMemory::CpcX64(MemoryCpcX64::new(config.roms)),
+            CpcModel::Cpc664 => AnyMemory::CpcX64(MemoryCpcX64::new(config.roms)),
+            CpcModel::Cpc6128 => AnyMemory::Cpc6128(MemoryCpc6128::new(config.roms)),
         };
 
         // Create CPU using Default trait

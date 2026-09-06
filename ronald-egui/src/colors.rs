@@ -1,7 +1,7 @@
 pub const BLACK: egui::Color32 = egui::Color32::BLACK;
 pub const WHITE: egui::Color32 = egui::Color32::WHITE;
 pub const MEDIUM_GRAY: egui::Color32 = egui::Color32::from_gray(120);
-pub const DARK_GRAY: egui::Color32 = egui::Color32::from_gray(160);
+pub const DARK_GRAY: egui::Color32 = egui::Color32::from_gray(60);
 pub const DARK_RED: egui::Color32 = egui::Color32::from_rgb(200, 50, 50);
 pub const LIGHT_RED: egui::Color32 = egui::Color32::from_rgb(255, 100, 100);
 pub const DEEP_MAGENTA: egui::Color32 = egui::Color32::from_rgb(220, 20, 120);
