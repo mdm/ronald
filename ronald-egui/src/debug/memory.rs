@@ -266,6 +266,7 @@ impl MemoryDebugWindow {
                         // TODO: show toast when wrapping
                         self.disassembly_start = Some((addr % size) as u16);
                         self.cached_disassembly = None; // Invalidate cache
+                        self.address_input.clear();
                     } else {
                         log::warn!("Failed to parse address: '{}'", self.address_input);
                     }
@@ -275,6 +276,7 @@ impl MemoryDebugWindow {
                     log::debug!("Setting scroll target to address: {:04X}", addr);
                     // TODO: show toast when wrapping
                     self.jump_to_address = Some(addr % size);
+                    self.address_input.clear();
                 } else {
                     log::warn!("Failed to parse address: '{}'", self.address_input);
                 }
@@ -1012,7 +1014,7 @@ mod snapshot_tests {
 
     use crate::debug::mock::TestDebugger;
 
-    fn pick_color_works(label: &str, snaphot: &str) {
+    fn pick_color_works(label: &str, address: &str, snaphot: &str) {
         let mut debugger = TestDebugger::default();
         let mut window = MemoryDebugWindow {
             show: true,
@@ -1028,6 +1030,11 @@ mod snapshot_tests {
 
         // Show color configuration
         harness.get_by_label("Address Color Coding").click();
+        harness.run();
+
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Restore Defaults")
+            .click();
         harness.run();
 
         harness.snapshot("memory_colors_defaults");
@@ -1066,7 +1073,33 @@ mod snapshot_tests {
         value.key_press(kittest::Key::Escape); // close color picker
         harness.run();
 
+        // Jump to address of memory region
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .type_text(address);
+        harness.run();
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Go")
+            .click();
+        harness.run();
+
         harness.snapshot(snaphot);
+
+        // Jump back to 0x0000
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .type_text("0x0000");
+        harness.run();
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Go")
+            .click();
+        harness.run();
 
         harness
             .get_by_role_and_label(accesskit::Role::Button, "Restore Defaults")
@@ -1079,24 +1112,28 @@ mod snapshot_tests {
     #[test]
     #[ignore = "snapshot test"]
     fn test_memory_debug_window_pick_color_lower_rom() {
-        pick_color_works("Lower ROM:", "memory_colors_lower_rom_changed");
+        pick_color_works("Lower ROM:", "0x0000", "memory_colors_lower_rom_changed");
     }
 
     #[test]
     #[ignore = "snapshot test"]
     fn test_memory_debug_window_pick_color_upper_rom() {
-        pick_color_works("Upper ROM:", "memory_colors_upper_rom_changed");
+        pick_color_works("Upper ROM:", "0xbfff", "memory_colors_upper_rom_changed");
     }
 
     #[test]
     #[ignore = "snapshot test"]
     fn test_memory_debug_window_pick_color_ram() {
-        pick_color_works("RAM:", "memory_colors_ram_changed");
+        pick_color_works("RAM:", "0x3fff", "memory_colors_ram_changed");
     }
 
     #[test]
     #[ignore = "snapshot test"]
     fn test_memory_debug_window_pick_color_extension_ram() {
-        pick_color_works("Extension RAM:", "memory_colors_extension_ram_changed");
+        pick_color_works(
+            "Extension RAM:",
+            "0x3fff",
+            "memory_colors_extension_ram_changed",
+        );
     }
 }

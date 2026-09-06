@@ -58,11 +58,8 @@ impl Frontend {
 
     fn with_driver_and_render_state(driver: Driver, render_state: &egui_wgpu::RenderState) -> Self {
         let audio = CpalAudio::new();
-        #[cfg(target_arch = "wasm32")]
-        {
-            // On WASM we need to ensure audio is played immediately
-            audio.play_audio();
-        }
+        audio.play_audio();
+
         let video = EguiWgpuVideo::new(render_state);
 
         Self {
