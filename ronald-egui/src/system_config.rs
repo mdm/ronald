@@ -79,39 +79,39 @@ impl Default for SystemConfig {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl TryFrom<&SystemConfig> for CoreSystemConfig {
-    type Error = anyhow::Error;
+pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystemConfig>>) {
+    let mut roms = HashMap::new();
+    let SystemConfig {
+        model,
+        crtc,
+        disk_drives,
+        ..
+    } = *config;
 
-    fn try_from(value: &SystemConfig) -> Result<Self, Self::Error> {
-        let mut roms = HashMap::new();
-
-        for rom in &value.assigned_roms {
-            let image = std::fs::read(&rom.key.0).map_err(|e| {
-                anyhow::anyhow!(
+    for rom in &config.assigned_roms {
+        let image = match std::fs::read(&rom.key.0) {
+            Ok(image) => image,
+            Err(e) => {
+                log::error!(
                     "Failed to read ROM file {:?} for slot {}: {}",
                     rom.key.0,
                     rom.slot,
                     e
-                )
-            })?;
-            roms.insert(rom.slot, image);
-        }
+                );
+                continue;
+            }
+        };
+        roms.insert(rom.slot, image);
+    }
 
-        Ok(Self {
-            model: value.model,
-            crtc: value.crtc,
-            disk_drives: value.disk_drives,
+    result.with_mut(|r| {
+        *r = Some(CoreSystemConfig {
+            model,
+            crtc,
+            disk_drives,
             roms,
         })
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystemConfig>>) {
-    match CoreSystemConfig::try_from(config) {
-        Ok(core_config) => result.with_mut(|r| *r = Some(core_config)),
-        Err(e) => log::error!("Failed to build system config: {}", e),
-    }
+    });
 }
 
 #[cfg(target_arch = "wasm32")]
