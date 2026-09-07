@@ -540,44 +540,37 @@ impl SystemConfigModal {
             egui::ComboBox::from_id_salt("rom_language_selector")
                 .selected_text(self.access_config().preferred_language.to_string())
                 .show_ui(ui, |ui| {
+                    let mut preferred_language = self.access_config_mut().preferred_language;
                     if ui
-                        .selectable_value(
-                            &mut self.access_config_mut().preferred_language,
-                            RomLanguage::Danish,
-                            "Danish",
-                        )
+                        .selectable_value(&mut preferred_language, RomLanguage::Danish, "Danish")
                         .clicked()
                     {
+                        self.unapply_auto_config();
+                        self.access_config_mut().preferred_language = preferred_language;
                         self.apply_auto_config();
                     }
                     if ui
-                        .selectable_value(
-                            &mut self.access_config_mut().preferred_language,
-                            RomLanguage::English,
-                            "English",
-                        )
+                        .selectable_value(&mut preferred_language, RomLanguage::English, "English")
                         .clicked()
                     {
+                        self.unapply_auto_config();
+                        self.access_config_mut().preferred_language = preferred_language;
                         self.apply_auto_config();
                     }
                     if ui
-                        .selectable_value(
-                            &mut self.access_config_mut().preferred_language,
-                            RomLanguage::French,
-                            "French",
-                        )
+                        .selectable_value(&mut preferred_language, RomLanguage::French, "French")
                         .clicked()
                     {
+                        self.unapply_auto_config();
+                        self.access_config_mut().preferred_language = preferred_language;
                         self.apply_auto_config();
                     }
                     if ui
-                        .selectable_value(
-                            &mut self.access_config_mut().preferred_language,
-                            RomLanguage::Spanish,
-                            "Spanish",
-                        )
+                        .selectable_value(&mut preferred_language, RomLanguage::Spanish, "Spanish")
                         .clicked()
                     {
+                        self.unapply_auto_config();
+                        self.access_config_mut().preferred_language = preferred_language;
                         self.apply_auto_config();
                     }
                 });
