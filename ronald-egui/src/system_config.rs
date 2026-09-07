@@ -37,12 +37,6 @@ pub struct SystemConfig {
     assigned_roms: Vec<AssignedRom>,
 }
 
-impl SystemConfig {
-    pub fn is_valid(&self) -> bool {
-        !self.assigned_roms.is_empty()
-    }
-}
-
 #[cfg(not(target_arch = "wasm32"))]
 impl Default for SystemConfig {
     fn default() -> Self {
@@ -78,8 +72,30 @@ impl Default for SystemConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum SystemConfigState {
+    Unknown,
+    Invalid,
+    Valid(CoreSystemConfig),
+}
+
+impl SystemConfigState {
+    pub fn take(&mut self) -> Self {
+        if let SystemConfigState::Valid(_) = self {
+            std::mem::replace(self, SystemConfigState::Unknown)
+        } else {
+            self.clone()
+        }
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
-pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystemConfig>>) {
+pub fn build_core_config(config: &SystemConfig, result: Shared<SystemConfigState>) {
+    if config.assigned_roms.is_empty() {
+        result.with_mut(|r| *r = SystemConfigState::Invalid);
+        return;
+    }
+
     let mut roms = HashMap::new();
     let SystemConfig {
         model,
@@ -88,6 +104,7 @@ pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystem
         ..
     } = *config;
 
+    let mut invalid = false;
     for rom in &config.assigned_roms {
         let image = match std::fs::read(&rom.key.0) {
             Ok(image) => image,
@@ -98,19 +115,24 @@ pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystem
                     rom.slot,
                     e
                 );
-                continue;
+                invalid = true;
+                break;
             }
         };
         roms.insert(rom.slot, image);
     }
 
     result.with_mut(|r| {
-        *r = Some(CoreSystemConfig {
-            model,
-            crtc,
-            disk_drives,
-            roms,
-        })
+        if invalid {
+            *r = SystemConfigState::Invalid;
+        } else {
+            *r = SystemConfigState::Valid(CoreSystemConfig {
+                model,
+                crtc,
+                disk_drives,
+                roms,
+            });
+        }
     });
 }
 
