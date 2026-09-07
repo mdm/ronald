@@ -96,7 +96,6 @@ pub fn build_core_config(config: &SystemConfig, result: Shared<SystemConfigState
         return;
     }
 
-    let mut roms = HashMap::new();
     let SystemConfig {
         model,
         crtc,
@@ -104,6 +103,7 @@ pub fn build_core_config(config: &SystemConfig, result: Shared<SystemConfigState
         ..
     } = *config;
 
+    let mut roms = HashMap::new();
     let mut invalid = false;
     for rom in &config.assigned_roms {
         let image = match std::fs::read(&rom.key.0) {
@@ -137,7 +137,12 @@ pub fn build_core_config(config: &SystemConfig, result: Shared<SystemConfigState
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystemConfig>>) {
+pub fn build_core_config(config: &SystemConfig, result: Shared<SystemConfigState>) {
+    if config.assigned_roms.is_empty() {
+        result.with_mut(|r| *r = SystemConfigState::Invalid);
+        return;
+    }
+
     let model = config.model;
     let crtc = config.crtc;
     let disk_drives = config.disk_drives;
@@ -158,25 +163,31 @@ pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystem
             .collect::<HashMap<_, _>>();
 
         let mut roms = HashMap::new();
-        for assigned in &assigned_roms {
-            let Some(image) = images.get(&assigned.key.0).cloned() else {
+        let mut invalid = false;
+        for rom in &assigned_roms {
+            let Some(image) = images.get(&rom.key.0).cloned() else {
                 log::error!(
                     "ROM image for slot {} is missing (hash {})",
-                    assigned.slot,
-                    hex::encode(&assigned.key.0)
+                    rom.slot,
+                    hex::encode(&rom.key.0)
                 );
-                return;
+                invalid = true;
+                break;
             };
-            roms.insert(assigned.slot, image);
+            roms.insert(rom.slot, image);
         }
 
         result.with_mut(|r| {
-            *r = Some(CoreSystemConfig {
-                model,
-                crtc,
-                disk_drives,
-                roms,
-            })
+            if invalid {
+                *r = SystemConfigState::Invalid;
+            } else {
+                *r = SystemConfigState::Valid(CoreSystemConfig {
+                    model,
+                    crtc,
+                    disk_drives,
+                    roms,
+                });
+            }
         });
     });
 }
