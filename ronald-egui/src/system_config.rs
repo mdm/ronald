@@ -3290,4 +3290,92 @@ mod gui_tests {
             }
         );
     }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_build_core_config_validates_assigned_roms_not_empty() {
+        let config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            assigned_roms: Vec::new(),
+            ..Default::default()
+        };
+
+        let core_config = shared(SystemConfigState::Unknown);
+
+        build_core_config(&config, core_config.clone());
+
+        core_config.with_mut(|state| {
+            assert!(
+                matches!(state, SystemConfigState::Invalid),
+                "empty assigned ROMs should result in an Invalid state"
+            );
+        });
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_build_core_config_detects_missing_roms() {
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_build_core_config_detects_missing_roms");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        let config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: Some(rom_folder.clone()),
+            assigned_roms: vec![AssignedRom {
+                key: RomKey(rom_folder.join("os6128_en.rom")),
+                slot: RomSlot::Lower,
+            }],
+            ..Default::default()
+        };
+
+        let core_config = shared(SystemConfigState::Unknown);
+
+        build_core_config(&config, core_config.clone());
+
+        core_config.with_mut(|state| {
+            assert!(
+                matches!(state, SystemConfigState::Invalid),
+                "missing ROMs should result in an Invalid state"
+            );
+        });
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_build_core_config_succeeds_with_existing_roms() {
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_build_core_config_succeeds_with_existing_roms");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        std::fs::write(rom_folder.join("os6128_en.rom"), b"dummy content").unwrap();
+
+        let config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: Some(rom_folder.clone()),
+            assigned_roms: vec![AssignedRom {
+                key: RomKey(rom_folder.join("os6128_en.rom")),
+                slot: RomSlot::Lower,
+            }],
+            ..Default::default()
+        };
+
+        let core_config = shared(SystemConfigState::Unknown);
+
+        build_core_config(&config, core_config.clone());
+
+        core_config.with_mut(|state| {
+            assert!(
+                matches!(state, SystemConfigState::Valid(_)),
+                "existing ROMs should result in a Valid state"
+            );
+        });
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
+    }
 }
