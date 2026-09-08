@@ -2663,6 +2663,87 @@ mod gui_tests {
     }
 
     #[test]
+    fn test_changing_the_preferred_language_reassigns_auto_configured_roms() {
+        let available_roms = vec![
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_da.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "c9b740d79546a988e12b86b16beb3dbd164b740cac64fe61afa2fcc8e591009c",
+                    Some(RomVariant::Language(RomLanguage::Danish)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("basic_fr.rom")),
+                info: RomInfo::from((
+                    "Locomotive BASIC 1.1",
+                    "fc9f747896664b6c89f6fd382691cf22d0840dbf8579b35af531b55b60f54aa5",
+                    Some(RomVariant::Language(RomLanguage::French)),
+                    Some(RomSlot::Upper(0)),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("amsdos.rom")),
+                info: RomInfo::from((
+                    "AMSDOS 0.5",
+                    "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
+                    None,
+                    Some(RomSlot::Upper(7)),
+                )),
+            },
+        ];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        harness.get_by_value("English").click();
+        harness.run();
+
+        harness.get_by_label("Danish").click();
+        harness.run();
+
+        harness.get_by_value("Danish").click();
+        harness.run();
+
+        harness.get_by_label("French").click();
+        harness.run();
+
+        drop(harness);
+
+        assert_eq!(modal.access_config().assigned_roms.len(), 2);
+        assert_eq!(
+            modal.access_config().assigned_roms[0],
+            AssignedRom {
+                key: RomKey(PathBuf::from("basic_fr.rom")),
+                slot: RomSlot::Upper(0)
+            }
+        );
+        assert_eq!(
+            modal.access_config().assigned_roms[1],
+            AssignedRom {
+                key: RomKey(PathBuf::from("amsdos.rom")),
+                slot: RomSlot::Upper(7)
+            }
+        );
+    }
+
+    #[test]
     fn test_manual_assignment_uses_the_slot_declared_by_the_rom() {
         let available_roms = vec![AvailableRom {
             key: RomKey(PathBuf::from("os6128_fr.rom")),
