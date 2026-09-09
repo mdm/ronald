@@ -95,7 +95,13 @@ where
         self.render_workbench_mode(ui);
         self.key_map_editor.ui(ui, &mut self.key_mapper);
         let config_changed = self.system_config_modal.ui(ui, &mut self.system_config);
-        if config_changed {
+        if config_changed
+            || (!self.system_config_modal.show
+                && self
+                    .core_config
+                    .try_with_mut(|config| matches!(config, SystemConfigState::Invalid))
+                    .is_some_and(|invalid| invalid))
+        {
             build_core_config(&self.system_config, self.core_config.clone());
         }
 
