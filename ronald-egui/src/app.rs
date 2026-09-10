@@ -8,7 +8,7 @@ use crate::debug::{
 use crate::frontend::Frontend;
 use crate::key_map_editor::KeyMapEditor;
 use crate::key_mapper::KeyMapper;
-use crate::system_config::{CoreSystemConfig, SystemConfig, SystemConfigModal, build_core_config};
+use crate::system_config::{SystemConfig, SystemConfigModal, SystemConfigState, build_core_config};
 use crate::utils::sync::{Shared, SharedExt, shared};
 
 pub use crate::key_mapper::KeyMapStore;
@@ -25,7 +25,7 @@ where
     dark_mode: bool,
     system_config: SystemConfig,
     #[serde(skip)]
-    core_config: Shared<Option<CoreSystemConfig>>,
+    core_config: Shared<SystemConfigState>,
     #[serde(skip)]
     frontend: Option<Frontend>,
     #[serde(skip)]
@@ -50,7 +50,7 @@ where
             workbench: false,
             dark_mode: true,
             system_config: SystemConfig::default(),
-            core_config: shared(None),
+            core_config: shared(SystemConfigState::Unknown),
             frontend: None,
             key_map_editor: KeyMapEditor::default(),
             key_mapper: KeyMapper::default(),
@@ -95,14 +95,18 @@ where
         self.render_workbench_mode(ui);
         self.key_map_editor.ui(ui, &mut self.key_mapper);
         let config_changed = self.system_config_modal.ui(ui, &mut self.system_config);
-        if config_changed {
+        if config_changed
+            || (!self.system_config_modal.show
+                && self
+                    .core_config
+                    .try_with_mut(|config| matches!(config, SystemConfigState::Invalid))
+                    .is_some_and(|invalid| invalid))
+        {
             build_core_config(&self.system_config, self.core_config.clone());
         }
 
-        if let Some(core_config) = self
-            .core_config
-            .try_with_mut(|config| config.take())
-            .flatten()
+        if let Some(SystemConfigState::Valid(core_config)) =
+            self.core_config.try_with_mut(|config| config.take())
             && let Some(render_state) = frame.wgpu_render_state()
         {
             self.frontend = Some(Frontend::with_config(render_state, core_config));
@@ -258,7 +262,10 @@ where
             return;
         }
 
-        if !self.system_config.is_valid() {
+        if self
+            .core_config
+            .with_mut(|config| matches!(config, SystemConfigState::Invalid))
+        {
             self.system_config_modal.show = true;
             return;
         }

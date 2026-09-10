@@ -37,12 +37,6 @@ pub struct SystemConfig {
     assigned_roms: Vec<AssignedRom>,
 }
 
-impl SystemConfig {
-    pub fn is_valid(&self) -> bool {
-        !self.assigned_roms.is_empty()
-    }
-}
-
 #[cfg(not(target_arch = "wasm32"))]
 impl Default for SystemConfig {
     fn default() -> Self {
@@ -78,44 +72,77 @@ impl Default for SystemConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum SystemConfigState {
+    Unknown,
+    Invalid,
+    Valid(CoreSystemConfig),
+}
+
+impl SystemConfigState {
+    pub fn take(&mut self) -> Self {
+        if let SystemConfigState::Valid(_) = self {
+            std::mem::replace(self, SystemConfigState::Unknown)
+        } else {
+            self.clone()
+        }
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
-impl TryFrom<&SystemConfig> for CoreSystemConfig {
-    type Error = anyhow::Error;
+pub fn build_core_config(config: &SystemConfig, result: Shared<SystemConfigState>) {
+    if config.assigned_roms.is_empty() {
+        result.with_mut(|r| *r = SystemConfigState::Invalid);
+        return;
+    }
 
-    fn try_from(value: &SystemConfig) -> Result<Self, Self::Error> {
-        let mut roms = HashMap::new();
+    let SystemConfig {
+        model,
+        crtc,
+        disk_drives,
+        ..
+    } = *config;
 
-        for rom in &value.assigned_roms {
-            let image = std::fs::read(&rom.key.0).map_err(|e| {
-                anyhow::anyhow!(
+    let mut roms = HashMap::new();
+    let mut invalid = false;
+    for rom in &config.assigned_roms {
+        let image = match std::fs::read(&rom.key.0) {
+            Ok(image) => image,
+            Err(e) => {
+                log::error!(
                     "Failed to read ROM file {:?} for slot {}: {}",
                     rom.key.0,
                     rom.slot,
                     e
-                )
-            })?;
-            roms.insert(rom.slot, image);
+                );
+                invalid = true;
+                break;
+            }
+        };
+        roms.insert(rom.slot, image);
+    }
+
+    result.with_mut(|r| {
+        if invalid {
+            *r = SystemConfigState::Invalid;
+        } else {
+            *r = SystemConfigState::Valid(CoreSystemConfig {
+                model,
+                crtc,
+                disk_drives,
+                roms,
+            });
         }
-
-        Ok(Self {
-            model: value.model,
-            crtc: value.crtc,
-            disk_drives: value.disk_drives,
-            roms,
-        })
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystemConfig>>) {
-    match CoreSystemConfig::try_from(config) {
-        Ok(core_config) => result.with_mut(|r| *r = Some(core_config)),
-        Err(e) => log::error!("Failed to build system config: {}", e),
-    }
+    });
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystemConfig>>) {
+pub fn build_core_config(config: &SystemConfig, result: Shared<SystemConfigState>) {
+    if config.assigned_roms.is_empty() {
+        result.with_mut(|r| *r = SystemConfigState::Invalid);
+        return;
+    }
+
     let model = config.model;
     let crtc = config.crtc;
     let disk_drives = config.disk_drives;
@@ -136,25 +163,31 @@ pub fn build_core_config(config: &SystemConfig, result: Shared<Option<CoreSystem
             .collect::<HashMap<_, _>>();
 
         let mut roms = HashMap::new();
-        for assigned in &assigned_roms {
-            let Some(image) = images.get(&assigned.key.0).cloned() else {
+        let mut invalid = false;
+        for rom in &assigned_roms {
+            let Some(image) = images.get(&rom.key.0).cloned() else {
                 log::error!(
                     "ROM image for slot {} is missing (hash {})",
-                    assigned.slot,
-                    hex::encode(&assigned.key.0)
+                    rom.slot,
+                    hex::encode(&rom.key.0)
                 );
-                return;
+                invalid = true;
+                break;
             };
-            roms.insert(assigned.slot, image);
+            roms.insert(rom.slot, image);
         }
 
         result.with_mut(|r| {
-            *r = Some(CoreSystemConfig {
-                model,
-                crtc,
-                disk_drives,
-                roms,
-            })
+            if invalid {
+                *r = SystemConfigState::Invalid;
+            } else {
+                *r = SystemConfigState::Valid(CoreSystemConfig {
+                    model,
+                    crtc,
+                    disk_drives,
+                    roms,
+                });
+            }
         });
     });
 }
@@ -540,44 +573,37 @@ impl SystemConfigModal {
             egui::ComboBox::from_id_salt("rom_language_selector")
                 .selected_text(self.access_config().preferred_language.to_string())
                 .show_ui(ui, |ui| {
+                    let mut preferred_language = self.access_config_mut().preferred_language;
                     if ui
-                        .selectable_value(
-                            &mut self.access_config_mut().preferred_language,
-                            RomLanguage::Danish,
-                            "Danish",
-                        )
+                        .selectable_value(&mut preferred_language, RomLanguage::Danish, "Danish")
                         .clicked()
                     {
+                        self.unapply_auto_config();
+                        self.access_config_mut().preferred_language = preferred_language;
                         self.apply_auto_config();
                     }
                     if ui
-                        .selectable_value(
-                            &mut self.access_config_mut().preferred_language,
-                            RomLanguage::English,
-                            "English",
-                        )
+                        .selectable_value(&mut preferred_language, RomLanguage::English, "English")
                         .clicked()
                     {
+                        self.unapply_auto_config();
+                        self.access_config_mut().preferred_language = preferred_language;
                         self.apply_auto_config();
                     }
                     if ui
-                        .selectable_value(
-                            &mut self.access_config_mut().preferred_language,
-                            RomLanguage::French,
-                            "French",
-                        )
+                        .selectable_value(&mut preferred_language, RomLanguage::French, "French")
                         .clicked()
                     {
+                        self.unapply_auto_config();
+                        self.access_config_mut().preferred_language = preferred_language;
                         self.apply_auto_config();
                     }
                     if ui
-                        .selectable_value(
-                            &mut self.access_config_mut().preferred_language,
-                            RomLanguage::Spanish,
-                            "Spanish",
-                        )
+                        .selectable_value(&mut preferred_language, RomLanguage::Spanish, "Spanish")
                         .clicked()
                     {
+                        self.unapply_auto_config();
+                        self.access_config_mut().preferred_language = preferred_language;
                         self.apply_auto_config();
                     }
                 });
@@ -2637,6 +2663,87 @@ mod gui_tests {
     }
 
     #[test]
+    fn test_changing_the_preferred_language_reassigns_auto_configured_roms() {
+        let available_roms = vec![
+            AvailableRom {
+                key: RomKey(PathBuf::from("os6128_da.rom")),
+                info: RomInfo::from((
+                    "CPC 6128 OS",
+                    "c9b740d79546a988e12b86b16beb3dbd164b740cac64fe61afa2fcc8e591009c",
+                    Some(RomVariant::Language(RomLanguage::Danish)),
+                    Some(RomSlot::Lower),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("basic_fr.rom")),
+                info: RomInfo::from((
+                    "Locomotive BASIC 1.1",
+                    "fc9f747896664b6c89f6fd382691cf22d0840dbf8579b35af531b55b60f54aa5",
+                    Some(RomVariant::Language(RomLanguage::French)),
+                    Some(RomSlot::Upper(0)),
+                )),
+            },
+            AvailableRom {
+                key: RomKey(PathBuf::from("amsdos.rom")),
+                info: RomInfo::from((
+                    "AMSDOS 0.5",
+                    "47085932df883b6d86101cfa12978846432e7aed3f7ccd738954e4c099220cd7",
+                    None,
+                    Some(RomSlot::Upper(7)),
+                )),
+            },
+        ];
+        let mut modal = SystemConfigModal {
+            show: true,
+            available_roms,
+            ..Default::default()
+        };
+
+        let mut config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            modal.ui(ui, &mut config);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        harness.get_by_value("English").click();
+        harness.run();
+
+        harness.get_by_label("Danish").click();
+        harness.run();
+
+        harness.get_by_value("Danish").click();
+        harness.run();
+
+        harness.get_by_label("French").click();
+        harness.run();
+
+        drop(harness);
+
+        assert_eq!(modal.access_config().assigned_roms.len(), 2);
+        assert_eq!(
+            modal.access_config().assigned_roms[0],
+            AssignedRom {
+                key: RomKey(PathBuf::from("basic_fr.rom")),
+                slot: RomSlot::Upper(0)
+            }
+        );
+        assert_eq!(
+            modal.access_config().assigned_roms[1],
+            AssignedRom {
+                key: RomKey(PathBuf::from("amsdos.rom")),
+                slot: RomSlot::Upper(7)
+            }
+        );
+    }
+
+    #[test]
     fn test_manual_assignment_uses_the_slot_declared_by_the_rom() {
         let available_roms = vec![AvailableRom {
             key: RomKey(PathBuf::from("os6128_fr.rom")),
@@ -3263,5 +3370,93 @@ mod gui_tests {
                 slot: RomSlot::Lower
             }
         );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_build_core_config_validates_assigned_roms_not_empty() {
+        let config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: None,
+            assigned_roms: Vec::new(),
+            ..Default::default()
+        };
+
+        let core_config = shared(SystemConfigState::Unknown);
+
+        build_core_config(&config, core_config.clone());
+
+        core_config.with_mut(|state| {
+            assert!(
+                matches!(state, SystemConfigState::Invalid),
+                "empty assigned ROMs should result in an Invalid state"
+            );
+        });
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_build_core_config_detects_missing_roms() {
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_build_core_config_detects_missing_roms");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        let config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: Some(rom_folder.clone()),
+            assigned_roms: vec![AssignedRom {
+                key: RomKey(rom_folder.join("os6128_en.rom")),
+                slot: RomSlot::Lower,
+            }],
+            ..Default::default()
+        };
+
+        let core_config = shared(SystemConfigState::Unknown);
+
+        build_core_config(&config, core_config.clone());
+
+        core_config.with_mut(|state| {
+            assert!(
+                matches!(state, SystemConfigState::Invalid),
+                "missing ROMs should result in an Invalid state"
+            );
+        });
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_build_core_config_succeeds_with_existing_roms() {
+        let rom_folder =
+            std::env::temp_dir().join("ronald_test_build_core_config_succeeds_with_existing_roms");
+        let _ = std::fs::remove_dir_all(&rom_folder);
+        let _ = std::fs::create_dir_all(&rom_folder);
+
+        std::fs::write(rom_folder.join("os6128_en.rom"), b"dummy content").unwrap();
+
+        let config = SystemConfig {
+            model: CpcModel::Cpc6128,
+            rom_folder: Some(rom_folder.clone()),
+            assigned_roms: vec![AssignedRom {
+                key: RomKey(rom_folder.join("os6128_en.rom")),
+                slot: RomSlot::Lower,
+            }],
+            ..Default::default()
+        };
+
+        let core_config = shared(SystemConfigState::Unknown);
+
+        build_core_config(&config, core_config.clone());
+
+        core_config.with_mut(|state| {
+            assert!(
+                matches!(state, SystemConfigState::Valid(_)),
+                "existing ROMs should result in a Valid state"
+            );
+        });
+
+        let _ = std::fs::remove_dir_all(&rom_folder);
     }
 }
