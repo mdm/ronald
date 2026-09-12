@@ -137,15 +137,17 @@ mod tests {
         }
 
         assert!(
-            screen.buffer[VISIBLE_LENGTH..BUFFER_LENGTH]
+            screen.buffer[VISIBLE_LENGTH..(VISIBLE_LENGTH + BORDER_WIDTH * 4)]
                 .as_chunks::<4>()
                 .0
                 .iter()
-                .all(|pixel| *pixel == HARDWARE_COLORS[11]),
+                .all(|pixel| *(pixel) == HARDWARE_COLORS[11]),
             "the wrapped tail of the last scan line is missing"
         );
         assert!(
-            screen.buffer[BUFFER_LENGTH..].iter().all(|&byte| byte == 0),
+            screen.buffer[(VISIBLE_LENGTH + BORDER_WIDTH * 4)..]
+                .iter()
+                .all(|&byte| byte == 0),
             "the spare row is written beyond the wrapped tail"
         );
     }
