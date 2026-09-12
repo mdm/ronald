@@ -25,7 +25,7 @@ pub trait GateArray: Default {
     ) -> bool;
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Amstrad40007 {
     current_screen_mode: u8,
@@ -36,25 +36,8 @@ pub struct Amstrad40007 {
     interrupt_counter: u8,
     hold_interrupt: bool,
     selected_pen: usize,
-    pen_colors: Vec<u8>,
+    pen_colors: [u8; 17], // 16 colors + border
     master_clock: MasterClockTick,
-}
-
-impl Default for Amstrad40007 {
-    fn default() -> Self {
-        Amstrad40007 {
-            current_screen_mode: 0,
-            requested_screen_mode: None,
-            hsync_active: false,
-            vsync_active: false,
-            hsyncs_since_last_vsync: 0,
-            interrupt_counter: 0,
-            hold_interrupt: false,
-            selected_pen: 0,
-            pen_colors: vec![0; 17], // 16 colors + border
-            master_clock: MasterClockTick::default(),
-        }
-    }
 }
 
 impl Amstrad40007 {
@@ -120,24 +103,23 @@ impl Amstrad40007 {
 
         if crtc.read_horizontal_sync() || crtc.read_vertical_sync() {
             // TODO: use modified hsync/vsync durations (see http://www.cpcwiki.eu/index.php?title=CRTC#HSYNC_and_VSYNC)
-            for _ in 0..16 {
-                // screen.write(20); // black
-                screen.write(self.pen_colors[0x10] as usize); // border // TODO: remove this workaround for the lengthened vsync problem
-            }
+            screen.write(&[20; 16]); // black
             return;
         }
 
         if !crtc.read_display_enabled() {
-            for _ in 0..16 {
-                screen.write(self.pen_colors[0x10] as usize); // border
-            }
+            screen.write(&[self.pen_colors[0x10]; 16]); // border
             return;
         }
 
+        // Both bytes are decoded into one 16-pixel batch, so the screen only
+        // does its gun arithmetic once per gate array step.
+        let mut colors = [0; 16];
         memory.force_ram_read(true);
         for offset in 0..2 {
             let address = crtc.read_address() + offset;
             let packed = memory.read_byte(address);
+            let colors = &mut colors[offset * 8..][..8];
             match self.current_screen_mode {
                 0 => {
                     let pixels = [
@@ -151,10 +133,8 @@ impl Amstrad40007 {
                             | ((packed & 0x01) << 3),
                     ];
 
-                    for pixel in pixels {
-                        for _ in 0..4 {
-                            screen.write(self.pen_colors[pixel as usize] as usize);
-                        }
+                    for (index, color) in colors.iter_mut().enumerate() {
+                        *color = self.pen_colors[pixels[index / 4] as usize];
                     }
                 }
                 1 => {
@@ -165,22 +145,22 @@ impl Amstrad40007 {
                         ((packed & 0x10) >> 4) | ((packed & 0x01) << 1),
                     ];
 
-                    for pixel in pixels {
-                        for _ in 0..2 {
-                            screen.write(self.pen_colors[pixel as usize] as usize);
-                        }
+                    for (index, color) in colors.iter_mut().enumerate() {
+                        *color = self.pen_colors[pixels[index / 2] as usize];
                     }
                 }
                 2 => {
-                    for bit in 0..8 {
+                    for (bit, color) in colors.iter_mut().enumerate() {
                         let pixel = (packed >> (7 - bit)) & 1;
-                        screen.write(self.pen_colors[pixel as usize] as usize);
+                        *color = self.pen_colors[pixel as usize];
                     }
                 }
                 _ => unimplemented!(),
             }
         }
         memory.force_ram_read(false);
+
+        screen.write(&colors);
     }
 }
 
@@ -305,7 +285,7 @@ impl Snapshottable for Amstrad40007 {
             interrupt_counter: self.interrupt_counter,
             hold_interrupt: self.hold_interrupt,
             selected_pen: self.selected_pen,
-            pen_colors: self.pen_colors.clone(),
+            pen_colors: self.pen_colors.to_vec(),
         }
     }
 }

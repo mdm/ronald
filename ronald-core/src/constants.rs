@@ -683,6 +683,20 @@ pub const FIRMWARE_COLORS: [[u8; 4]; 27] = [
     [0xff, 0xff, 0xff, 0xff], // 26
 ];
 
+/// Precomputed hardware colors to speed up screen's hot path.
+pub const HARDWARE_COLORS: [[u8; 4]; 32] = build_hardware_colors();
+
+const fn build_hardware_colors() -> [[u8; 4]; 32] {
+    let mut colors = [[0; 4]; 32];
+    let mut hardware_color = 0;
+    while hardware_color < colors.len() {
+        colors[hardware_color] = FIRMWARE_COLORS[HARDWARE_TO_FIRMWARE_COLORS[hardware_color]];
+        hardware_color += 1;
+    }
+
+    colors
+}
+
 // Hardware to firmware color mapping
 pub const HARDWARE_TO_FIRMWARE_COLORS: [usize; 32] = [
     13, // 0 (0x40)

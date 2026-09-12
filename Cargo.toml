@@ -5,3 +5,8 @@ default-members = ["ronald-egui"]
 
 [profile.dev]
 opt-level = 3
+codegen-units = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
