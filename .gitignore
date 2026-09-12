@@ -7,6 +7,8 @@ keyconfig*.yml
 keymap.json
 keymap.backup.json
 
+profile.json.gz
+
 # Local Netlify folder
 .netlify
 justfile
