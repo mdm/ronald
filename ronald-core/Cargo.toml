@@ -25,3 +25,7 @@ harness = false
 [[bench]]
 name = "screen_throughput"
 harness = false
+
+[[bench]]
+name = "pixel_unpacking"
+harness = false

@@ -118,41 +118,22 @@ impl Amstrad40007 {
         memory.force_ram_read(true);
         for offset in 0..2 {
             let address = crtc.read_address() + offset;
-            let packed = memory.read_byte(address);
+            let packed = memory.read_byte(address) as usize;
             let colors = &mut colors[offset * 8..][..8];
             match self.current_screen_mode {
                 0 => {
-                    let pixels = [
-                        ((packed & 0x80) >> 7)
-                            | ((packed & 0x08) >> 2)
-                            | ((packed & 0x20) >> 3)
-                            | ((packed & 0x02) << 2),
-                        ((packed & 0x40) >> 6)
-                            | ((packed & 0x04) >> 1)
-                            | ((packed & 0x10) >> 2)
-                            | ((packed & 0x01) << 3),
-                    ];
-
                     for (index, color) in colors.iter_mut().enumerate() {
-                        *color = self.pen_colors[pixels[index / 4] as usize];
+                        *color = self.pen_colors[MODE0_PEN_LUT[packed][index / 4] as usize];
                     }
                 }
                 1 => {
-                    let pixels = [
-                        ((packed & 0x80) >> 7) | ((packed & 0x08) >> 2),
-                        ((packed & 0x40) >> 6) | ((packed & 0x04) >> 1),
-                        ((packed & 0x20) >> 5) | (packed & 0x02),
-                        ((packed & 0x10) >> 4) | ((packed & 0x01) << 1),
-                    ];
-
                     for (index, color) in colors.iter_mut().enumerate() {
-                        *color = self.pen_colors[pixels[index / 2] as usize];
+                        *color = self.pen_colors[MODE1_PEN_LUT[packed][index / 2] as usize];
                     }
                 }
                 2 => {
-                    for (bit, color) in colors.iter_mut().enumerate() {
-                        let pixel = (packed >> (7 - bit)) & 1;
-                        *color = self.pen_colors[pixel as usize];
+                    for (index, color) in colors.iter_mut().enumerate() {
+                        *color = self.pen_colors[MODE2_PEN_LUT[packed][index] as usize];
                     }
                 }
                 _ => unimplemented!(),
@@ -344,3 +325,59 @@ impl Snapshottable for AnyGateArray {
         }
     }
 }
+
+// Lookup tables for decoding packed pixel data into pen numbers.
+
+const fn mode0_pen(b: u8) -> u8 {
+    ((b & 0x80) >> 7) | ((b & 0x20) >> 3) | ((b & 0x08) >> 2) | ((b & 0x02) << 2)
+}
+
+const fn mode1_pen(b: u8) -> u8 {
+    ((b & 0x80) >> 7) | ((b & 0x08) >> 2)
+}
+
+const MODE0_PEN_LUT: [[u8; 2]; 256] = {
+    let mut t = [[0u8; 2]; 256];
+    let mut i = 0;
+    while i < 256 {
+        t[i] = [mode0_pen(i as u8), mode0_pen((i as u8) << 1)];
+        i += 1;
+    }
+    t
+};
+
+const MODE1_PEN_LUT: [[u8; 4]; 256] = {
+    let mut t = [[0u8; 4]; 256];
+    let mut i = 0;
+    while i < 256 {
+        let b = i as u8;
+        t[i] = [
+            mode1_pen(b),
+            mode1_pen(b << 1),
+            mode1_pen(b << 2),
+            mode1_pen(b << 3),
+        ];
+        i += 1;
+    }
+    t
+};
+
+const MODE2_PEN_LUT: [[u8; 8]; 256] = {
+    let mut t = [[0u8; 8]; 256];
+    let mut i = 0;
+    while i < 256 {
+        let b = i as u8;
+        t[i] = [
+            (b & 0x80) >> 7,
+            (b & 0x40) >> 6,
+            (b & 0x20) >> 5,
+            (b & 0x10) >> 4,
+            (b & 0x08) >> 3,
+            (b & 0x04) >> 2,
+            (b & 0x02) >> 1,
+            b & 0x01,
+        ];
+        i += 1;
+    }
+    t
+};
