@@ -204,19 +204,37 @@ where
                     }
                 });
                 ui.menu_button("Media", |ui| {
-                    if ui.button("Drive A: Load DSK").clicked() {
+                    if ui
+                        .add_enabled(
+                            self.system_config.drive_a_enabled(),
+                            egui::Button::new("Drive A: Load DSK"),
+                        )
+                        .clicked()
+                    {
                         ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_disk_a();
                         }
                     }
-                    if ui.button("Drive B: Load DSK").clicked() {
+                    if ui
+                        .add_enabled(
+                            self.system_config.drive_b_enabled(),
+                            egui::Button::new("Drive B: Load DSK"),
+                        )
+                        .clicked()
+                    {
                         ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_disk_b();
                         }
                     }
-                    if ui.button("Tape: Load CDT").clicked() {
+                    if ui
+                        .add_enabled(
+                            self.system_config.tape_enabled(),
+                            egui::Button::new("Tape: Load CDT"),
+                        )
+                        .clicked()
+                    {
                         ui.close();
                         if let Some(frontend) = &mut self.frontend {
                             frontend.pick_file_tape();

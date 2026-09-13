@@ -1291,7 +1291,7 @@ pub struct FloppyDiskController {
 
 impl Default for FloppyDiskController {
     fn default() -> Self {
-        Self::new(1)
+        Self::new(2)
     }
 }
 
@@ -1715,7 +1715,11 @@ impl FloppyDiskController {
     }
 
     pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {
-        self.drives[drive].disk = match dsk_file::Disk::load(rom, path) {
+        let Some(drive) = self.drives.get_mut(drive) else {
+            return;
+        };
+
+        drive.disk = match dsk_file::Disk::load(rom, path) {
             Ok(disk) => {
                 log::info!("Disk loaded successfully");
                 Some(disk)
@@ -1724,7 +1728,7 @@ impl FloppyDiskController {
                 log::warn!("Disk could not be loaded: {error}");
                 None
             }
-        }
+        };
     }
 
     fn enter_phase(&mut self, phase: Phase) {

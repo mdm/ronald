@@ -37,6 +37,18 @@ pub struct SystemConfig {
     assigned_roms: Vec<AssignedRom>,
 }
 
+impl SystemConfig {
+    pub fn drive_a_enabled(&self) -> bool {
+        matches!(self.disk_drives, DiskDrives::One | DiskDrives::Two)
+    }
+    pub fn drive_b_enabled(&self) -> bool {
+        matches!(self.disk_drives, DiskDrives::Two)
+    }
+    pub fn tape_enabled(&self) -> bool {
+        matches!(self.model, CpcModel::Cpc464)
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl Default for SystemConfig {
     fn default() -> Self {
