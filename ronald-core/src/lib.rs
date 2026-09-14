@@ -8,6 +8,7 @@ use system::instruction::AlgorithmicDecoder;
 use system::memory::AnyMemory;
 use system::{AmstradCpc, SystemConfig};
 
+use crate::system::DiskDrives;
 use crate::system::instruction::DecodedInstruction;
 
 pub mod constants;
@@ -89,6 +90,10 @@ impl Driver {
             self.system
                 .unset_key(key_definition.line, key_definition.bit);
         }
+    }
+
+    pub fn disk_drives(&self) -> DiskDrives {
+        self.system.disk_drives()
     }
 
     pub fn load_disk(&mut self, drive: usize, rom: Vec<u8>, path: PathBuf) {

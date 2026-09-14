@@ -12,7 +12,7 @@ use ronald_core::{
         breakpoint::{AnyBreakpoint, BreakpointManager},
         view::SystemDebugView,
     },
-    system::{SystemConfig, instruction::DecodedInstruction},
+    system::{DiskDrives, SystemConfig, instruction::DecodedInstruction},
 };
 
 use crate::utils::sync::{Shared, SharedExt, shared};
@@ -217,33 +217,44 @@ impl Frontend {
                 .map(|s| s.to_ascii_lowercase())
                 .and_then(|s| s.into_string().ok());
             match extension.as_deref() {
-                Some("dsk") => {
-                    egui::Modal::new("drive_selection_modal".into()).show(ui, |ui| {
-                        let filename = self
-                            .dropped_files
-                            .last()
-                            .and_then(|f| f.path_buf.file_name())
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or("unknown file".into());
-
-                        ui.label(format!("Choose disk drive to load \"{filename}\" into:"));
-
-                        ui.horizontal(|ui| {
-                            if ui.button("Drive A").clicked() {
-                                self.picked_file_disk_a.with_mut(|f| {
-                                    *f = self.dropped_files.pop();
-                                });
-                            }
-
-                            if ui.button("Drive B").clicked() {
-                                self.picked_file_disk_b.with_mut(|f| {
-                                    *f = self.dropped_files.pop();
-                                });
-                            }
+                Some("dsk") => match self.driver.disk_drives() {
+                    DiskDrives::None => {
+                        log::warn!("No disk drives available to load DSK file");
+                        self.dropped_files.pop();
+                    }
+                    DiskDrives::One => {
+                        self.picked_file_disk_a.with_mut(|f| {
+                            *f = self.dropped_files.pop();
                         });
-                    });
-                }
+                    }
+                    DiskDrives::Two => {
+                        egui::Modal::new("drive_selection_modal".into()).show(ui, |ui| {
+                            let filename = self
+                                .dropped_files
+                                .last()
+                                .and_then(|f| f.path_buf.file_name())
+                                .and_then(|s| s.to_str())
+                                .map(|s| s.to_string())
+                                .unwrap_or("unknown file".into());
+
+                            ui.label(format!("Choose disk drive to load \"{filename}\" into:"));
+
+                            ui.horizontal(|ui| {
+                                if ui.button("Drive A").clicked() {
+                                    self.picked_file_disk_a.with_mut(|f| {
+                                        *f = self.dropped_files.pop();
+                                    });
+                                }
+
+                                if ui.button("Drive B").clicked() {
+                                    self.picked_file_disk_b.with_mut(|f| {
+                                        *f = self.dropped_files.pop();
+                                    });
+                                }
+                            });
+                        });
+                    }
+                },
                 Some("cdt") => {
                     self.picked_file_tape.try_with_mut(|f| {
                         *f = self.dropped_files.pop();

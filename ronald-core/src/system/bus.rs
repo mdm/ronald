@@ -6,6 +6,7 @@ use crate::debug::Snapshottable;
 use crate::debug::view::{CrtcDebugView, FdcDebugView, GateArrayDebugView};
 use crate::system::clock::MasterClockTick;
 use crate::system::memory::{MemManage, MemRead};
+use crate::system::{CrtcType, DiskDrives};
 use crate::{AudioSink, VideoSink};
 
 pub mod crtc;
@@ -64,6 +65,25 @@ where
     psg: SoundGenerator,
     screen: Screen,
     tape: TapeController,
+}
+
+impl<C, G> StandardBus<C, G>
+where
+    C: CrtController,
+    G: GateArray,
+{
+    pub fn new(_crtc_type: CrtcType, disk_drives: DiskDrives) -> Self {
+        let fdc = match disk_drives {
+            DiskDrives::None => FloppyDiskController::new(0),
+            DiskDrives::One => FloppyDiskController::new(1),
+            DiskDrives::Two => FloppyDiskController::new(2),
+        };
+
+        Self {
+            fdc,
+            ..Default::default()
+        }
+    }
 }
 
 impl<C, G> Bus for StandardBus<C, G>

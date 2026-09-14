@@ -95,6 +95,10 @@ where
         // TODO: allow loading tapes as well
         self.bus.load_disk(drive, rom, path);
     }
+
+    pub fn disk_drives(&self) -> DiskDrives {
+        self.disk_drives
+    }
 }
 
 impl<C, M, B> AmstradCpc<C, M, B>
@@ -186,9 +190,9 @@ pub enum DiskDrives {
 impl Default for SystemConfig {
     fn default() -> Self {
         Self {
-            model: CpcModel::Cpc464,
+            model: CpcModel::Cpc6128,
             crtc: CrtcType::Type0,
-            disk_drives: DiskDrives::None,
+            disk_drives: DiskDrives::Two,
             roms: HashMap::new(),
         }
     }
@@ -230,19 +234,14 @@ where
     C: Cpu + Default,
 {
     fn from(config: SystemConfig) -> Self {
-        // Select memory implementation based on model
         let memory = match config.model {
             CpcModel::Cpc464 => AnyMemory::CpcX64(MemoryCpcX64::new(config.roms)),
             CpcModel::Cpc664 => AnyMemory::CpcX64(MemoryCpcX64::new(config.roms)),
             CpcModel::Cpc6128 => AnyMemory::Cpc6128(MemoryCpc6128::new(config.roms)),
         };
 
-        // Create CPU using Default trait
         let cpu = C::default();
-
-        // Create bus with Any* components
-        // Note: Taking liberties here as requested since not all CRTC and Gate Array variants are implemented
-        let bus = StandardBus::default();
+        let bus = StandardBus::new(config.crtc, config.disk_drives);
 
         AmstradCpc {
             cpu,
