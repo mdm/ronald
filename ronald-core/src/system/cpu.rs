@@ -2392,7 +2392,7 @@ mod tests {
     #[test]
     #[ignore = "this is an extremely slow test"]
     fn test_zexdoc_slow() {
-        let rom = include_bytes!("../../rom/zexdoc.rom");
+        let rom = include_bytes!("../../tests/roms/zexdoc.rom");
         let mut harness = ZexHarness::new(rom);
         assert_eq!(harness.emulate(), 67);
     }
