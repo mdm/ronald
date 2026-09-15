@@ -123,7 +123,6 @@ where
             0xf8ff => (), // peripheral soft reset (ignored)
             _ => {
                 log::error!("Unhandled write to port {port:#06X}: {value:#010b}");
-                unimplemented!();
             }
         }
     }

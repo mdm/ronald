@@ -108,11 +108,13 @@ pub struct HitachiHd6845s {
 
 impl HitachiHd6845s {
     fn select_register(&mut self, register: usize) {
-        self.selected_register = register;
+        let Ok(register) = Register::try_from(register) else {
+            return;
+        };
+
+        self.selected_register = register.into();
         self.emit_debug_event(
-            CrtcDebugEvent::RegisterSelected {
-                register: Register::try_from(register).expect("Invalid CRTC register selected"),
-            },
+            CrtcDebugEvent::RegisterSelected { register },
             self.master_clock,
         );
     }
@@ -168,7 +170,7 @@ impl CrtController for HitachiHd6845s {
         let function = (port >> 8) & 0x03;
 
         match function {
-            2 => todo!("handle read depending on CRTC type"),
+            2 => 0xff, // TODO: handle read depending on CRTC type
             3 => self.read_register(),
             _ => 0xff, // TODO: properly emulate floating bus
         }
