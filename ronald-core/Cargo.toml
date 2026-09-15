@@ -29,3 +29,7 @@ harness = false
 [[bench]]
 name = "pixel_unpacking"
 harness = false
+
+[[bench]]
+name = "system_throughput"
+harness = false
