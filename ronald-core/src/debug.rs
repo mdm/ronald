@@ -168,6 +168,14 @@ impl SubscriptionRegistry {
 
     fn unsubscribe(&mut self, id: SubscriptionId) {
         self.active_subscriptions.remove(&id);
+
+        if self.active_subscriptions.is_empty() {
+            DEBUG_EVENT_LOG.with(|log| {
+                let mut log = log.borrow_mut();
+                log.events.clear();
+                log.first_sequence = log.next_sequence;
+            });
+        }
     }
 
     fn consume_events(&mut self, id: SubscriptionId, first_unconsumed: EventSequence) {
