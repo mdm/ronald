@@ -1531,7 +1531,7 @@ impl fmt::Display for AnyBreakpoint {
 pub struct BreakpointManager {
     breakpoints: HashMap<BreakpointId, AnyBreakpoint>,
     next_id: usize,
-    subscription: EventSubscription,
+    subscription: Option<EventSubscription>,
 }
 
 impl BreakpointManager {
@@ -1539,7 +1539,7 @@ impl BreakpointManager {
         Self {
             breakpoints: HashMap::new(),
             next_id: 0,
-            subscription: EventSubscription::new(DebugSource::Any),
+            subscription: None,
         }
     }
 
@@ -1547,11 +1547,16 @@ impl BreakpointManager {
         let id = BreakpointId(self.next_id);
         self.next_id += 1;
         self.breakpoints.insert(id, breakpoint);
+        self.subscription
+            .get_or_insert_with(|| EventSubscription::new(DebugSource::Any));
         id
     }
 
     pub fn remove_breakpoint(&mut self, id: BreakpointId) -> bool {
-        self.breakpoints.remove(&id).is_some()
+        let removed = self.breakpoints.remove(&id).is_some();
+        self.unsubscribe_if_idle();
+
+        removed
     }
 
     pub fn enable_breakpoint(&mut self, id: BreakpointId, enabled: bool) -> bool {
@@ -1583,6 +1588,13 @@ impl BreakpointManager {
 
     pub fn clear_all(&mut self) {
         self.breakpoints.clear();
+        self.unsubscribe_if_idle();
+    }
+
+    fn unsubscribe_if_idle(&mut self) {
+        if self.breakpoints.is_empty() {
+            self.subscription = None;
+        }
     }
 
     pub fn any_triggered(&self) -> bool {
@@ -1590,6 +1602,10 @@ impl BreakpointManager {
     }
 
     pub fn evaluate_breakpoints(&mut self) {
+        let Some(subscription) = &mut self.subscription else {
+            return;
+        };
+
         // Remove triggered one-shot breakpoints
         self.breakpoints
             .retain(|_id, bp| bp.triggered().is_none() || !bp.one_shot());
@@ -1599,13 +1615,16 @@ impl BreakpointManager {
             breakpoint.set_triggered(None);
         }
 
-        self.subscription.with_events(|record| {
-            for breakpoint in self.breakpoints.values_mut() {
+        let breakpoints = &mut self.breakpoints;
+        subscription.with_events(|record| {
+            for breakpoint in breakpoints.values_mut() {
                 if breakpoint.should_break(record.source, &record.event) {
                     breakpoint.set_triggered(Some(record.master_clock));
                 }
             }
         });
+
+        self.unsubscribe_if_idle();
     }
 }
 
@@ -2058,13 +2077,12 @@ mod tests {
     fn test_step_out_from_inside_function() {
         let mut manager = BreakpointManager::new();
 
-        // Simulate that we're already inside a function by creating the breakpoint
-        // after a call has been made (this is the typical debugging scenario)
+        // Create step_out breakpoint (starts with depth 1)
+        let step_out_id = manager.add_breakpoint(AnyBreakpoint::step_out());
+
+        // Descend one level deeper.
         let call_event = DebugEvent::Cpu(CpuDebugEvent::CallFetched { interrupt: false });
         emit_event(DebugSource::Cpu, call_event, MasterClockTick::default());
-
-        // Now create step_out breakpoint (starts with depth 1)
-        let step_out_id = manager.add_breakpoint(AnyBreakpoint::step_out());
 
         // Evaluate breakpoints so the CallStackBreakpoint can process the call event
         // This will increment its internal depth from 1 to 2

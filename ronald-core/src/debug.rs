@@ -68,7 +68,7 @@ impl EventLog {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct SubscriptionId(usize);
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EventSubscription {
     id: SubscriptionId,
     source: DebugSource,
@@ -203,6 +203,12 @@ thread_local! {
 }
 
 pub fn emit_event(source: DebugSource, event: DebugEvent, master_clock: MasterClockTick) {
+    let no_subscriptions = DEBUG_SUBSCRIPTION_REGISTRY
+        .with_borrow(|registry| registry.active_subscriptions.is_empty());
+    if no_subscriptions {
+        return;
+    }
+
     DEBUG_EVENT_LOG.with_borrow_mut(|log| log.append(source, event, master_clock));
 }
 
@@ -619,6 +625,8 @@ mod tests {
             assert_eq!(initial_sequence.0, 0);
         });
 
+        let _subscription = EventSubscription::new(DebugSource::Cpu);
+
         emit_event(
             DebugSource::Cpu,
             DebugEvent::Cpu(event::CpuDebugEvent::Register8Written {
@@ -637,6 +645,8 @@ mod tests {
 
     #[test]
     fn test_sequence_boundary_consecutive_events() {
+        let _subscription = EventSubscription::new(DebugSource::Cpu);
+
         for i in 0..5 {
             emit_event(
                 DebugSource::Cpu,
