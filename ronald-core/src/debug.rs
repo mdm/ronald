@@ -205,8 +205,11 @@ pub fn emit_event(source: DebugSource, event: DebugEvent, master_clock: MasterCl
     DEBUG_EVENT_LOG.with(|log| log.borrow_mut().append(source, event, master_clock));
 }
 
-pub fn record_debug_events(enabled: bool) {
-    DEBUG_EVENT_LOG.with(|log| log.borrow_mut().enabled = enabled);
+pub fn record_debug_events(enabled: bool) -> bool {
+    DEBUG_EVENT_LOG.with(|log| {
+        let mut log = log.borrow_mut();
+        std::mem::replace(&mut log.enabled, enabled)
+    })
 }
 
 pub trait Snapshottable {

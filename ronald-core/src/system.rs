@@ -108,7 +108,7 @@ where
     B: Bus,
 {
     pub fn disassemble(&self, start_address: u16, count: usize) -> Vec<DecodedInstruction> {
-        record_debug_events(false);
+        let recording = record_debug_events(false);
         let mut decoder = AlgorithmicDecoder::default();
         let mut disassembly = Vec::with_capacity(count + 1);
         let mut address = start_address;
@@ -125,7 +125,7 @@ where
             });
             address = next_address as u16;
         }
-        record_debug_events(true);
+        record_debug_events(recording);
         disassembly
     }
 }
@@ -139,7 +139,7 @@ where
     type View = SystemDebugView;
 
     fn debug_view(&self) -> Self::View {
-        record_debug_events(false);
+        let recording = record_debug_events(false);
         let bus_debug_view = self.bus.debug_view();
         let debug_view = Self::View {
             master_clock: self.master_clock.current(),
@@ -149,7 +149,7 @@ where
             crtc: bus_debug_view.crtc,
             fdc: bus_debug_view.fdc,
         };
-        record_debug_events(true);
+        record_debug_events(recording);
 
         debug_view
     }
