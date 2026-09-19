@@ -77,9 +77,9 @@ pub struct EventSubscription {
 
 impl EventSubscription {
     pub fn new(source: DebugSource) -> Self {
-        let first_unconsumed = DEBUG_EVENT_LOG.with(|log| log.borrow().next_sequence);
+        let first_unconsumed = DEBUG_EVENT_LOG.with_borrow(|log| log.next_sequence);
         let id = DEBUG_SUBSCRIPTION_REGISTRY
-            .with(|registry| registry.borrow_mut().subcribe(first_unconsumed));
+            .with_borrow_mut(|registry| registry.subcribe(first_unconsumed));
 
         Self {
             id,
@@ -92,8 +92,7 @@ impl EventSubscription {
     where
         F: FnMut(&EventRecord),
     {
-        DEBUG_EVENT_LOG.with(|log| {
-            let log = log.borrow();
+        DEBUG_EVENT_LOG.with_borrow(|log| {
             let first_unconsumed = self.first_unconsumed.0 - log.first_sequence.0;
 
             for record in &log.events[first_unconsumed as usize..] {
@@ -104,15 +103,13 @@ impl EventSubscription {
             }
         });
 
-        DEBUG_SUBSCRIPTION_REGISTRY.with(|registry| {
-            registry
-                .borrow_mut()
-                .consume_events(self.id, self.first_unconsumed);
+        DEBUG_SUBSCRIPTION_REGISTRY.with_borrow_mut(|registry| {
+            registry.consume_events(self.id, self.first_unconsumed);
         });
     }
 
     pub fn has_pending(&self) -> bool {
-        DEBUG_EVENT_LOG.with(|log| log.borrow().next_sequence > self.first_unconsumed)
+        DEBUG_EVENT_LOG.with_borrow(|log| log.next_sequence > self.first_unconsumed)
     }
 
     pub fn pending_count(&self) -> u64 {
@@ -120,8 +117,7 @@ impl EventSubscription {
             return 0;
         }
 
-        DEBUG_EVENT_LOG.with(|log| {
-            let log = log.borrow();
+        DEBUG_EVENT_LOG.with_borrow(|log| {
             let mut count = 0;
 
             for record in &log.events {
@@ -139,8 +135,8 @@ impl EventSubscription {
 
 impl Drop for EventSubscription {
     fn drop(&mut self) {
-        DEBUG_SUBSCRIPTION_REGISTRY.with(|registry| {
-            registry.borrow_mut().unsubscribe(self.id);
+        DEBUG_SUBSCRIPTION_REGISTRY.with_borrow_mut(|registry| {
+            registry.unsubscribe(self.id);
         });
     }
 }
@@ -170,8 +166,7 @@ impl SubscriptionRegistry {
         self.active_subscriptions.remove(&id);
 
         if self.active_subscriptions.is_empty() {
-            DEBUG_EVENT_LOG.with(|log| {
-                let mut log = log.borrow_mut();
+            DEBUG_EVENT_LOG.with_borrow_mut(|log| {
                 log.events.clear();
                 log.first_sequence = log.next_sequence;
             });
@@ -193,9 +188,7 @@ impl SubscriptionRegistry {
             return;
         }
 
-        DEBUG_EVENT_LOG.with(|log| {
-            let mut log = log.borrow_mut();
-
+        DEBUG_EVENT_LOG.with_borrow_mut(|log| {
             let retain_from = min_first_unconsumed.0 - log.first_sequence.0;
             log.events.drain(0..retain_from as usize);
             log.first_sequence = min_first_unconsumed;
@@ -210,14 +203,11 @@ thread_local! {
 }
 
 pub fn emit_event(source: DebugSource, event: DebugEvent, master_clock: MasterClockTick) {
-    DEBUG_EVENT_LOG.with(|log| log.borrow_mut().append(source, event, master_clock));
+    DEBUG_EVENT_LOG.with_borrow_mut(|log| log.append(source, event, master_clock));
 }
 
 pub fn record_debug_events(enabled: bool) -> bool {
-    DEBUG_EVENT_LOG.with(|log| {
-        let mut log = log.borrow_mut();
-        std::mem::replace(&mut log.enabled, enabled)
-    })
+    DEBUG_EVENT_LOG.with_borrow_mut(|log| std::mem::replace(&mut log.enabled, enabled))
 }
 
 pub trait Snapshottable {
@@ -624,8 +614,8 @@ mod tests {
 
     #[test]
     fn test_sequence_boundary_first_event_zero() {
-        DEBUG_EVENT_LOG.with(|log| {
-            let initial_sequence = log.borrow().next_sequence;
+        DEBUG_EVENT_LOG.with_borrow(|log| {
+            let initial_sequence = log.next_sequence;
             assert_eq!(initial_sequence.0, 0);
         });
 
@@ -639,8 +629,7 @@ mod tests {
             MasterClockTick::default(),
         );
 
-        DEBUG_EVENT_LOG.with(|log| {
-            let log = log.borrow();
+        DEBUG_EVENT_LOG.with_borrow(|log| {
             assert_eq!(log.next_sequence.0, 1);
             assert_eq!(log.events[0].sequence.0, 0);
         });
@@ -660,8 +649,7 @@ mod tests {
             );
         }
 
-        DEBUG_EVENT_LOG.with(|log| {
-            let log = log.borrow();
+        DEBUG_EVENT_LOG.with_borrow(|log| {
             assert_eq!(log.next_sequence.0, 5);
 
             for (idx, event) in log.events.iter().enumerate() {
