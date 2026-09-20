@@ -218,10 +218,9 @@ impl GateArray for Amstrad40007 {
                 }
             }
             3 => {
-                // ROM banking (only available in CPC 6128)
                 let bank = (value >> 3) & 0x07;
                 let config = value & 0x07;
-                memory.set_ram_config(bank, config);
+                memory.set_extended_ram_config(bank, config);
             }
             _ => {
                 unreachable!();

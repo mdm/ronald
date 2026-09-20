@@ -31,7 +31,7 @@ struct MemorySourceColors {
     lower_rom: egui::Color32,
     upper_rom: egui::Color32,
     ram: egui::Color32,
-    extension_ram: egui::Color32,
+    extended_ram: egui::Color32,
 }
 
 #[derive(Deserialize, Serialize, PartialEq)]
@@ -42,7 +42,7 @@ enum MemoryViewMode {
     LowerRomOnly,
     UpperRomOnly(u8),
     RamOnly,
-    ExtensionRamOnly,
+    ExtendedRamOnly,
 }
 
 impl Default for MemoryDebugWindow {
@@ -66,7 +66,7 @@ impl Default for MemorySourceColors {
             lower_rom: colors::DARK_ORANGE,
             upper_rom: colors::DEEP_MAGENTA,
             ram: colors::FORREST_GREEN,
-            extension_ram: colors::DODGER_BLUE,
+            extended_ram: colors::DODGER_BLUE,
         }
     }
 }
@@ -77,7 +77,7 @@ impl MemorySourceColors {
             MemoryViewMode::LowerRomOnly => self.lower_rom,
             MemoryViewMode::UpperRomOnly(_) => self.upper_rom,
             MemoryViewMode::RamOnly => self.ram,
-            MemoryViewMode::ExtensionRamOnly => self.extension_ram,
+            MemoryViewMode::ExtendedRamOnly => self.extended_ram,
             _ => colors::DARK_GRAY,
         }
     }
@@ -122,7 +122,7 @@ impl MemoryDebugWindow {
                     MemoryViewMode::LowerRomOnly => "Lower ROM only".to_string(),
                     MemoryViewMode::UpperRomOnly(bank) => format!("Upper ROM #{:02X} only", bank),
                     MemoryViewMode::RamOnly => "RAM only".to_string(),
-                    MemoryViewMode::ExtensionRamOnly => "Extension RAM only".to_string(),
+                    MemoryViewMode::ExtendedRamOnly => "Extended RAM only".to_string(),
                 })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
@@ -171,12 +171,12 @@ impl MemoryDebugWindow {
                         egui::RichText::new("RAM only").color(color),
                     );
 
-                    let ext_ram_mode = MemoryViewMode::ExtensionRamOnly;
+                    let ext_ram_mode = MemoryViewMode::ExtendedRamOnly;
                     let color = self.memory_colors.get_color_for_mode(&ext_ram_mode);
                     ui.selectable_value(
                         &mut self.view_mode,
                         ext_ram_mode,
-                        egui::RichText::new("Extension RAM only").color(color),
+                        egui::RichText::new("Extended RAM only").color(color),
                     );
                 });
         });
@@ -203,8 +203,8 @@ impl MemoryDebugWindow {
 
                 ui.separator();
 
-                let label = ui.label("Extension RAM:");
-                ui.color_edit_button_srgba(&mut self.memory_colors.extension_ram)
+                let label = ui.label("Extended RAM:");
+                ui.color_edit_button_srgba(&mut self.memory_colors.extended_ram)
                     .labelled_by(label.id);
             });
 
@@ -245,7 +245,7 @@ impl MemoryDebugWindow {
             MemoryViewMode::LowerRomOnly => 0x4000,
             MemoryViewMode::UpperRomOnly(_) => 0x4000,
             MemoryViewMode::RamOnly => 0x10000,
-            MemoryViewMode::ExtensionRamOnly => 0x10000,
+            MemoryViewMode::ExtendedRamOnly => 0x10000,
         };
 
         ui.horizontal(|ui| {
@@ -407,7 +407,7 @@ impl MemoryDebugWindow {
                 }
             }
             MemoryViewMode::RamOnly => &data.ram,
-            MemoryViewMode::ExtensionRamOnly => &data.ram_extension,
+            MemoryViewMode::ExtendedRamOnly => &data.extended_ram,
         };
 
         egui::ScrollArea::vertical()
@@ -1025,9 +1025,9 @@ mod gui_tests {
     }
 
     #[test]
-    #[ignore = "extension ram not implemented"]
-    fn test_memory_debug_window_jump_to_address_works_extension_ram() {
-        jump_to_address_works("Extension RAM only");
+    #[ignore = "extended ram not implemented"]
+    fn test_memory_debug_window_jump_to_address_works_extended_ram() {
+        jump_to_address_works("Extended RAM only");
     }
 }
 
@@ -1155,11 +1155,11 @@ mod snapshot_tests {
 
     #[test]
     #[ignore = "snapshot test"]
-    fn test_memory_debug_window_pick_color_extension_ram() {
+    fn test_memory_debug_window_pick_color_extended() {
         pick_color_works(
-            "Extension RAM:",
+            "Extended RAM:",
             "0x3fff",
-            "memory_colors_extension_ram_changed",
+            "memory_colors_extended_ram_changed",
         );
     }
 }

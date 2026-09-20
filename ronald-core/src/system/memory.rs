@@ -39,7 +39,7 @@ pub trait MemManage {
 
     fn force_base_ram_read(&mut self, force: bool);
 
-    fn set_extension_ram_config(&mut self, bank: u8, config: u8);
+    fn set_extended_ram_config(&mut self, bank: u8, config: u8);
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -196,7 +196,7 @@ impl MemManage for Ram {
 
     fn force_base_ram_read(&mut self, _force: bool) {}
 
-    fn set_extension_ram_config(&mut self, _bank: u8, _config: u8) {}
+    fn set_extended_ram_config(&mut self, _bank: u8, _config: u8) {}
 }
 
 pub struct RamDebugView {
@@ -313,7 +313,7 @@ impl MemManage for MemoryCpcX64 {
         self.ram_read_forced = force;
     }
 
-    fn set_extension_ram_config(&mut self, _bank: u8, _config: u8) {}
+    fn set_extended_ram_config(&mut self, _bank: u8, _config: u8) {}
 }
 
 impl Snapshottable for MemoryCpcX64 {
@@ -326,13 +326,13 @@ impl Snapshottable for MemoryCpcX64 {
         }
 
         let ram = self.ram.debug_view().data;
-        let ram_extension = vec![];
+        let extended_ram = vec![];
         let lower_rom = self.lower_rom.debug_view().data;
         let lower_rom_enabled = self.lower_rom_enabled;
         let selected_upper_rom = self.selected_upper_rom;
         let upper_rom_enabled = self.upper_rom_enabled;
 
-        // Create composite RAM view first (just RAM for now, extension RAM not implemented yet)
+        // TODO: support RAM expansions
         let composite_ram = ram.clone();
 
         // Create composite ROM/RAM view based on composite_ram
@@ -348,7 +348,7 @@ impl Snapshottable for MemoryCpcX64 {
 
         MemoryDebugView {
             ram,
-            ram_extension,
+            extended_ram,
             lower_rom,
             lower_rom_enabled,
             upper_roms,
@@ -368,22 +368,22 @@ impl Debuggable for MemoryCpcX64 {
 #[derive(Serialize, Deserialize)]
 pub struct MemoryCpc6128 {
     memory: MemoryCpcX64,
-    extension_ram: Ram,
-    extension_ram_config: u8,
+    extended_ram: Ram,
+    extended_ram_config: u8,
 }
 
 impl MemoryCpc6128 {
     pub fn new(roms: HashMap<RomSlot, Vec<u8>>) -> Self {
         MemoryCpc6128 {
             memory: MemoryCpcX64::new(roms),
-            extension_ram: Ram::new(0x10000),
-            extension_ram_config: 0,
+            extended_ram: Ram::new(0x10000),
+            extended_ram_config: 0,
         }
     }
 
-    /// Returns a tuple of (is_extension_ram, mapped_address)
+    /// Returns a tuple of (is_extended_ram, mapped_address)
     fn map_address(&self, address: usize) -> (bool, usize) {
-        match self.extension_ram_config {
+        match self.extended_ram_config {
             1 => {
                 if address >= 0xc000 {
                     return (true, address);
@@ -435,26 +435,26 @@ impl Default for MemoryCpc6128 {
 
 impl MemRead for MemoryCpc6128 {
     fn read_byte(&self, address: usize) -> u8 {
-        if self.extension_ram_config == 0 {
+        if self.extended_ram_config == 0 {
             return self.memory.read_byte(address);
         }
 
-        let (is_extension_ram, mapped_address) = self.map_address(address);
-        if is_extension_ram {
-            self.extension_ram.read_byte(mapped_address)
+        let (is_extended_ram, mapped_address) = self.map_address(address);
+        if is_extended_ram {
+            self.extended_ram.read_byte(mapped_address)
         } else {
             self.memory.read_byte(mapped_address)
         }
     }
 
     fn read_word(&self, address: usize) -> u16 {
-        if self.extension_ram_config == 0 {
+        if self.extended_ram_config == 0 {
             return self.memory.read_word(address);
         }
 
-        let (is_extension_ram, mapped_address) = self.map_address(address);
-        if is_extension_ram {
-            self.extension_ram.read_word(mapped_address)
+        let (is_extended_ram, mapped_address) = self.map_address(address);
+        if is_extended_ram {
+            self.extended_ram.read_word(mapped_address)
         } else {
             self.memory.read_word(mapped_address)
         }
@@ -463,28 +463,28 @@ impl MemRead for MemoryCpc6128 {
 
 impl MemWrite for MemoryCpc6128 {
     fn write_byte(&mut self, address: usize, value: u8) {
-        if self.extension_ram_config == 0 {
+        if self.extended_ram_config == 0 {
             self.memory.write_byte(address, value);
             return;
         }
 
-        let (is_extension_ram, mapped_address) = self.map_address(address);
-        if is_extension_ram {
-            self.extension_ram.write_byte(mapped_address, value);
+        let (is_extended_ram, mapped_address) = self.map_address(address);
+        if is_extended_ram {
+            self.extended_ram.write_byte(mapped_address, value);
         } else {
             self.memory.write_byte(mapped_address, value);
         }
     }
 
     fn write_word(&mut self, address: usize, value: u16) {
-        if self.extension_ram_config == 0 {
+        if self.extended_ram_config == 0 {
             self.memory.write_word(address, value);
             return;
         }
 
-        let (is_extension_ram, mapped_address) = self.map_address(address);
-        if is_extension_ram {
-            self.extension_ram.write_word(mapped_address, value);
+        let (is_extended_ram, mapped_address) = self.map_address(address);
+        if is_extended_ram {
+            self.extended_ram.write_word(mapped_address, value);
         } else {
             self.memory.write_word(mapped_address, value);
         }
@@ -508,8 +508,8 @@ impl MemManage for MemoryCpc6128 {
         self.memory.force_base_ram_read(force);
     }
 
-    fn set_extension_ram_config(&mut self, _bank: u8, config: u8) {
-        self.extension_ram_config = config;
+    fn set_extended_ram_config(&mut self, _bank: u8, config: u8) {
+        self.extended_ram_config = config;
     }
 }
 
@@ -593,6 +593,13 @@ impl MemManage for AnyMemory {
             AnyMemory::Cpc6128(memory) => memory.force_base_ram_read(force),
         }
     }
+
+    fn set_extended_ram_config(&mut self, bank: u8, config: u8) {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.set_extended_ram_config(bank, config),
+            AnyMemory::Cpc6128(memory) => memory.set_extended_ram_config(bank, config),
+        }
+    }
 }
 
 impl Snapshottable for AnyMemory {
@@ -665,7 +672,7 @@ impl MemManage for TestMemory {
         // Noop
     }
 
-    fn set_extension_ram_config(&mut self, _bank: u8, _config: u8) {
+    fn set_extended_ram_config(&mut self, _bank: u8, _config: u8) {
         // Noop
     }
 }
