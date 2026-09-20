@@ -1172,7 +1172,7 @@ impl SystemConfigModal {
                 .find(|r| r.slot == slot);
             let mut required_by_auto_config = false;
             if assigned_rom.is_some() {
-                required_by_auto_config = assigned_rom
+                required_by_auto_config = self.access_config().auto_config && assigned_rom
                     .and_then(|assigned| {
                         self
                             .available_roms
