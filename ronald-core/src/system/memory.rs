@@ -463,11 +463,31 @@ impl MemRead for MemoryCpc6128 {
 
 impl MemWrite for MemoryCpc6128 {
     fn write_byte(&mut self, address: usize, value: u8) {
-        self.memory.write_byte(address, value);
+        if self.extension_ram_config == 0 {
+            self.memory.write_byte(address, value);
+            return;
+        }
+
+        let (is_extension_ram, mapped_address) = self.map_address(address);
+        if is_extension_ram {
+            self.extension_ram.write_byte(mapped_address, value);
+        } else {
+            self.memory.write_byte(mapped_address, value);
+        }
     }
 
     fn write_word(&mut self, address: usize, value: u16) {
-        self.memory.write_word(address, value);
+        if self.extension_ram_config == 0 {
+            self.memory.write_word(address, value);
+            return;
+        }
+
+        let (is_extension_ram, mapped_address) = self.map_address(address);
+        if is_extension_ram {
+            self.extension_ram.write_word(mapped_address, value);
+        } else {
+            self.memory.write_word(mapped_address, value);
+        }
     }
 }
 
