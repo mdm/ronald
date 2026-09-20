@@ -115,7 +115,7 @@ impl Amstrad40007 {
         // Both bytes are decoded into one 16-pixel batch, so the screen only
         // does its gun arithmetic once per gate array step.
         let mut colors = [0; 16];
-        memory.force_ram_read(true);
+        memory.force_base_ram_read(true);
         for offset in 0..2 {
             let address = crtc.read_address() + offset;
             let packed = memory.read_byte(address) as usize;
@@ -139,7 +139,7 @@ impl Amstrad40007 {
                 _ => unimplemented!(),
             }
         }
-        memory.force_ram_read(false);
+        memory.force_base_ram_read(false);
 
         screen.write(&colors);
     }
@@ -219,8 +219,9 @@ impl GateArray for Amstrad40007 {
             }
             3 => {
                 // ROM banking (only available in CPC 6128)
-                // TODO: show error message to user
-                log::error!("Gate Array ROM banking not supported: {value:#010b}");
+                let bank = (value >> 3) & 0x07;
+                let config = value & 0x07;
+                memory.set_ram_config(bank, config);
             }
             _ => {
                 unreachable!();

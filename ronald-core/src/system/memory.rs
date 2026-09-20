@@ -37,7 +37,9 @@ pub trait MemManage {
 
     fn select_upper_rom(&mut self, upper_rom_nr: u8);
 
-    fn force_ram_read(&mut self, force: bool);
+    fn force_base_ram_read(&mut self, force: bool);
+
+    fn set_extension_ram_config(&mut self, bank: u8, config: u8);
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -192,7 +194,9 @@ impl MemManage for Ram {
 
     fn select_upper_rom(&mut self, _upper_rom_nr: u8) {}
 
-    fn force_ram_read(&mut self, _force: bool) {}
+    fn force_base_ram_read(&mut self, _force: bool) {}
+
+    fn set_extension_ram_config(&mut self, _bank: u8, _config: u8) {}
 }
 
 pub struct RamDebugView {
@@ -305,9 +309,11 @@ impl MemManage for MemoryCpcX64 {
         self.selected_upper_rom = upper_rom_nr;
     }
 
-    fn force_ram_read(&mut self, force: bool) {
+    fn force_base_ram_read(&mut self, force: bool) {
         self.ram_read_forced = force;
     }
+
+    fn set_extension_ram_config(&mut self, _bank: u8, _config: u8) {}
 }
 
 impl Snapshottable for MemoryCpcX64 {
@@ -362,13 +368,62 @@ impl Debuggable for MemoryCpcX64 {
 #[derive(Serialize, Deserialize)]
 pub struct MemoryCpc6128 {
     memory: MemoryCpcX64,
+    extension_ram: Ram,
+    extension_ram_config: u8,
 }
 
 impl MemoryCpc6128 {
     pub fn new(roms: HashMap<RomSlot, Vec<u8>>) -> Self {
         MemoryCpc6128 {
             memory: MemoryCpcX64::new(roms),
+            extension_ram: Ram::new(0x10000),
+            extension_ram_config: 0,
         }
+    }
+
+    /// Returns a tuple of (is_extension_ram, mapped_address)
+    fn map_address(&self, address: usize) -> (bool, usize) {
+        match self.extension_ram_config {
+            1 => {
+                if address >= 0xc000 {
+                    return (true, address);
+                }
+            }
+            2 => {
+                return (true, address);
+            }
+            3 => {
+                if address >= 0x4000 && address < 0x8000 {
+                    return (false, address + 0x8000);
+                }
+                if address >= 0xc000 {
+                    return (true, address);
+                }
+            }
+            4 => {
+                if address >= 0x4000 && address < 0x8000 {
+                    return (true, address - 0x4000);
+                }
+            }
+            5 => {
+                if address >= 0x4000 && address < 0x8000 {
+                    return (true, address);
+                }
+            }
+            6 => {
+                if address >= 0x4000 && address < 0x8000 {
+                    return (true, address + 0x4000);
+                }
+            }
+            7 => {
+                if address >= 0x4000 && address < 0x8000 {
+                    return (true, address + 0x8000);
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        (false, address)
     }
 }
 
@@ -380,11 +435,29 @@ impl Default for MemoryCpc6128 {
 
 impl MemRead for MemoryCpc6128 {
     fn read_byte(&self, address: usize) -> u8 {
-        self.memory.read_byte(address)
+        if self.extension_ram_config == 0 {
+            return self.memory.read_byte(address);
+        }
+
+        let (is_extension_ram, mapped_address) = self.map_address(address);
+        if is_extension_ram {
+            self.extension_ram.read_byte(mapped_address)
+        } else {
+            self.memory.read_byte(mapped_address)
+        }
     }
 
     fn read_word(&self, address: usize) -> u16 {
-        self.memory.read_word(address)
+        if self.extension_ram_config == 0 {
+            return self.memory.read_word(address);
+        }
+
+        let (is_extension_ram, mapped_address) = self.map_address(address);
+        if is_extension_ram {
+            self.extension_ram.read_word(mapped_address)
+        } else {
+            self.memory.read_word(mapped_address)
+        }
     }
 }
 
@@ -411,8 +484,12 @@ impl MemManage for MemoryCpc6128 {
         self.memory.select_upper_rom(upper_rom_nr);
     }
 
-    fn force_ram_read(&mut self, force: bool) {
-        self.memory.force_ram_read(force);
+    fn force_base_ram_read(&mut self, force: bool) {
+        self.memory.force_base_ram_read(force);
+    }
+
+    fn set_extension_ram_config(&mut self, _bank: u8, config: u8) {
+        self.extension_ram_config = config;
     }
 }
 
@@ -490,10 +567,10 @@ impl MemManage for AnyMemory {
         }
     }
 
-    fn force_ram_read(&mut self, force: bool) {
+    fn force_base_ram_read(&mut self, force: bool) {
         match self {
-            AnyMemory::CpcX64(memory) => memory.force_ram_read(force),
-            AnyMemory::Cpc6128(memory) => memory.force_ram_read(force),
+            AnyMemory::CpcX64(memory) => memory.force_base_ram_read(force),
+            AnyMemory::Cpc6128(memory) => memory.force_base_ram_read(force),
         }
     }
 }
@@ -564,7 +641,11 @@ impl MemManage for TestMemory {
         // Noop
     }
 
-    fn force_ram_read(&mut self, _force: bool) {
+    fn force_base_ram_read(&mut self, _force: bool) {
+        // Noop
+    }
+
+    fn set_extension_ram_config(&mut self, _bank: u8, _config: u8) {
         // Noop
     }
 }
