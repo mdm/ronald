@@ -1025,7 +1025,6 @@ mod gui_tests {
     }
 
     #[test]
-    #[ignore = "extended ram not implemented"]
     fn test_memory_debug_window_jump_to_address_works_extended_ram() {
         jump_to_address_works("Extended RAM only");
     }
