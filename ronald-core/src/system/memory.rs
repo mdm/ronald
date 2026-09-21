@@ -261,6 +261,8 @@ impl MemoryCpcX64 {
     fn debug_view_common(&self) -> MemoryDebugView {
         let ram = self.ram.debug_view().data;
         let extended_ram = vec![];
+        let extended_ram_bank = 0;
+        let extended_ram_config = 0;
         let lower_rom = self.lower_rom.debug_view().data;
         let lower_rom_enabled = self.lower_rom_enabled;
         let mut upper_roms = HashMap::new();
@@ -275,6 +277,8 @@ impl MemoryCpcX64 {
         MemoryDebugView {
             ram,
             extended_ram,
+            extended_ram_bank,
+            extended_ram_config,
             lower_rom,
             lower_rom_enabled,
             upper_roms,
@@ -553,12 +557,14 @@ impl Snapshottable for MemoryCpc6128 {
 
     fn debug_view(&self) -> Self::View {
         let extended_ram = self.extended_ram.debug_view().data;
+        let extended_ram_config = self.extended_ram_config;
         let common = self.memory.debug_view_common();
         let composite_ram = self.debug_view_composite_ram(&common.ram, &extended_ram);
         let composite_rom_ram = self.memory.debug_view_composite_rom_ram(&composite_ram);
 
         MemoryDebugView {
             extended_ram,
+            extended_ram_config,
             composite_ram,
             composite_rom_ram,
             ..common

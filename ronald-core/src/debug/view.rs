@@ -52,6 +52,8 @@ pub struct CpuDebugView {
 pub struct MemoryDebugView {
     pub ram: Vec<u8>,
     pub extended_ram: Vec<u8>,
+    pub extended_ram_bank: u8,
+    pub extended_ram_config: u8,
     pub lower_rom: Vec<u8>,
     pub lower_rom_enabled: bool,
     pub upper_roms: HashMap<u8, Vec<u8>>,
