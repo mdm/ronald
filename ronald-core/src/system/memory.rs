@@ -727,3 +727,105 @@ impl MemManage for TestMemory {
         // Noop
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn marked_memory(config: u8) -> MemoryCpc6128 {
+        let mut memory = MemoryCpc6128::new(HashMap::new());
+
+        for (i, start_address) in [0x0000, 0x4000, 0x8000, 0xc000].iter().enumerate() {
+            memory.memory.write_byte(*start_address, 0xb0 + i as u8);
+            memory
+                .extended_ram
+                .write_byte(*start_address, 0xe0 + i as u8);
+        }
+
+        memory.enable_lower_rom(false);
+        memory.enable_upper_rom(false);
+        memory.set_extended_ram_config(0, config);
+
+        memory
+    }
+
+    #[test]
+    fn test_extended_ram_config_0_maps_correctly() {
+        let memory = marked_memory(0);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xb1);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_1_maps_correctly() {
+        let memory = marked_memory(1);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xb1);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xe3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_2_maps_correctly() {
+        let memory = marked_memory(2);
+
+        assert_eq!(memory.read_byte(0x0000), 0xe0);
+        assert_eq!(memory.read_byte(0x4000), 0xe1);
+        assert_eq!(memory.read_byte(0x8000), 0xe2);
+        assert_eq!(memory.read_byte(0xc000), 0xe3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_3_maps_correctly() {
+        let memory = marked_memory(3);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xb3);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xe3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_4_maps_correctly() {
+        let memory = marked_memory(4);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xe0);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_5_maps_correctly() {
+        let memory = marked_memory(5);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xe1);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_6_maps_correctly() {
+        let memory = marked_memory(6);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xe2);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_7_maps_correctly() {
+        let memory = marked_memory(7);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xe3);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+}
