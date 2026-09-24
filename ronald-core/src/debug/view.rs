@@ -7,6 +7,7 @@ use crate::system::{
     instruction::InterruptMode,
 };
 
+#[derive(Debug, Clone)]
 pub struct SystemDebugView {
     pub master_clock: MasterClockTick,
     pub cpu: CpuDebugView,
@@ -16,6 +17,7 @@ pub struct SystemDebugView {
     pub fdc: FdcDebugView,
 }
 
+#[derive(Debug, Clone)]
 pub struct CpuDebugView {
     pub register_a: u8,
     pub register_f: u8,
@@ -49,6 +51,7 @@ pub struct CpuDebugView {
     pub irq_received: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct MemoryDebugView {
     pub ram: Vec<u8>,
     pub extended_ram: Vec<u8>,
@@ -63,6 +66,7 @@ pub struct MemoryDebugView {
     pub composite_rom_ram: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
 pub struct GateArrayDebugView {
     pub current_screen_mode: u8,
     pub requested_screen_mode: Option<u8>,
@@ -75,6 +79,7 @@ pub struct GateArrayDebugView {
     pub pen_colors: Vec<u8>, // Hardware color values (0-31)
 }
 
+#[derive(Debug, Clone)]
 pub struct CrtcDebugView {
     pub registers: [u8; 18],
     pub selected_register: CrtcRegister,
@@ -88,6 +93,7 @@ pub struct CrtcDebugView {
     pub current_address: usize,
 }
 
+#[derive(Debug, Clone)]
 pub struct FdcDebugView {
     pub main_status_register: u8,
     pub phase: FdcPhase,

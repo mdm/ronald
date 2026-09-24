@@ -445,7 +445,7 @@ impl MemoryCpc6128 {
                     return (true, address + 0x8000);
                 }
             }
-            _ => unreachable!(),
+            _ => unreachable!("Invalid extended RAM config: {}", self.extended_ram_config),
         }
 
         (false, address)
@@ -548,7 +548,7 @@ impl MemManage for MemoryCpc6128 {
     }
 
     fn set_extended_ram_config(&mut self, _bank: u8, config: u8) {
-        self.extended_ram_config = config;
+        self.extended_ram_config = config & 0x07;
     }
 }
 

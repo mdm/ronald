@@ -85,29 +85,37 @@ impl MemorySourceColors {
 
 impl MemoryDebugWindow {
     fn get_memory_source_color(&self, addr: usize, data: &MemoryDebugView) -> egui::Color32 {
+        let is_extended_ram = match data.extended_ram_config {
+            0 => false,
+            1 => (0xc000..0x10000).contains(&addr),
+            2 => true,
+            3 => (0x4000..0x8000).contains(&addr) || (0xc000..0x10000).contains(&addr),
+            4 => (0x4000..0x8000).contains(&addr),
+            5 => (0x4000..0x8000).contains(&addr),
+            6 => (0x4000..0x8000).contains(&addr),
+            7 => (0x4000..0x8000).contains(&addr),
+            _ => unreachable!("Invalid extended RAM config: {}", data.extended_ram_config),
+        };
         match &self.view_mode {
             MemoryViewMode::Disassembly | MemoryViewMode::CompositeRomRam => {
-                // CPC 464 memory map:
-                // 0x0000-0x3FFF: Lower ROM (if enabled) or RAM
-                // 0x4000-0x7FFF: RAM
-                // 0x8000-0xBFFF: RAM
-                // 0xC000-0xFFFF: Upper ROM (if enabled) or RAM
                 if addr < 0x4000 && data.lower_rom_enabled {
                     self.memory_colors.lower_rom
                 } else if addr >= 0xC000 && data.upper_rom_enabled {
                     self.memory_colors.upper_rom
+                } else if is_extended_ram {
+                    self.memory_colors.extended_ram
                 } else {
                     self.memory_colors.ram
                 }
             }
             MemoryViewMode::CompositeRam => {
-                // All composite RAM uses RAM color
-                self.memory_colors.ram
+                if is_extended_ram {
+                    self.memory_colors.extended_ram
+                } else {
+                    self.memory_colors.ram
+                }
             }
-            _ => {
-                // For single-source modes, use the mode's color
-                self.memory_colors.get_color_for_mode(&self.view_mode)
-            }
+            _ => self.memory_colors.get_color_for_mode(&self.view_mode),
         }
     }
     fn render_view_mode_selector(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
@@ -1039,7 +1047,7 @@ mod snapshot_tests {
 
     use crate::debug::mock::TestDebugger;
 
-    fn pick_color_works(label: &str, address: &str, snaphot: &str) {
+    fn pick_color_works(label: &str, address: &str, snapshot: &str) {
         let mut debugger = TestDebugger::default();
         let mut window = MemoryDebugWindow {
             show: true,
@@ -1111,7 +1119,7 @@ mod snapshot_tests {
             .click();
         harness.run();
 
-        harness.snapshot(snaphot);
+        harness.snapshot(snapshot);
 
         // Jump back to 0x0000
         harness
@@ -1160,5 +1168,134 @@ mod snapshot_tests {
             "0x3fff",
             "memory_colors_extended_ram_changed",
         );
+    }
+
+    fn composite_ram_colors_are_correct(mut debugger: TestDebugger, snapshot: &str) {
+        let mut window = MemoryDebugWindow {
+            show: true,
+            ..Default::default()
+        };
+
+        let app = |ui: &mut egui::Ui| {
+            window.ui(ui, &mut debugger);
+        };
+
+        let mut harness = Harness::new_ui(app);
+        harness.run();
+
+        // Select Composite RAM view
+        harness.get_by_role(accesskit::Role::ComboBox).click();
+        harness.run();
+        harness.get_by_label("Composite RAM").click();
+        harness.run();
+
+        harness.snapshot(format!("{snapshot}_0x{:04x}", 0x0000));
+
+        // Type 0x4000 - 0x10
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .type_text(&format!("0x{:04x}", 0x4000 - 0x10));
+        harness.run();
+
+        // Jump to address
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Go")
+            .click();
+        harness.run();
+
+        harness.snapshot(format!("{snapshot}_0x{:04x}", 0x4000 - 0x10));
+
+        // Type 0x8000 - 0x10
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .type_text(&format!("0x{:04x}", 0x8000 - 0x10));
+        harness.run();
+
+        // Jump to address
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Go")
+            .click();
+        harness.run();
+
+        harness.snapshot(format!("{snapshot}_0x{:04x}", 0x8000 - 0x10));
+
+        // Type 0xc000 - 0x10
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .focus();
+        harness
+            .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
+            .type_text(&format!("0x{:04x}", 0xc000 - 0x10));
+        harness.run();
+
+        // Jump to address
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Go")
+            .click();
+        harness.run();
+
+        harness.snapshot(format!("{snapshot}_0x{:04x}", 0xc000 - 0x10));
+    }
+
+    #[test]
+    #[ignore = "snapshot test"]
+    fn test_memory_debug_window_composite_ram_color_config_0() {
+        let debugger = TestDebugger::with_memory_config(false, false, 0);
+        composite_ram_colors_are_correct(debugger, "memory_colors_composite_ram_config_0");
+    }
+
+    #[test]
+    #[ignore = "snapshot test"]
+    fn test_memory_debug_window_composite_ram_color_config_1() {
+        let debugger = TestDebugger::with_memory_config(false, false, 1);
+        composite_ram_colors_are_correct(debugger, "memory_colors_composite_ram_config_1");
+    }
+
+    #[test]
+    #[ignore = "snapshot test"]
+    fn test_memory_debug_window_composite_ram_color_config_2() {
+        let debugger = TestDebugger::with_memory_config(false, false, 2);
+        composite_ram_colors_are_correct(debugger, "memory_colors_composite_ram_config_2");
+    }
+
+    #[test]
+    #[ignore = "snapshot test"]
+    fn test_memory_debug_window_composite_ram_color_config_3() {
+        let debugger = TestDebugger::with_memory_config(false, false, 3);
+        composite_ram_colors_are_correct(debugger, "memory_colors_composite_ram_config_3");
+    }
+
+    #[test]
+    #[ignore = "snapshot test"]
+    fn test_memory_debug_window_composite_ram_color_config_4() {
+        let debugger = TestDebugger::with_memory_config(false, false, 4);
+        composite_ram_colors_are_correct(debugger, "memory_colors_composite_ram_config_4");
+    }
+
+    #[test]
+    #[ignore = "snapshot test"]
+    fn test_memory_debug_window_composite_ram_color_config_5() {
+        let debugger = TestDebugger::with_memory_config(false, false, 5);
+        composite_ram_colors_are_correct(debugger, "memory_colors_composite_ram_config_5");
+    }
+
+    #[test]
+    #[ignore = "snapshot test"]
+    fn test_memory_debug_window_composite_ram_color_config_6() {
+        let debugger = TestDebugger::with_memory_config(false, false, 6);
+        composite_ram_colors_are_correct(debugger, "memory_colors_composite_ram_config_6");
+    }
+
+    #[test]
+    #[ignore = "snapshot test"]
+    fn test_memory_debug_window_composite_ram_color_config_7() {
+        let debugger = TestDebugger::with_memory_config(false, false, 7);
+        composite_ram_colors_are_correct(debugger, "memory_colors_composite_ram_config_7");
     }
 }
