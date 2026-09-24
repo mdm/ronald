@@ -337,6 +337,11 @@ impl MemoryDebugWindow {
                     );
                     ui.label(format!("(Selected: #{:02X})", data.selected_upper_rom));
                 });
+                ui.horizontal(|ui| {
+                    ui.label(format!("Extended RAM bank: {}", data.extended_ram_bank));
+                    ui.separator();
+                    ui.label(format!("Extended RAM config: {}", data.extended_ram_config));
+                });
                 ui.separator();
             }
             MemoryViewMode::LowerRomOnly => {
@@ -376,6 +381,14 @@ impl MemoryDebugWindow {
                         "(Selected: #{:02X}, Viewing: #{:02X})",
                         data.selected_upper_rom, bank
                     ));
+                });
+                ui.separator();
+            }
+            MemoryViewMode::CompositeRam | MemoryViewMode::ExtendedRamOnly => {
+                ui.horizontal(|ui| {
+                    ui.label(format!("Extended RAM bank: {}", data.extended_ram_bank));
+                    ui.separator();
+                    ui.label(format!("Extended RAM config: {}", data.extended_ram_config));
                 });
                 ui.separator();
             }
