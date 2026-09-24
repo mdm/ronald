@@ -72,7 +72,7 @@ impl fmt::Display for Operand {
     }
 }
 
-#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub enum InterruptMode {
     #[default]
     #[serde(rename = "0")]

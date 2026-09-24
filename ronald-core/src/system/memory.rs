@@ -11,6 +11,7 @@ use crate::debug::view::MemoryDebugView;
 use crate::system::clock::MasterClockTick;
 
 pub trait MemRead {
+    // TODO: implement reading entire 4K pages at once for debug views
     fn read_byte(&self, address: usize) -> u8;
 
     fn read_word(&self, address: usize) -> u16 {
@@ -37,7 +38,9 @@ pub trait MemManage {
 
     fn select_upper_rom(&mut self, upper_rom_nr: u8);
 
-    fn force_ram_read(&mut self, force: bool);
+    fn force_base_ram_read(&mut self, force: bool);
+
+    fn set_extended_ram_config(&mut self, bank: u8, config: u8);
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -192,7 +195,9 @@ impl MemManage for Ram {
 
     fn select_upper_rom(&mut self, _upper_rom_nr: u8) {}
 
-    fn force_ram_read(&mut self, _force: bool) {}
+    fn force_base_ram_read(&mut self, _force: bool) {}
+
+    fn set_extended_ram_config(&mut self, _bank: u8, _config: u8) {}
 }
 
 pub struct RamDebugView {
@@ -252,6 +257,55 @@ impl MemoryCpcX64 {
             ram_read_forced: false,
         }
     }
+
+    fn debug_view_common(&self) -> MemoryDebugView {
+        let ram = self.ram.debug_view().data;
+        let extended_ram = vec![];
+        let extended_ram_bank = 0;
+        let extended_ram_config = 0;
+        let lower_rom = self.lower_rom.debug_view().data;
+        let lower_rom_enabled = self.lower_rom_enabled;
+        let mut upper_roms = HashMap::new();
+        for (key, rom) in &self.upper_roms {
+            upper_roms.insert(*key, rom.debug_view().data);
+        }
+        let selected_upper_rom = self.selected_upper_rom;
+        let upper_rom_enabled = self.upper_rom_enabled;
+        let composite_ram = vec![];
+        let composite_rom_ram = vec![];
+
+        MemoryDebugView {
+            ram,
+            extended_ram,
+            extended_ram_bank,
+            extended_ram_config,
+            lower_rom,
+            lower_rom_enabled,
+            upper_roms,
+            selected_upper_rom,
+            upper_rom_enabled,
+            composite_ram,
+            composite_rom_ram,
+        }
+    }
+
+    fn debug_view_composite_rom_ram(&self, composite_ram: &[u8]) -> Vec<u8> {
+        let mut composite_rom_ram = composite_ram.to_vec();
+
+        if self.lower_rom_enabled {
+            let lower_rom_data = self.lower_rom.debug_view().data;
+            composite_rom_ram[0x0000..0x4000].copy_from_slice(&lower_rom_data);
+        }
+
+        if self.upper_rom_enabled
+            && let Some(upper_rom) = self.upper_roms.get(&self.selected_upper_rom)
+        {
+            let upper_rom_data = upper_rom.debug_view().data;
+            composite_rom_ram[0xC000..0x10000].copy_from_slice(&upper_rom_data);
+        }
+
+        composite_rom_ram
+    }
 }
 
 impl Default for MemoryCpcX64 {
@@ -305,51 +359,25 @@ impl MemManage for MemoryCpcX64 {
         self.selected_upper_rom = upper_rom_nr;
     }
 
-    fn force_ram_read(&mut self, force: bool) {
+    fn force_base_ram_read(&mut self, force: bool) {
         self.ram_read_forced = force;
     }
+
+    fn set_extended_ram_config(&mut self, _bank: u8, _config: u8) {}
 }
 
 impl Snapshottable for MemoryCpcX64 {
     type View = MemoryDebugView;
 
     fn debug_view(&self) -> Self::View {
-        let mut upper_roms = HashMap::new();
-        for (key, rom) in &self.upper_roms {
-            upper_roms.insert(*key, rom.debug_view().data);
-        }
-
-        let ram = self.ram.debug_view().data;
-        let ram_extension = vec![];
-        let lower_rom = self.lower_rom.debug_view().data;
-        let lower_rom_enabled = self.lower_rom_enabled;
-        let selected_upper_rom = self.selected_upper_rom;
-        let upper_rom_enabled = self.upper_rom_enabled;
-
-        // Create composite RAM view first (just RAM for now, extension RAM not implemented yet)
-        let composite_ram = ram.clone();
-
-        // Create composite ROM/RAM view based on composite_ram
-        let mut composite_rom_ram = composite_ram.clone();
-
-        if lower_rom_enabled {
-            composite_rom_ram[0x0000..0x4000].copy_from_slice(&lower_rom);
-        }
-
-        if upper_rom_enabled && let Some(upper_rom_data) = upper_roms.get(&selected_upper_rom) {
-            composite_rom_ram[0xC000..0x10000].copy_from_slice(upper_rom_data);
-        }
+        let common = self.debug_view_common();
+        let composite_ram = common.ram.clone();
+        let composite_rom_ram = self.debug_view_composite_rom_ram(&composite_ram);
 
         MemoryDebugView {
-            ram,
-            ram_extension,
-            lower_rom,
-            lower_rom_enabled,
-            upper_roms,
-            selected_upper_rom,
-            upper_rom_enabled,
-            composite_rom_ram,
             composite_ram,
+            composite_rom_ram,
+            ..common
         }
     }
 }
@@ -362,13 +390,79 @@ impl Debuggable for MemoryCpcX64 {
 #[derive(Serialize, Deserialize)]
 pub struct MemoryCpc6128 {
     memory: MemoryCpcX64,
+    extended_ram: Ram,
+    extended_ram_config: u8,
 }
 
 impl MemoryCpc6128 {
     pub fn new(roms: HashMap<RomSlot, Vec<u8>>) -> Self {
         MemoryCpc6128 {
             memory: MemoryCpcX64::new(roms),
+            extended_ram: Ram::new(0x10000),
+            extended_ram_config: 0,
         }
+    }
+
+    /// Returns a tuple of (is_extended_ram, mapped_address)
+    fn map_address(&self, address: usize) -> (bool, usize) {
+        match self.extended_ram_config {
+            0 => {
+                return (false, address);
+            }
+            1 => {
+                if address >= 0xc000 {
+                    return (true, address);
+                }
+            }
+            2 => {
+                return (true, address);
+            }
+            3 => {
+                if (0x4000..0x8000).contains(&address) {
+                    return (false, address + 0x8000);
+                }
+                if address >= 0xc000 {
+                    return (true, address);
+                }
+            }
+            4 => {
+                if (0x4000..0x8000).contains(&address) {
+                    return (true, address - 0x4000);
+                }
+            }
+            5 => {
+                if (0x4000..0x8000).contains(&address) {
+                    return (true, address);
+                }
+            }
+            6 => {
+                if (0x4000..0x8000).contains(&address) {
+                    return (true, address + 0x4000);
+                }
+            }
+            7 => {
+                if (0x4000..0x8000).contains(&address) {
+                    return (true, address + 0x8000);
+                }
+            }
+            _ => unreachable!("Invalid extended RAM config: {}", self.extended_ram_config),
+        }
+
+        (false, address)
+    }
+
+    fn debug_view_composite_ram(&self, base_ram: &[u8], extended_ram: &[u8]) -> Vec<u8> {
+        let mut composite_ram = base_ram.to_vec();
+
+        for start_address in [0x0000, 0x4000, 0x8000, 0xc000] {
+            let (is_extended_ram, mapped_address) = self.map_address(start_address);
+            if is_extended_ram {
+                composite_ram[start_address..start_address + 0x4000]
+                    .copy_from_slice(&extended_ram[mapped_address..mapped_address + 0x4000]);
+            }
+        }
+
+        composite_ram
     }
 }
 
@@ -380,21 +474,59 @@ impl Default for MemoryCpc6128 {
 
 impl MemRead for MemoryCpc6128 {
     fn read_byte(&self, address: usize) -> u8 {
-        self.memory.read_byte(address)
+        if self.extended_ram_config == 0 {
+            return self.memory.read_byte(address);
+        }
+
+        let (is_extended_ram, mapped_address) = self.map_address(address);
+        if is_extended_ram {
+            self.extended_ram.read_byte(mapped_address)
+        } else {
+            self.memory.read_byte(mapped_address)
+        }
     }
 
     fn read_word(&self, address: usize) -> u16 {
-        self.memory.read_word(address)
+        if self.extended_ram_config == 0 {
+            return self.memory.read_word(address);
+        }
+
+        let (is_extended_ram, mapped_address) = self.map_address(address);
+        if is_extended_ram {
+            self.extended_ram.read_word(mapped_address)
+        } else {
+            self.memory.read_word(mapped_address)
+        }
     }
 }
 
 impl MemWrite for MemoryCpc6128 {
     fn write_byte(&mut self, address: usize, value: u8) {
-        self.memory.write_byte(address, value);
+        if self.extended_ram_config == 0 {
+            self.memory.write_byte(address, value);
+            return;
+        }
+
+        let (is_extended_ram, mapped_address) = self.map_address(address);
+        if is_extended_ram {
+            self.extended_ram.write_byte(mapped_address, value);
+        } else {
+            self.memory.write_byte(mapped_address, value);
+        }
     }
 
     fn write_word(&mut self, address: usize, value: u16) {
-        self.memory.write_word(address, value);
+        if self.extended_ram_config == 0 {
+            self.memory.write_word(address, value);
+            return;
+        }
+
+        let (is_extended_ram, mapped_address) = self.map_address(address);
+        if is_extended_ram {
+            self.extended_ram.write_word(mapped_address, value);
+        } else {
+            self.memory.write_word(mapped_address, value);
+        }
     }
 }
 
@@ -411,8 +543,12 @@ impl MemManage for MemoryCpc6128 {
         self.memory.select_upper_rom(upper_rom_nr);
     }
 
-    fn force_ram_read(&mut self, force: bool) {
-        self.memory.force_ram_read(force);
+    fn force_base_ram_read(&mut self, force: bool) {
+        self.memory.force_base_ram_read(force);
+    }
+
+    fn set_extended_ram_config(&mut self, _bank: u8, config: u8) {
+        self.extended_ram_config = config & 0x07;
     }
 }
 
@@ -420,7 +556,19 @@ impl Snapshottable for MemoryCpc6128 {
     type View = MemoryDebugView;
 
     fn debug_view(&self) -> Self::View {
-        self.memory.debug_view()
+        let extended_ram = self.extended_ram.debug_view().data;
+        let extended_ram_config = self.extended_ram_config;
+        let common = self.memory.debug_view_common();
+        let composite_ram = self.debug_view_composite_ram(&common.ram, &extended_ram);
+        let composite_rom_ram = self.memory.debug_view_composite_rom_ram(&composite_ram);
+
+        MemoryDebugView {
+            extended_ram,
+            extended_ram_config,
+            composite_ram,
+            composite_rom_ram,
+            ..common
+        }
     }
 }
 
@@ -490,10 +638,17 @@ impl MemManage for AnyMemory {
         }
     }
 
-    fn force_ram_read(&mut self, force: bool) {
+    fn force_base_ram_read(&mut self, force: bool) {
         match self {
-            AnyMemory::CpcX64(memory) => memory.force_ram_read(force),
-            AnyMemory::Cpc6128(memory) => memory.force_ram_read(force),
+            AnyMemory::CpcX64(memory) => memory.force_base_ram_read(force),
+            AnyMemory::Cpc6128(memory) => memory.force_base_ram_read(force),
+        }
+    }
+
+    fn set_extended_ram_config(&mut self, bank: u8, config: u8) {
+        match self {
+            AnyMemory::CpcX64(memory) => memory.set_extended_ram_config(bank, config),
+            AnyMemory::Cpc6128(memory) => memory.set_extended_ram_config(bank, config),
         }
     }
 }
@@ -564,7 +719,113 @@ impl MemManage for TestMemory {
         // Noop
     }
 
-    fn force_ram_read(&mut self, _force: bool) {
+    fn force_base_ram_read(&mut self, _force: bool) {
         // Noop
+    }
+
+    fn set_extended_ram_config(&mut self, _bank: u8, _config: u8) {
+        // Noop
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn marked_memory(config: u8) -> MemoryCpc6128 {
+        let mut memory = MemoryCpc6128::new(HashMap::new());
+
+        for (i, start_address) in [0x0000, 0x4000, 0x8000, 0xc000].iter().enumerate() {
+            memory.memory.write_byte(*start_address, 0xb0 + i as u8);
+            memory
+                .extended_ram
+                .write_byte(*start_address, 0xe0 + i as u8);
+        }
+
+        memory.enable_lower_rom(false);
+        memory.enable_upper_rom(false);
+        memory.set_extended_ram_config(0, config);
+
+        memory
+    }
+
+    #[test]
+    fn test_extended_ram_config_0_maps_correctly() {
+        let memory = marked_memory(0);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xb1);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_1_maps_correctly() {
+        let memory = marked_memory(1);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xb1);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xe3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_2_maps_correctly() {
+        let memory = marked_memory(2);
+
+        assert_eq!(memory.read_byte(0x0000), 0xe0);
+        assert_eq!(memory.read_byte(0x4000), 0xe1);
+        assert_eq!(memory.read_byte(0x8000), 0xe2);
+        assert_eq!(memory.read_byte(0xc000), 0xe3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_3_maps_correctly() {
+        let memory = marked_memory(3);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xb3);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xe3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_4_maps_correctly() {
+        let memory = marked_memory(4);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xe0);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_5_maps_correctly() {
+        let memory = marked_memory(5);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xe1);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_6_maps_correctly() {
+        let memory = marked_memory(6);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xe2);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
+    }
+
+    #[test]
+    fn test_extended_ram_config_7_maps_correctly() {
+        let memory = marked_memory(7);
+
+        assert_eq!(memory.read_byte(0x0000), 0xb0);
+        assert_eq!(memory.read_byte(0x4000), 0xe3);
+        assert_eq!(memory.read_byte(0x8000), 0xb2);
+        assert_eq!(memory.read_byte(0xc000), 0xb3);
     }
 }
