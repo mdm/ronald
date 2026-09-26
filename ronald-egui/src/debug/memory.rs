@@ -431,25 +431,39 @@ impl MemoryDebugWindow {
             MemoryViewMode::ExtendedRamOnly => &data.extended_ram,
         };
 
+        const BYTES_PER_ROW: usize = 16;
+        let mut invisible = ui.new_child(egui::UiBuilder::new().invisible());
+        let first_chunk: &[u8; BYTES_PER_ROW] = memory_data.first_chunk().unwrap();
+        let first_row = self.render_hex_row(&mut invisible, first_chunk, 0, data);
+        let row_height = first_row.rect.height();
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
+            .show_rows(
+                ui,
+                row_height,
+                memory_data.len() / BYTES_PER_ROW,
+                |ui, visible| {
+                    ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
 
-                let target_addr = self.jump_to_address.take();
-                for (row, chunk) in memory_data.chunks(16).enumerate() {
-                    let addr = row * 16;
-                    let response = self.render_hex_row(ui, chunk, addr, data);
+                    let target_addr = self.jump_to_address.take();
+                    for (row, chunk) in memory_data.chunks(BYTES_PER_ROW).enumerate() {
+                        if !visible.contains(&row) {
+                            continue;
+                        }
 
-                    // If this row contains our target address, scroll to it immediately
-                    if let Some(target) = target_addr
-                        && target >= addr
-                        && target < addr + 16
-                    {
-                        response.scroll_to_me(Some(egui::Align::Min));
+                        let addr = row * BYTES_PER_ROW;
+                        let response = self.render_hex_row(ui, chunk, addr, data);
+
+                        // If this row contains our target address, scroll to it immediately
+                        if let Some(target) = target_addr
+                            && target >= addr
+                            && target < addr + BYTES_PER_ROW
+                        {
+                            response.scroll_to_me(Some(egui::Align::Min));
+                        }
                     }
-                }
-            });
+                },
+            );
     }
 
     fn render_hex_row(
