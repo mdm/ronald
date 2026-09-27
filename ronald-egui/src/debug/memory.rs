@@ -431,25 +431,39 @@ impl MemoryDebugWindow {
             MemoryViewMode::ExtendedRamOnly => &data.extended_ram,
         };
 
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
+        const BYTES_PER_ROW: usize = 16;
+        let mut invisible = ui.new_child(egui::UiBuilder::new().invisible());
+        let first_chunk: &[u8; BYTES_PER_ROW] = memory_data.first_chunk().unwrap();
+        let first_row = self.render_hex_row(&mut invisible, first_chunk, 0, data);
+        let row_height = first_row.rect.height();
+        let mut scroll_area = egui::ScrollArea::vertical().auto_shrink([false, false]);
+
+        if let Some(target) = self.jump_to_address.take() {
+            scroll_area = scroll_area.vertical_scroll_offset(
+                ((row_height + ui.spacing().item_spacing.y)
+                    * f32::from((target / BYTES_PER_ROW) as u16)
+                    - ui.spacing().item_spacing.y)
+                    .max(0.0),
+            );
+        }
+
+        scroll_area.show_rows(
+            ui,
+            row_height,
+            memory_data.len() / BYTES_PER_ROW,
+            |ui, visible| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
 
-                let target_addr = self.jump_to_address.take();
-                for (row, chunk) in memory_data.chunks(16).enumerate() {
-                    let addr = row * 16;
-                    let response = self.render_hex_row(ui, chunk, addr, data);
-
-                    // If this row contains our target address, scroll to it immediately
-                    if let Some(target) = target_addr
-                        && target >= addr
-                        && target < addr + 16
-                    {
-                        response.scroll_to_me(Some(egui::Align::Min));
+                for (row, chunk) in memory_data.chunks(BYTES_PER_ROW).enumerate() {
+                    if !visible.contains(&row) {
+                        continue;
                     }
+
+                    let addr = row * BYTES_PER_ROW;
+                    self.render_hex_row(ui, chunk, addr, data);
                 }
-            });
+            },
+        );
     }
 
     fn render_hex_row(
@@ -978,6 +992,11 @@ mod gui_tests {
         harness.get_by_label(view).click();
         harness.run();
 
+        assert!(
+            harness.query_by_label("2000:").is_none(),
+            "0x2000 should not be visible before jump"
+        );
+
         // Type 0x2000
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
@@ -985,6 +1004,12 @@ mod gui_tests {
         harness
             .get_by_role_and_label(accesskit::Role::TextInput, "Jump to address:")
             .type_text("0x2000");
+        harness.run();
+
+        // Jump to address
+        harness
+            .get_by_role_and_label(accesskit::Role::Button, "Go")
+            .click();
         harness.run();
 
         // egui 0.34 no longer sets a bounding box on the label's immediate
@@ -998,19 +1023,6 @@ mod gui_tests {
             }
             ancestor = node.parent();
         };
-
-        let address_label = harness
-            .get_by_label("2000:")
-            .accesskit_node()
-            .bounding_box()
-            .unwrap();
-        assert!(!scroll_area.contains(address_label.origin()));
-
-        // Jump to address
-        harness
-            .get_by_role_and_label(accesskit::Role::Button, "Go")
-            .click();
-        harness.run();
 
         let address_label = harness
             .get_by_label("2000:")
