@@ -440,7 +440,10 @@ impl MemoryDebugWindow {
 
         if let Some(target) = self.jump_to_address.take() {
             scroll_area = scroll_area.vertical_scroll_offset(
-                (row_height + ui.spacing().item_spacing.y) * (target / BYTES_PER_ROW) as f32,
+                ((row_height + ui.spacing().item_spacing.y)
+                    * f32::from((target / BYTES_PER_ROW) as u16)
+                    - ui.spacing().item_spacing.y)
+                    .max(0.0),
             );
         }
 
