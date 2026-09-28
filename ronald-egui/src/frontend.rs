@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use eframe::{egui, egui_wgpu};
 use egui::Vec2;
-use web_time::Instant;
+use web_time::{Duration, Instant};
 
 use ronald_core::{
     AudioSink, Driver,
@@ -18,7 +18,7 @@ use ronald_core::{
 use crate::utils::sync::{Shared, SharedExt, shared};
 use crate::{
     debug::Debugger,
-    frontend::{audio::CpalAudio, video::EguiWgpuVideo},
+    frontend::{audio::CpalAudio, stats::PerfStats, video::EguiWgpuVideo},
 };
 use crate::{
     key_mapper::{KeyEvent, KeyMapStore, KeyMapper},
@@ -26,6 +26,7 @@ use crate::{
 };
 
 mod audio;
+mod stats;
 mod video;
 
 pub struct Frontend {
@@ -35,6 +36,7 @@ pub struct Frontend {
     video: EguiWgpuVideo,
     frame_start: Instant,
     time_available: usize,
+    stats: PerfStats,
     can_interact: bool,
     paused: bool,
     hovered: Option<Instant>,
@@ -63,6 +65,7 @@ impl Frontend {
             video,
             frame_start: Instant::now(),
             time_available: 0,
+            stats: PerfStats::default(),
             can_interact: true,
             paused: false,
             hovered: None,
@@ -283,44 +286,47 @@ impl Frontend {
 
     fn step_emulation(&mut self) {
         if self.paused {
+            // Keep measuring the host frame rate while the metrics that depend on
+            // emulation decay to zero.
+            self.stats.record_frame(Duration::ZERO, 0);
             return;
         }
 
         log::trace!("Starting new frame");
-        let start = Instant::now();
-
         self.time_available += self.frame_start.elapsed().as_micros() as usize;
         self.frame_start = Instant::now();
+
+        let mut breakpoint_hit = false;
 
         // TODO: Allow running at 60Hz??? Does CPC really support that?
         while self.time_available >= 20_000 {
             log::trace!("Stepping emulator for 20_000 microseconds");
-            let breakpoint_hit = self.driver.step(20_000, &mut self.video, &mut self.audio);
+            breakpoint_hit = self.driver.step(20_000, &mut self.video, &mut self.audio);
             self.time_available -= 20_000; // TODO:: take into account actually executed cycles
 
             if breakpoint_hit {
-                self.pause();
-                return;
+                break;
             }
         }
 
-        if self.time_available > 0 {
+        if !breakpoint_hit && self.time_available > 0 {
             log::trace!("Stepping emulator for {} microseconds", self.time_available);
-            let breakpoint_hit =
+            breakpoint_hit =
                 self.driver
                     .step(self.time_available, &mut self.video, &mut self.audio);
             self.time_available = 0; // TODO:: take into account actually executed cycles
-
-            if breakpoint_hit {
-                self.pause();
-                return;
-            }
         }
 
-        log::trace!(
-            "Frame emulated in {} microseconds",
-            start.elapsed().as_micros()
-        );
+        let busy = self.frame_start.elapsed();
+        self.stats
+            .record_frame(busy, self.video.take_frames_drawn());
+
+        if breakpoint_hit {
+            self.pause();
+            return;
+        }
+
+        log::trace!("Frame emulated in {} microseconds", busy.as_micros());
     }
 
     fn draw_framebuffer(
@@ -419,6 +425,10 @@ impl Frontend {
             egui::CornerRadius::default(),
             egui::Color32::from_black_alpha(128),
         );
+
+        // Draw the performance metrics first: the status section below returns early in
+        // some cases, and the metrics live in their own right-aligned child UI anyway.
+        stats::draw_perf_stats(ui, overlay_rect, self.stats.latest());
 
         // Draw the overlay content in a child UI
         let mut child_ui = ui.new_child(

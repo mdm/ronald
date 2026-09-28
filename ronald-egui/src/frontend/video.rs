@@ -9,6 +9,7 @@ pub struct EguiWgpuVideo {
     queue: wgpu::Queue,
     texture: wgpu::Texture,
     framebuffer_texture_id: egui::TextureId,
+    frames_drawn: u32,
 }
 
 impl EguiWgpuVideo {
@@ -44,16 +45,23 @@ impl EguiWgpuVideo {
             queue: render_state.queue.clone(),
             texture,
             framebuffer_texture_id,
+            frames_drawn: 0,
         }
     }
 
     pub fn framebuffer(&self) -> egui::TextureId {
         self.framebuffer_texture_id
     }
+
+    pub fn take_frames_drawn(&mut self) -> u32 {
+        std::mem::take(&mut self.frames_drawn)
+    }
 }
 
 impl VideoSink for EguiWgpuVideo {
     fn draw_frame(&mut self, buffer: &[u8]) {
+        self.frames_drawn += 1;
+
         let texture_extent = wgpu::Extent3d {
             width: SCREEN_BUFFER_WIDTH as u32,
             height: SCREEN_BUFFER_HEIGHT as u32,
