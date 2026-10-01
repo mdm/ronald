@@ -18,9 +18,21 @@ pub trait CrtController: Default {
     fn read_vertical_sync(&self) -> bool;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    IntoPrimitive,
+    TryFromPrimitive,
+    Serialize,
+    Deserialize,
+)]
 #[repr(usize)]
 pub enum Register {
+    #[default]
     HorizontalTotal,
     HorizontalDisplayed,
     HorizontalSyncPosition,
@@ -89,11 +101,36 @@ impl fmt::Display for Register {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Function {
+    Ignore,
+    Select,
+    Write,
+    Status,
+    Read,
+}
+
+impl From<u16> for Function {
+    fn from(port: u16) -> Self {
+        if port & 0x4000 != 0 {
+            return Function::Ignore;
+        }
+
+        match (port >> 8) & 0x03 {
+            0 => Function::Select,
+            1 => Function::Write,
+            2 => Function::Status,
+            3 => Function::Read,
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HitachiHd6845s {
+struct Common {
     registers: [u8; 18],
-    selected_register: usize,
+    selected_register: Register,
     horizontal_counter: u8,
     horizontal_sync_width_counter: u8,
     character_row_counter: u8,
@@ -106,13 +143,13 @@ pub struct HitachiHd6845s {
     previous_address: usize,
 }
 
-impl HitachiHd6845s {
+impl Common {
     fn select_register(&mut self, register: usize) {
-        let Ok(register) = Register::try_from(register) else {
+        let Ok(register) = Register::try_from(register & 0x1f) else {
             return;
         };
 
-        self.selected_register = register.into();
+        self.selected_register = register;
         self.emit_debug_event(
             CrtcDebugEvent::RegisterSelected { register },
             self.master_clock,
@@ -121,13 +158,19 @@ impl HitachiHd6845s {
 
     fn write_register(&mut self, value: u8) {
         // TODO: restrict to writable registers
-        let was = self.registers[self.selected_register];
-        self.registers[self.selected_register] = value;
+        let was = self.registers[usize::from(self.selected_register)];
+
+        let truncated = match self.selected_register {
+            Register::MaximumRasterAddress => value & 0x1f,
+            _ => value,
+        };
+
+        self.registers[usize::from(self.selected_register)] = truncated;
 
         self.emit_debug_event(
             CrtcDebugEvent::RegisterWritten {
-                register: Register::try_from(self.selected_register).unwrap(),
-                is: value,
+                register: self.selected_register,
+                is: truncated,
                 was,
             },
             self.master_clock,
@@ -137,17 +180,17 @@ impl HitachiHd6845s {
     fn read_register(&self) -> u8 {
         // TODO: restrict to readable registers
         // TODO: handle type 4 reads (see https://www.cpcwiki.eu/index.php/Extra_CPC_Plus_Hardware_Information#CRTC)
-        self.registers[self.selected_register]
+        self.registers[usize::from(self.selected_register)]
     }
 }
 
-impl Snapshottable for HitachiHd6845s {
+impl Snapshottable for Common {
     type View = CrtcDebugView;
 
     fn debug_view(&self) -> Self::View {
         CrtcDebugView {
             registers: self.registers,
-            selected_register: Register::try_from(self.selected_register).unwrap(),
+            selected_register: self.selected_register,
             horizontal_counter: self.horizontal_counter,
             character_row_counter: self.character_row_counter,
             scan_line_counter: self.scan_line_counter,
@@ -160,28 +203,23 @@ impl Snapshottable for HitachiHd6845s {
     }
 }
 
-impl Debuggable for HitachiHd6845s {
+impl Debuggable for Common {
     const SOURCE: DebugSource = DebugSource::Crtc;
     type Event = CrtcDebugEvent;
 }
 
-impl CrtController for HitachiHd6845s {
+impl CrtController for Common {
     fn read_byte(&mut self, port: u16) -> u8 {
-        let function = (port >> 8) & 0x03;
-
-        match function {
-            2 => 0xff, // TODO: handle read depending on CRTC type
-            3 => self.read_register(),
+        match port.into() {
+            Function::Read => self.read_register(),
             _ => 0xff, // TODO: properly emulate floating bus
         }
     }
 
     fn write_byte(&mut self, port: u16, value: u8) {
-        let function = (port >> 8) & 0x03;
-
-        match function {
-            0 => self.select_register(value as usize),
-            1 => self.write_register(value),
+        match port.into() {
+            Function::Select => self.select_register(value as usize),
+            Function::Write => self.write_register(value),
             _ => (),
         }
     }
@@ -311,14 +349,209 @@ impl CrtController for HitachiHd6845s {
     }
 }
 
+#[derive(Default, Serialize, Deserialize)]
+pub struct Type0 {
+    common: Common,
+}
+
+impl Snapshottable for Type0 {
+    type View = CrtcDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        self.common.debug_view()
+    }
+}
+
+impl Debuggable for Type0 {
+    const SOURCE: DebugSource = DebugSource::Crtc;
+    type Event = CrtcDebugEvent;
+}
+
+impl CrtController for Type0 {
+    fn read_byte(&mut self, port: u16) -> u8 {
+        self.common.read_byte(port)
+    }
+
+    fn write_byte(&mut self, port: u16, value: u8) {
+        self.common.write_byte(port, value)
+    }
+
+    fn step(&mut self, master_clock: MasterClockTick) {
+        self.common.step(master_clock)
+    }
+
+    fn read_address(&self) -> usize {
+        self.common.read_address()
+    }
+
+    fn read_display_enabled(&self) -> bool {
+        self.common.read_display_enabled()
+    }
+
+    fn read_horizontal_sync(&self) -> bool {
+        self.common.read_horizontal_sync()
+    }
+
+    fn read_vertical_sync(&self) -> bool {
+        self.common.read_vertical_sync()
+    }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct Type1 {
+    common: Common,
+}
+
+impl Snapshottable for Type1 {
+    type View = CrtcDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        self.common.debug_view()
+    }
+}
+
+impl Debuggable for Type1 {
+    const SOURCE: DebugSource = DebugSource::Crtc;
+    type Event = CrtcDebugEvent;
+}
+
+impl CrtController for Type1 {
+    fn read_byte(&mut self, port: u16) -> u8 {
+        self.common.read_byte(port)
+    }
+
+    fn write_byte(&mut self, port: u16, value: u8) {
+        self.common.write_byte(port, value)
+    }
+
+    fn step(&mut self, master_clock: MasterClockTick) {
+        self.common.step(master_clock)
+    }
+
+    fn read_address(&self) -> usize {
+        self.common.read_address()
+    }
+
+    fn read_display_enabled(&self) -> bool {
+        self.common.read_display_enabled()
+    }
+
+    fn read_horizontal_sync(&self) -> bool {
+        self.common.read_horizontal_sync()
+    }
+
+    fn read_vertical_sync(&self) -> bool {
+        self.common.read_vertical_sync()
+    }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct Type2 {
+    common: Common,
+}
+
+impl Snapshottable for Type2 {
+    type View = CrtcDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        self.common.debug_view()
+    }
+}
+
+impl Debuggable for Type2 {
+    const SOURCE: DebugSource = DebugSource::Crtc;
+    type Event = CrtcDebugEvent;
+}
+
+impl CrtController for Type2 {
+    fn read_byte(&mut self, port: u16) -> u8 {
+        self.common.read_byte(port)
+    }
+
+    fn write_byte(&mut self, port: u16, value: u8) {
+        self.common.write_byte(port, value)
+    }
+
+    fn step(&mut self, master_clock: MasterClockTick) {
+        self.common.step(master_clock)
+    }
+
+    fn read_address(&self) -> usize {
+        self.common.read_address()
+    }
+
+    fn read_display_enabled(&self) -> bool {
+        self.common.read_display_enabled()
+    }
+
+    fn read_horizontal_sync(&self) -> bool {
+        self.common.read_horizontal_sync()
+    }
+
+    fn read_vertical_sync(&self) -> bool {
+        self.common.read_vertical_sync()
+    }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct Type4 {
+    common: Common,
+}
+
+impl Snapshottable for Type4 {
+    type View = CrtcDebugView;
+
+    fn debug_view(&self) -> Self::View {
+        self.common.debug_view()
+    }
+}
+
+impl Debuggable for Type4 {
+    const SOURCE: DebugSource = DebugSource::Crtc;
+    type Event = CrtcDebugEvent;
+}
+
+impl CrtController for Type4 {
+    fn read_byte(&mut self, port: u16) -> u8 {
+        self.common.read_byte(port)
+    }
+
+    fn write_byte(&mut self, port: u16, value: u8) {
+        self.common.write_byte(port, value)
+    }
+
+    fn step(&mut self, master_clock: MasterClockTick) {
+        self.common.step(master_clock)
+    }
+
+    fn read_address(&self) -> usize {
+        self.common.read_address()
+    }
+
+    fn read_display_enabled(&self) -> bool {
+        self.common.read_display_enabled()
+    }
+
+    fn read_horizontal_sync(&self) -> bool {
+        self.common.read_horizontal_sync()
+    }
+
+    fn read_vertical_sync(&self) -> bool {
+        self.common.read_vertical_sync()
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub enum AnyCrtController {
-    HitachiHd6845s(HitachiHd6845s),
+    Type0(Type0),
+    Type1(Type1),
+    Type2(Type2),
+    Type4(Type4),
 }
 
 impl Default for AnyCrtController {
     fn default() -> Self {
-        AnyCrtController::HitachiHd6845s(HitachiHd6845s::default())
+        AnyCrtController::Type0(Type0::default())
     }
 }
 
@@ -327,7 +560,10 @@ impl Snapshottable for AnyCrtController {
 
     fn debug_view(&self) -> Self::View {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.debug_view(),
+            AnyCrtController::Type0(crtc) => crtc.debug_view(),
+            AnyCrtController::Type1(crtc) => crtc.debug_view(),
+            AnyCrtController::Type2(crtc) => crtc.debug_view(),
+            AnyCrtController::Type4(crtc) => crtc.debug_view(),
         }
     }
 }
@@ -335,43 +571,64 @@ impl Snapshottable for AnyCrtController {
 impl CrtController for AnyCrtController {
     fn read_byte(&mut self, port: u16) -> u8 {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_byte(port),
+            AnyCrtController::Type0(crtc) => crtc.read_byte(port),
+            AnyCrtController::Type1(crtc) => crtc.read_byte(port),
+            AnyCrtController::Type2(crtc) => crtc.read_byte(port),
+            AnyCrtController::Type4(crtc) => crtc.read_byte(port),
         }
     }
 
     fn write_byte(&mut self, port: u16, value: u8) {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.write_byte(port, value),
+            AnyCrtController::Type0(crtc) => crtc.write_byte(port, value),
+            AnyCrtController::Type1(crtc) => crtc.write_byte(port, value),
+            AnyCrtController::Type2(crtc) => crtc.write_byte(port, value),
+            AnyCrtController::Type4(crtc) => crtc.write_byte(port, value),
         }
     }
 
     fn step(&mut self, master_clock: MasterClockTick) {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.step(master_clock),
+            AnyCrtController::Type0(crtc) => crtc.step(master_clock),
+            AnyCrtController::Type1(crtc) => crtc.step(master_clock),
+            AnyCrtController::Type2(crtc) => crtc.step(master_clock),
+            AnyCrtController::Type4(crtc) => crtc.step(master_clock),
         }
     }
 
     fn read_address(&self) -> usize {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_address(),
+            AnyCrtController::Type0(crtc) => crtc.read_address(),
+            AnyCrtController::Type1(crtc) => crtc.read_address(),
+            AnyCrtController::Type2(crtc) => crtc.read_address(),
+            AnyCrtController::Type4(crtc) => crtc.read_address(),
         }
     }
 
     fn read_display_enabled(&self) -> bool {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_display_enabled(),
+            AnyCrtController::Type0(crtc) => crtc.read_display_enabled(),
+            AnyCrtController::Type1(crtc) => crtc.read_display_enabled(),
+            AnyCrtController::Type2(crtc) => crtc.read_display_enabled(),
+            AnyCrtController::Type4(crtc) => crtc.read_display_enabled(),
         }
     }
 
     fn read_horizontal_sync(&self) -> bool {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_horizontal_sync(),
+            AnyCrtController::Type0(crtc) => crtc.read_horizontal_sync(),
+            AnyCrtController::Type1(crtc) => crtc.read_horizontal_sync(),
+            AnyCrtController::Type2(crtc) => crtc.read_horizontal_sync(),
+            AnyCrtController::Type4(crtc) => crtc.read_horizontal_sync(),
         }
     }
 
     fn read_vertical_sync(&self) -> bool {
         match self {
-            AnyCrtController::HitachiHd6845s(crtc) => crtc.read_vertical_sync(),
+            AnyCrtController::Type0(crtc) => crtc.read_vertical_sync(),
+            AnyCrtController::Type1(crtc) => crtc.read_vertical_sync(),
+            AnyCrtController::Type2(crtc) => crtc.read_vertical_sync(),
+            AnyCrtController::Type4(crtc) => crtc.read_vertical_sync(),
         }
     }
 }
@@ -380,7 +637,7 @@ impl CrtController for AnyCrtController {
 // Section numbers in the comments refer to the compendium. One `step` is one CRTC character (1 µs).
 //
 // Test names start with `test_type_<types>_`, listing the CRTC types the behaviour applies to:
-//   type 0: Hitachi HD6845S / UMC UM6845 (currently emulated by `HitachiHd6845s`)
+//   type 0: Hitachi HD6845S / UMC UM6845
 //   type 1: UMC UM6845R
 //   type 2: Motorola MC6845
 //   type 4: Amstrad pre-ASIC 40226
@@ -390,31 +647,93 @@ mod tests {
     #[allow(unused_imports)]
     use super::*;
 
+    macro_rules! crtcs {
+        (All) => {
+            [
+                AnyCrtController::Type0(Type0::default()),
+                AnyCrtController::Type1(Type1::default()),
+                AnyCrtController::Type2(Type2::default()),
+                AnyCrtController::Type4(Type4::default()),
+            ]
+        };
+        ($($variant:ident),+) => {
+            [$(
+                AnyCrtController::$variant($variant::default())
+            ),+]
+        };
+    }
+
     mod register_access {
         #[allow(unused_imports)]
         use super::*;
 
         #[test]
-        #[ignore]
         fn test_type_all_register_function_is_decoded_from_port_bits_8_and_9() {
             // ACCC 4.3, 4.4.1: &BC00 selects, &BD00 writes, &BE00 reads status, &BF00 reads a register.
             // The low byte of the port address must not influence the function.
-            todo!()
+
+            for port in 0xbc00..=0xbcff {
+                assert_eq!(Function::from(port), Function::Select);
+            }
+
+            for port in 0xbd00..=0xbdff {
+                assert_eq!(Function::from(port), Function::Write);
+            }
+
+            for port in 0xbe00..=0xbeff {
+                assert_eq!(Function::from(port), Function::Status);
+            }
+
+            for port in 0xbf00..=0xbfff {
+                assert_eq!(Function::from(port), Function::Read);
+            }
+
+            assert_eq!(Function::from(0x4000), Function::Ignore);
         }
 
         #[test]
-        #[ignore]
         fn test_type_all_register_select_for_writes_ignores_upper_three_bits() {
             // ACCC 5.1: only the 5 low bits of the register number count, so selecting &29 is the same as selecting R9.
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                for register in 0..=255 {
+                    crtc.write_byte(0xbc00, register);
+                    let selected_register = match &crtc {
+                        AnyCrtController::Type0(crtc) => crtc.common.selected_register,
+                        AnyCrtController::Type1(crtc) => crtc.common.selected_register,
+                        AnyCrtController::Type2(crtc) => crtc.common.selected_register,
+                        AnyCrtController::Type4(crtc) => crtc.common.selected_register,
+                    };
+
+                    if (19..31).contains(&(register & 0x1f)) {
+                        assert_eq!(usize::from(selected_register), 18);
+                    } else {
+                        assert_eq!(usize::from(selected_register), register as usize & 0x1f);
+                    }
+                }
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_all_r9_write_is_truncated_to_five_bits() {
             // ACCC 5.1, 10.1: writing &27 to R9 stores 7.
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                crtc.write_byte(0xbc00, 9);
+                crtc.write_byte(0xbd00, 0x27);
+
+                let r9_value = match &crtc {
+                    AnyCrtController::Type0(crtc) => crtc.common.registers[9],
+                    AnyCrtController::Type1(crtc) => crtc.common.registers[9],
+                    AnyCrtController::Type2(crtc) => crtc.common.registers[9],
+                    AnyCrtController::Type4(crtc) => crtc.common.registers[9],
+                };
+
+                assert_eq!(r9_value, 7);
+            }
         }
+
+        // TODO: test for other register truncations according to ACCC 4.3
 
         #[test]
         #[ignore]
