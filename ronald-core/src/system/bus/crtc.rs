@@ -157,12 +157,36 @@ impl Common {
     }
 
     fn write_register(&mut self, value: u8) {
-        // TODO: restrict to writable registers
+        if matches!(
+            self.selected_register,
+            Register::LightPenAddressHigh | Register::LightPenAddressLow
+        ) {
+            return;
+        }
+
         let was = self.registers[usize::from(self.selected_register)];
 
         let truncated = match self.selected_register {
+            Register::HorizontalTotal => value,
+            Register::HorizontalDisplayed => value,
+            Register::HorizontalSyncPosition => value,
+            Register::HorizontalAndVerticalSyncWidths => value,
+            Register::VerticalTotal => value & 0x7f,
+            Register::VerticalTotalAdjust => value & 0x1f,
+            Register::VerticalDisplayed => value & 0x7f,
+            Register::VerticalSyncPosition => value & 0x7f,
+            Register::InterlaceAndSkew => value,
             Register::MaximumRasterAddress => value & 0x1f,
-            _ => value,
+            Register::CursorStartRaster => value,
+            Register::CursorEndRaster => value,
+            Register::DisplayStartAddressHigh => value,
+            Register::DisplayStartAddressLow => value,
+            Register::CursorAddressHigh => value,
+            Register::CursorAddressLow => value,
+            Register::LightPenAddressHigh => value,
+            Register::LightPenAddressLow => value,
+            Register::Unused => value,
+            Register::Dummy => value,
         };
 
         self.registers[usize::from(self.selected_register)] = truncated;
@@ -180,6 +204,13 @@ impl Common {
     fn read_register(&self) -> u8 {
         // TODO: restrict to readable registers
         // TODO: handle type 4 reads (see https://www.cpcwiki.eu/index.php/Extra_CPC_Plus_Hardware_Information#CRTC)
+        if matches!(
+            self.selected_register,
+            Register::CursorAddressHigh | Register::LightPenAddressHigh
+        ) {
+            return self.registers[usize::from(self.selected_register)] & 0x3f;
+        }
+
         self.registers[usize::from(self.selected_register)]
     }
 }
@@ -736,52 +767,215 @@ mod tests {
         // TODO: test for other register truncations according to ACCC 4.3
 
         #[test]
-        #[ignore]
         fn test_type_all_r5_write_is_truncated_to_five_bits() {
             // ACCC 11.1: R5 holds a number of lines on 5 bits (0 to 31).
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                crtc.write_byte(0xbc00, 5);
+                crtc.write_byte(0xbd00, 0x27);
+
+                let r5_value = match &crtc {
+                    AnyCrtController::Type0(crtc) => crtc.common.registers[5],
+                    AnyCrtController::Type1(crtc) => crtc.common.registers[5],
+                    AnyCrtController::Type2(crtc) => crtc.common.registers[5],
+                    AnyCrtController::Type4(crtc) => crtc.common.registers[5],
+                };
+
+                assert_eq!(r5_value, 7);
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_all_character_row_registers_are_truncated_to_seven_bits() {
             // ACCC 12.1: C4 counts up to 127, so R4, R6 and R7 are 7-bit registers.
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                for register in [4, 6, 7] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, 0xff);
+
+                    let value = match &crtc {
+                        AnyCrtController::Type0(crtc) => crtc.common.registers[register as usize],
+                        AnyCrtController::Type1(crtc) => crtc.common.registers[register as usize],
+                        AnyCrtController::Type2(crtc) => crtc.common.registers[register as usize],
+                        AnyCrtController::Type4(crtc) => crtc.common.registers[register as usize],
+                    };
+
+                    assert_eq!(value, 0x7f);
+                }
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_all_writes_to_read_ports_are_ignored() {
             // ACCC 4.3: only &BC00 and &BD00 are writable; writing to &BE00/&BF00 changes nothing.
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                let before = match &crtc {
+                    AnyCrtController::Type0(crtc) => crtc.common.selected_register,
+                    AnyCrtController::Type1(crtc) => crtc.common.selected_register,
+                    AnyCrtController::Type2(crtc) => crtc.common.selected_register,
+                    AnyCrtController::Type4(crtc) => crtc.common.selected_register,
+                };
+
+                crtc.write_byte(0xbc00, 0x42);
+
+                let after = match &crtc {
+                    AnyCrtController::Type0(crtc) => crtc.common.selected_register,
+                    AnyCrtController::Type1(crtc) => crtc.common.selected_register,
+                    AnyCrtController::Type2(crtc) => crtc.common.selected_register,
+                    AnyCrtController::Type4(crtc) => crtc.common.selected_register,
+                };
+
+                assert_ne!(before, after);
+
+                let before = match &crtc {
+                    AnyCrtController::Type0(crtc) => crtc.common.registers,
+                    AnyCrtController::Type1(crtc) => crtc.common.registers,
+                    AnyCrtController::Type2(crtc) => crtc.common.registers,
+                    AnyCrtController::Type4(crtc) => crtc.common.registers,
+                };
+
+                crtc.write_byte(0xbd00, 0x42);
+
+                let after = match &crtc {
+                    AnyCrtController::Type0(crtc) => crtc.common.registers,
+                    AnyCrtController::Type1(crtc) => crtc.common.registers,
+                    AnyCrtController::Type2(crtc) => crtc.common.registers,
+                    AnyCrtController::Type4(crtc) => crtc.common.registers,
+                };
+
+                assert_ne!(before, after);
+
+                for port in [0xbe00, 0xbf00] {
+                    let before = match &crtc {
+                        AnyCrtController::Type0(crtc) => {
+                            (crtc.common.selected_register, crtc.common.registers)
+                        }
+                        AnyCrtController::Type1(crtc) => {
+                            (crtc.common.selected_register, crtc.common.registers)
+                        }
+                        AnyCrtController::Type2(crtc) => {
+                            (crtc.common.selected_register, crtc.common.registers)
+                        }
+                        AnyCrtController::Type4(crtc) => {
+                            (crtc.common.selected_register, crtc.common.registers)
+                        }
+                    };
+
+                    crtc.write_byte(port, 0x42);
+
+                    let after = match &crtc {
+                        AnyCrtController::Type0(crtc) => {
+                            (crtc.common.selected_register, crtc.common.registers)
+                        }
+                        AnyCrtController::Type1(crtc) => {
+                            (crtc.common.selected_register, crtc.common.registers)
+                        }
+                        AnyCrtController::Type2(crtc) => {
+                            (crtc.common.selected_register, crtc.common.registers)
+                        }
+                        AnyCrtController::Type4(crtc) => {
+                            (crtc.common.selected_register, crtc.common.registers)
+                        }
+                    };
+
+                    assert_eq!(before, after);
+                }
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_all_cursor_registers_store_and_read_back_values() {
             // ACCC 21.2.1-21.2.3: the cursor is unused on CPC, but R14/R15 still store values that can be read back.
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                for register in [14, 15] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, 0x3f);
+
+                    let value = crtc.read_byte(0xbf00);
+
+                    assert_eq!(value, 0x3f);
+                }
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_all_light_pen_registers_are_read_only() {
             // ACCC 4.3: R16/R17 can be read but writes to them are ignored.
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                for register in [16, 17] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, 0x42);
+
+                    let value = crtc.read_byte(0xbf00);
+
+                    assert_eq!(value, 0x00);
+                }
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_all_cursor_and_light_pen_high_registers_read_bits_6_and_7_as_zero() {
             // ACCC 21.2.1-21.2.3: R14 and R16 only have 6 bits; bits 6 and 7 read as 0.
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                for register in [14, 16] {
+                    match crtc {
+                        AnyCrtController::Type0(crtc) => {
+                            crtc.common.registers[register as usize] = 0xff
+                        }
+                        AnyCrtController::Type1(crtc) => {
+                            crtc.common.registers[register as usize] = 0xff
+                        }
+                        AnyCrtController::Type2(crtc) => {
+                            crtc.common.registers[register as usize] = 0xff
+                        }
+                        AnyCrtController::Type4(crtc) => {
+                            crtc.common.registers[register as usize] = 0xff
+                        }
+                    }
+
+                    crtc.write_byte(0xbc00, register);
+                    let value = crtc.read_byte(0xbf00);
+
+                    assert_eq!(value & 0b1100_0000, 0);
+                }
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_012_register_select_for_reads_ignores_upper_three_bits() {
             // ACCC 21.2.1, 21.2.2, 28.1.9: selecting register 108 and reading &BF00 is the same as reading R12.
-            todo!()
+
+            for crtc in &mut crtcs!(Type0, Type1, Type2) {
+                for register in 0..=255 {
+                    match crtc {
+                        AnyCrtController::Type0(crtc) => {
+                            crtc.common.registers = std::array::from_fn(|i| i as u8);
+                        }
+                        AnyCrtController::Type1(crtc) => {
+                            crtc.common.registers = std::array::from_fn(|i| i as u8);
+                        }
+                        AnyCrtController::Type2(crtc) => {
+                            crtc.common.registers = std::array::from_fn(|i| i as u8);
+                        }
+                        AnyCrtController::Type4(crtc) => {
+                            crtc.common.registers = std::array::from_fn(|i| i as u8);
+                        }
+                    };
+
+                    crtc.write_byte(0xbc00, register);
+                    let value = crtc.read_byte(0xbf00);
+
+                    crtc.write_byte(0xbc00, register & 0x1f);
+                    let expected = crtc.read_byte(0xbf00);
+
+                    assert_eq!(value, expected);
+                }
+            }
         }
 
         #[test]
