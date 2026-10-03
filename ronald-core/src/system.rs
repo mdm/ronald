@@ -17,7 +17,6 @@ use crate::system::instruction::DecodedInstruction;
 use crate::system::memory::RomSlot;
 use crate::{AudioSink, VideoSink};
 
-use bus::crtc::AnyCrtController;
 use bus::gate_array::AnyGateArray;
 use bus::{Bus, StandardBus};
 use cpu::Cpu;
@@ -229,7 +228,7 @@ impl std::fmt::Display for DiskDrives {
     }
 }
 
-impl<C> From<SystemConfig> for AmstradCpc<C, AnyMemory, StandardBus<AnyCrtController, AnyGateArray>>
+impl<C> From<SystemConfig> for AmstradCpc<C, AnyMemory, StandardBus<AnyGateArray>>
 where
     C: Cpu + Default,
 {

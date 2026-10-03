@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::debug::event::CrtcDebugEvent;
 use crate::debug::view::CrtcDebugView;
 use crate::debug::{DebugSource, Debuggable, Snapshottable};
+use crate::system::CrtcType;
 use crate::system::clock::MasterClockTick;
 
 pub trait CrtController: Default {
@@ -128,7 +129,10 @@ impl From<u16> for Function {
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Common {
+struct CommonCrtController<I>
+where
+    I: CrtControllerImpl,
+{
     registers: [u8; 18],
     selected_register: Register,
     horizontal_counter: u8,
@@ -141,9 +145,13 @@ struct Common {
     previous_vsync: bool,
     previous_display_enabled: bool,
     previous_address: usize,
+    impl_: I,
 }
 
-impl Common {
+impl<I> CommonCrtController<I>
+where
+    I: CrtControllerImpl,
+{
     fn select_register(&mut self, register: usize) {
         let Ok(register) = Register::try_from(register & 0x1f) else {
             return;
@@ -215,7 +223,10 @@ impl Common {
     }
 }
 
-impl Snapshottable for Common {
+impl<I> Snapshottable for CommonCrtController<I>
+where
+    I: CrtControllerImpl,
+{
     type View = CrtcDebugView;
 
     fn debug_view(&self) -> Self::View {
@@ -234,12 +245,18 @@ impl Snapshottable for Common {
     }
 }
 
-impl Debuggable for Common {
+impl<I> Debuggable for CommonCrtController<I>
+where
+    I: CrtControllerImpl,
+{
     const SOURCE: DebugSource = DebugSource::Crtc;
     type Event = CrtcDebugEvent;
 }
 
-impl CrtController for Common {
+impl<I> CrtController for CommonCrtController<I>
+where
+    I: CrtControllerImpl,
+{
     fn read_byte(&mut self, port: u16) -> u8 {
         match port.into() {
             Function::Read => self.read_register(),
@@ -380,220 +397,65 @@ impl CrtController for Common {
     }
 }
 
-#[derive(Default, Serialize, Deserialize)]
-pub struct Type0 {
-    common: Common,
-}
-
-impl Snapshottable for Type0 {
-    type View = CrtcDebugView;
-
-    fn debug_view(&self) -> Self::View {
-        self.common.debug_view()
-    }
-}
-
-impl Debuggable for Type0 {
-    const SOURCE: DebugSource = DebugSource::Crtc;
-    type Event = CrtcDebugEvent;
-}
-
-impl CrtController for Type0 {
-    fn read_byte(&mut self, port: u16) -> u8 {
-        self.common.read_byte(port)
-    }
-
-    fn write_byte(&mut self, port: u16, value: u8) {
-        self.common.write_byte(port, value)
-    }
-
-    fn step(&mut self, master_clock: MasterClockTick) {
-        self.common.step(master_clock)
-    }
-
-    fn read_address(&self) -> usize {
-        self.common.read_address()
-    }
-
-    fn read_display_enabled(&self) -> bool {
-        self.common.read_display_enabled()
-    }
-
-    fn read_horizontal_sync(&self) -> bool {
-        self.common.read_horizontal_sync()
-    }
-
-    fn read_vertical_sync(&self) -> bool {
-        self.common.read_vertical_sync()
-    }
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct Type1 {
-    common: Common,
-}
-
-impl Snapshottable for Type1 {
-    type View = CrtcDebugView;
-
-    fn debug_view(&self) -> Self::View {
-        self.common.debug_view()
-    }
-}
-
-impl Debuggable for Type1 {
-    const SOURCE: DebugSource = DebugSource::Crtc;
-    type Event = CrtcDebugEvent;
-}
-
-impl CrtController for Type1 {
-    fn read_byte(&mut self, port: u16) -> u8 {
-        self.common.read_byte(port)
-    }
-
-    fn write_byte(&mut self, port: u16, value: u8) {
-        self.common.write_byte(port, value)
-    }
-
-    fn step(&mut self, master_clock: MasterClockTick) {
-        self.common.step(master_clock)
-    }
-
-    fn read_address(&self) -> usize {
-        self.common.read_address()
-    }
-
-    fn read_display_enabled(&self) -> bool {
-        self.common.read_display_enabled()
-    }
-
-    fn read_horizontal_sync(&self) -> bool {
-        self.common.read_horizontal_sync()
-    }
-
-    fn read_vertical_sync(&self) -> bool {
-        self.common.read_vertical_sync()
-    }
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct Type2 {
-    common: Common,
-}
-
-impl Snapshottable for Type2 {
-    type View = CrtcDebugView;
-
-    fn debug_view(&self) -> Self::View {
-        self.common.debug_view()
-    }
-}
-
-impl Debuggable for Type2 {
-    const SOURCE: DebugSource = DebugSource::Crtc;
-    type Event = CrtcDebugEvent;
-}
-
-impl CrtController for Type2 {
-    fn read_byte(&mut self, port: u16) -> u8 {
-        self.common.read_byte(port)
-    }
-
-    fn write_byte(&mut self, port: u16, value: u8) {
-        self.common.write_byte(port, value)
-    }
-
-    fn step(&mut self, master_clock: MasterClockTick) {
-        self.common.step(master_clock)
-    }
-
-    fn read_address(&self) -> usize {
-        self.common.read_address()
-    }
-
-    fn read_display_enabled(&self) -> bool {
-        self.common.read_display_enabled()
-    }
-
-    fn read_horizontal_sync(&self) -> bool {
-        self.common.read_horizontal_sync()
-    }
-
-    fn read_vertical_sync(&self) -> bool {
-        self.common.read_vertical_sync()
-    }
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct Type4 {
-    common: Common,
-}
-
-impl Snapshottable for Type4 {
-    type View = CrtcDebugView;
-
-    fn debug_view(&self) -> Self::View {
-        self.common.debug_view()
-    }
-}
-
-impl Debuggable for Type4 {
-    const SOURCE: DebugSource = DebugSource::Crtc;
-    type Event = CrtcDebugEvent;
-}
-
-impl CrtController for Type4 {
-    fn read_byte(&mut self, port: u16) -> u8 {
-        self.common.read_byte(port)
-    }
-
-    fn write_byte(&mut self, port: u16, value: u8) {
-        self.common.write_byte(port, value)
-    }
-
-    fn step(&mut self, master_clock: MasterClockTick) {
-        self.common.step(master_clock)
-    }
-
-    fn read_address(&self) -> usize {
-        self.common.read_address()
-    }
-
-    fn read_display_enabled(&self) -> bool {
-        self.common.read_display_enabled()
-    }
-
-    fn read_horizontal_sync(&self) -> bool {
-        self.common.read_horizontal_sync()
-    }
-
-    fn read_vertical_sync(&self) -> bool {
-        self.common.read_vertical_sync()
-    }
-}
-
 macro_rules! dispatch {
     ($any_crtc:expr, $inner_crtc:ident => $body:expr) => {
-        match $any_crtc {
-            AnyCrtController::Type0($inner_crtc) => $body,
-            AnyCrtController::Type1($inner_crtc) => $body,
-            AnyCrtController::Type2($inner_crtc) => $body,
-            AnyCrtController::Type4($inner_crtc) => $body,
+        match &$any_crtc.inner {
+            AnyCrtControllerInner::Type0($inner_crtc) => $body,
+            AnyCrtControllerInner::Type1($inner_crtc) => $body,
+            AnyCrtControllerInner::Type2($inner_crtc) => $body,
+            AnyCrtControllerInner::Type4($inner_crtc) => $body,
+        }
+    };
+}
+
+macro_rules! dispatch_mut {
+    ($any_crtc:expr, $inner_crtc:ident => $body:expr) => {
+        match &mut $any_crtc.inner {
+            AnyCrtControllerInner::Type0($inner_crtc) => $body,
+            AnyCrtControllerInner::Type1($inner_crtc) => $body,
+            AnyCrtControllerInner::Type2($inner_crtc) => $body,
+            AnyCrtControllerInner::Type4($inner_crtc) => $body,
         }
     };
 }
 
 #[derive(Serialize, Deserialize)]
-pub enum AnyCrtController {
-    Type0(Type0),
-    Type1(Type1),
-    Type2(Type2),
-    Type4(Type4),
+enum AnyCrtControllerInner {
+    Type0(CommonCrtController<Type0>),
+    Type1(CommonCrtController<Type1>),
+    Type2(CommonCrtController<Type2>),
+    Type4(CommonCrtController<Type4>),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AnyCrtController {
+    inner: AnyCrtControllerInner,
+}
+
+impl AnyCrtController {
+    pub fn new(type_: CrtcType) -> Self {
+        let inner = match type_ {
+            CrtcType::Type0 => {
+                AnyCrtControllerInner::Type0(CommonCrtController::<Type0>::default())
+            }
+            CrtcType::Type1 => {
+                AnyCrtControllerInner::Type1(CommonCrtController::<Type1>::default())
+            }
+            CrtcType::Type2 => {
+                AnyCrtControllerInner::Type2(CommonCrtController::<Type2>::default())
+            }
+            CrtcType::Type4 => {
+                AnyCrtControllerInner::Type4(CommonCrtController::<Type4>::default())
+            }
+        };
+
+        Self { inner }
+    }
 }
 
 impl Default for AnyCrtController {
     fn default() -> Self {
-        AnyCrtController::Type0(Type0::default())
+        Self::new(CrtcType::Type0)
     }
 }
 
@@ -607,15 +469,15 @@ impl Snapshottable for AnyCrtController {
 
 impl CrtController for AnyCrtController {
     fn read_byte(&mut self, port: u16) -> u8 {
-        dispatch!(self, crtc => crtc.read_byte(port))
+        dispatch_mut!(self, crtc => crtc.read_byte(port))
     }
 
     fn write_byte(&mut self, port: u16, value: u8) {
-        dispatch!(self, crtc => crtc.write_byte(port, value))
+        dispatch_mut!(self, crtc => crtc.write_byte(port, value))
     }
 
     fn step(&mut self, master_clock: MasterClockTick) {
-        dispatch!(self, crtc => crtc.step(master_clock))
+        dispatch_mut!(self, crtc => crtc.step(master_clock))
     }
 
     fn read_address(&self) -> usize {
@@ -637,6 +499,28 @@ impl CrtController for AnyCrtController {
 
 mod common {}
 
+trait CrtControllerImpl: Default {}
+
+#[derive(Default, Serialize, Deserialize)]
+struct Type0 {}
+
+impl CrtControllerImpl for Type0 {}
+
+#[derive(Default, Serialize, Deserialize)]
+struct Type1 {}
+
+impl CrtControllerImpl for Type1 {}
+
+#[derive(Default, Serialize, Deserialize)]
+struct Type2 {}
+
+impl CrtControllerImpl for Type2 {}
+
+#[derive(Default, Serialize, Deserialize)]
+struct Type4 {}
+
+impl CrtControllerImpl for Type4 {}
+
 // Test suite derived from "The Amstrad CPC CRTC Compendium" (ACCC) v1.11 by Longshot / Logon System.
 // Section numbers in the comments refer to the compendium. One `step` is one CRTC character (1 µs).
 //
@@ -654,15 +538,15 @@ mod tests {
     macro_rules! crtcs {
         (All) => {
             [
-                AnyCrtController::Type0(Type0::default()),
-                AnyCrtController::Type1(Type1::default()),
-                AnyCrtController::Type2(Type2::default()),
-                AnyCrtController::Type4(Type4::default()),
+                AnyCrtController::new(CrtcType::Type0),
+                AnyCrtController::new(CrtcType::Type1),
+                AnyCrtController::new(CrtcType::Type2),
+                AnyCrtController::new(CrtcType::Type4),
             ]
         };
         ($($variant:ident),+) => {
             [$(
-                AnyCrtController::$variant($variant::default())
+                AnyCrtController::new(CrtcType::$variant)
             ),+]
         };
     }
@@ -702,7 +586,7 @@ mod tests {
             for crtc in &mut crtcs!(All) {
                 for register in 0..=255 {
                     crtc.write_byte(0xbc00, register);
-                    let selected_register = dispatch!(crtc, crtc => crtc.common.selected_register);
+                    let selected_register = dispatch!(crtc, crtc => crtc.selected_register);
 
                     if (19..31).contains(&(register & 0x1f)) {
                         assert_eq!(usize::from(selected_register), 18);
@@ -721,7 +605,7 @@ mod tests {
                 crtc.write_byte(0xbc00, 9);
                 crtc.write_byte(0xbd00, 0x27);
 
-                let r9_value = dispatch!(crtc, crtc => crtc.common.registers[9]);
+                let r9_value = dispatch!(crtc, crtc => crtc.registers[9]);
 
                 assert_eq!(r9_value, 7);
             }
@@ -737,7 +621,7 @@ mod tests {
                 crtc.write_byte(0xbc00, 5);
                 crtc.write_byte(0xbd00, 0x27);
 
-                let r5_value = dispatch!(crtc, crtc => crtc.common.registers[5]);
+                let r5_value = dispatch!(crtc, crtc => crtc.registers[5]);
 
                 assert_eq!(r5_value, 7);
             }
@@ -752,7 +636,7 @@ mod tests {
                     crtc.write_byte(0xbc00, register);
                     crtc.write_byte(0xbd00, 0xff);
 
-                    let value = dispatch!(crtc, crtc => crtc.common.registers[register as usize]);
+                    let value = dispatch!(crtc, crtc => crtc.registers[register as usize]);
 
                     assert_eq!(value, 0x7f);
                 }
@@ -764,22 +648,22 @@ mod tests {
             // ACCC 4.3: only &BC00 and &BD00 are writable; writing to &BE00/&BF00 changes nothing.
 
             for crtc in &mut crtcs!(All) {
-                let before = dispatch!(crtc, crtc => crtc.common.selected_register);
+                let before = dispatch!(crtc, crtc => crtc.selected_register);
                 crtc.write_byte(0xbc00, 0x42);
-                let after = dispatch!(crtc, crtc => crtc.common.selected_register);
+                let after = dispatch!(crtc, crtc => crtc.selected_register);
 
                 assert_ne!(before, after);
 
-                let before = dispatch!(crtc, crtc => crtc.common.registers);
+                let before = dispatch!(crtc, crtc => crtc.registers);
                 crtc.write_byte(0xbd00, 0x42);
-                let after = dispatch!(crtc, crtc => crtc.common.registers);
+                let after = dispatch!(crtc, crtc => crtc.registers);
 
                 assert_ne!(before, after);
 
                 for port in [0xbe00, 0xbf00] {
-                    let before = dispatch!(crtc, crtc => (crtc.common.selected_register, crtc.common.registers));
+                    let before = dispatch!(crtc, crtc => (crtc.selected_register, crtc.registers));
                     crtc.write_byte(port, 0x42);
-                    let after = dispatch!(crtc, crtc => (crtc.common.selected_register, crtc.common.registers));
+                    let after = dispatch!(crtc, crtc => (crtc.selected_register, crtc.registers));
 
                     assert_eq!(before, after);
                 }
@@ -824,7 +708,7 @@ mod tests {
 
             for crtc in &mut crtcs!(All) {
                 for register in [14, 16] {
-                    dispatch!(crtc, crtc => crtc.common.registers[register as usize] = 0xff);
+                    dispatch_mut!(crtc, crtc => crtc.registers[register as usize] = 0xff);
 
                     crtc.write_byte(0xbc00, register);
                     let value = crtc.read_byte(0xbf00);
@@ -840,7 +724,7 @@ mod tests {
 
             for crtc in &mut crtcs!(Type0, Type1, Type2) {
                 for register in 0..=255 {
-                    dispatch!(crtc, crtc => crtc.common.registers = std::array::from_fn(|i| i as u8));
+                    dispatch_mut!(crtc, crtc => crtc.registers = std::array::from_fn(|i| i as u8));
 
                     crtc.write_byte(0xbc00, register);
                     let value = crtc.read_byte(0xbf00);
