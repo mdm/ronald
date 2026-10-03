@@ -572,6 +572,17 @@ impl CrtController for Type4 {
     }
 }
 
+macro_rules! dispatch {
+    ($any_crtc:expr, $inner_crtc:ident => $body:expr) => {
+        match $any_crtc {
+            AnyCrtController::Type0($inner_crtc) => $body,
+            AnyCrtController::Type1($inner_crtc) => $body,
+            AnyCrtController::Type2($inner_crtc) => $body,
+            AnyCrtController::Type4($inner_crtc) => $body,
+        }
+    };
+}
+
 #[derive(Serialize, Deserialize)]
 pub enum AnyCrtController {
     Type0(Type0),
@@ -590,79 +601,41 @@ impl Snapshottable for AnyCrtController {
     type View = CrtcDebugView;
 
     fn debug_view(&self) -> Self::View {
-        match self {
-            AnyCrtController::Type0(crtc) => crtc.debug_view(),
-            AnyCrtController::Type1(crtc) => crtc.debug_view(),
-            AnyCrtController::Type2(crtc) => crtc.debug_view(),
-            AnyCrtController::Type4(crtc) => crtc.debug_view(),
-        }
+        dispatch!(self, crtc => crtc.debug_view())
     }
 }
 
 impl CrtController for AnyCrtController {
     fn read_byte(&mut self, port: u16) -> u8 {
-        match self {
-            AnyCrtController::Type0(crtc) => crtc.read_byte(port),
-            AnyCrtController::Type1(crtc) => crtc.read_byte(port),
-            AnyCrtController::Type2(crtc) => crtc.read_byte(port),
-            AnyCrtController::Type4(crtc) => crtc.read_byte(port),
-        }
+        dispatch!(self, crtc => crtc.read_byte(port))
     }
 
     fn write_byte(&mut self, port: u16, value: u8) {
-        match self {
-            AnyCrtController::Type0(crtc) => crtc.write_byte(port, value),
-            AnyCrtController::Type1(crtc) => crtc.write_byte(port, value),
-            AnyCrtController::Type2(crtc) => crtc.write_byte(port, value),
-            AnyCrtController::Type4(crtc) => crtc.write_byte(port, value),
-        }
+        dispatch!(self, crtc => crtc.write_byte(port, value))
     }
 
     fn step(&mut self, master_clock: MasterClockTick) {
-        match self {
-            AnyCrtController::Type0(crtc) => crtc.step(master_clock),
-            AnyCrtController::Type1(crtc) => crtc.step(master_clock),
-            AnyCrtController::Type2(crtc) => crtc.step(master_clock),
-            AnyCrtController::Type4(crtc) => crtc.step(master_clock),
-        }
+        dispatch!(self, crtc => crtc.step(master_clock))
     }
 
     fn read_address(&self) -> usize {
-        match self {
-            AnyCrtController::Type0(crtc) => crtc.read_address(),
-            AnyCrtController::Type1(crtc) => crtc.read_address(),
-            AnyCrtController::Type2(crtc) => crtc.read_address(),
-            AnyCrtController::Type4(crtc) => crtc.read_address(),
-        }
+        dispatch!(self, crtc => crtc.read_address())
     }
 
     fn read_display_enabled(&self) -> bool {
-        match self {
-            AnyCrtController::Type0(crtc) => crtc.read_display_enabled(),
-            AnyCrtController::Type1(crtc) => crtc.read_display_enabled(),
-            AnyCrtController::Type2(crtc) => crtc.read_display_enabled(),
-            AnyCrtController::Type4(crtc) => crtc.read_display_enabled(),
-        }
+        dispatch!(self, crtc => crtc.read_display_enabled())
     }
 
     fn read_horizontal_sync(&self) -> bool {
-        match self {
-            AnyCrtController::Type0(crtc) => crtc.read_horizontal_sync(),
-            AnyCrtController::Type1(crtc) => crtc.read_horizontal_sync(),
-            AnyCrtController::Type2(crtc) => crtc.read_horizontal_sync(),
-            AnyCrtController::Type4(crtc) => crtc.read_horizontal_sync(),
-        }
+        dispatch!(self, crtc => crtc.read_horizontal_sync())
     }
 
     fn read_vertical_sync(&self) -> bool {
-        match self {
-            AnyCrtController::Type0(crtc) => crtc.read_vertical_sync(),
-            AnyCrtController::Type1(crtc) => crtc.read_vertical_sync(),
-            AnyCrtController::Type2(crtc) => crtc.read_vertical_sync(),
-            AnyCrtController::Type4(crtc) => crtc.read_vertical_sync(),
-        }
+        dispatch!(self, crtc => crtc.read_vertical_sync())
     }
 }
+
+mod common {}
 
 // Test suite derived from "The Amstrad CPC CRTC Compendium" (ACCC) v1.11 by Longshot / Logon System.
 // Section numbers in the comments refer to the compendium. One `step` is one CRTC character (1 µs).
@@ -729,12 +702,7 @@ mod tests {
             for crtc in &mut crtcs!(All) {
                 for register in 0..=255 {
                     crtc.write_byte(0xbc00, register);
-                    let selected_register = match &crtc {
-                        AnyCrtController::Type0(crtc) => crtc.common.selected_register,
-                        AnyCrtController::Type1(crtc) => crtc.common.selected_register,
-                        AnyCrtController::Type2(crtc) => crtc.common.selected_register,
-                        AnyCrtController::Type4(crtc) => crtc.common.selected_register,
-                    };
+                    let selected_register = dispatch!(crtc, crtc => crtc.common.selected_register);
 
                     if (19..31).contains(&(register & 0x1f)) {
                         assert_eq!(usize::from(selected_register), 18);
@@ -753,12 +721,7 @@ mod tests {
                 crtc.write_byte(0xbc00, 9);
                 crtc.write_byte(0xbd00, 0x27);
 
-                let r9_value = match &crtc {
-                    AnyCrtController::Type0(crtc) => crtc.common.registers[9],
-                    AnyCrtController::Type1(crtc) => crtc.common.registers[9],
-                    AnyCrtController::Type2(crtc) => crtc.common.registers[9],
-                    AnyCrtController::Type4(crtc) => crtc.common.registers[9],
-                };
+                let r9_value = dispatch!(crtc, crtc => crtc.common.registers[9]);
 
                 assert_eq!(r9_value, 7);
             }
@@ -774,12 +737,7 @@ mod tests {
                 crtc.write_byte(0xbc00, 5);
                 crtc.write_byte(0xbd00, 0x27);
 
-                let r5_value = match &crtc {
-                    AnyCrtController::Type0(crtc) => crtc.common.registers[5],
-                    AnyCrtController::Type1(crtc) => crtc.common.registers[5],
-                    AnyCrtController::Type2(crtc) => crtc.common.registers[5],
-                    AnyCrtController::Type4(crtc) => crtc.common.registers[5],
-                };
+                let r5_value = dispatch!(crtc, crtc => crtc.common.registers[5]);
 
                 assert_eq!(r5_value, 7);
             }
@@ -794,12 +752,7 @@ mod tests {
                     crtc.write_byte(0xbc00, register);
                     crtc.write_byte(0xbd00, 0xff);
 
-                    let value = match &crtc {
-                        AnyCrtController::Type0(crtc) => crtc.common.registers[register as usize],
-                        AnyCrtController::Type1(crtc) => crtc.common.registers[register as usize],
-                        AnyCrtController::Type2(crtc) => crtc.common.registers[register as usize],
-                        AnyCrtController::Type4(crtc) => crtc.common.registers[register as usize],
-                    };
+                    let value = dispatch!(crtc, crtc => crtc.common.registers[register as usize]);
 
                     assert_eq!(value, 0x7f);
                 }
@@ -811,74 +764,22 @@ mod tests {
             // ACCC 4.3: only &BC00 and &BD00 are writable; writing to &BE00/&BF00 changes nothing.
 
             for crtc in &mut crtcs!(All) {
-                let before = match &crtc {
-                    AnyCrtController::Type0(crtc) => crtc.common.selected_register,
-                    AnyCrtController::Type1(crtc) => crtc.common.selected_register,
-                    AnyCrtController::Type2(crtc) => crtc.common.selected_register,
-                    AnyCrtController::Type4(crtc) => crtc.common.selected_register,
-                };
-
+                let before = dispatch!(crtc, crtc => crtc.common.selected_register);
                 crtc.write_byte(0xbc00, 0x42);
-
-                let after = match &crtc {
-                    AnyCrtController::Type0(crtc) => crtc.common.selected_register,
-                    AnyCrtController::Type1(crtc) => crtc.common.selected_register,
-                    AnyCrtController::Type2(crtc) => crtc.common.selected_register,
-                    AnyCrtController::Type4(crtc) => crtc.common.selected_register,
-                };
+                let after = dispatch!(crtc, crtc => crtc.common.selected_register);
 
                 assert_ne!(before, after);
 
-                let before = match &crtc {
-                    AnyCrtController::Type0(crtc) => crtc.common.registers,
-                    AnyCrtController::Type1(crtc) => crtc.common.registers,
-                    AnyCrtController::Type2(crtc) => crtc.common.registers,
-                    AnyCrtController::Type4(crtc) => crtc.common.registers,
-                };
-
+                let before = dispatch!(crtc, crtc => crtc.common.registers);
                 crtc.write_byte(0xbd00, 0x42);
-
-                let after = match &crtc {
-                    AnyCrtController::Type0(crtc) => crtc.common.registers,
-                    AnyCrtController::Type1(crtc) => crtc.common.registers,
-                    AnyCrtController::Type2(crtc) => crtc.common.registers,
-                    AnyCrtController::Type4(crtc) => crtc.common.registers,
-                };
+                let after = dispatch!(crtc, crtc => crtc.common.registers);
 
                 assert_ne!(before, after);
 
                 for port in [0xbe00, 0xbf00] {
-                    let before = match &crtc {
-                        AnyCrtController::Type0(crtc) => {
-                            (crtc.common.selected_register, crtc.common.registers)
-                        }
-                        AnyCrtController::Type1(crtc) => {
-                            (crtc.common.selected_register, crtc.common.registers)
-                        }
-                        AnyCrtController::Type2(crtc) => {
-                            (crtc.common.selected_register, crtc.common.registers)
-                        }
-                        AnyCrtController::Type4(crtc) => {
-                            (crtc.common.selected_register, crtc.common.registers)
-                        }
-                    };
-
+                    let before = dispatch!(crtc, crtc => (crtc.common.selected_register, crtc.common.registers));
                     crtc.write_byte(port, 0x42);
-
-                    let after = match &crtc {
-                        AnyCrtController::Type0(crtc) => {
-                            (crtc.common.selected_register, crtc.common.registers)
-                        }
-                        AnyCrtController::Type1(crtc) => {
-                            (crtc.common.selected_register, crtc.common.registers)
-                        }
-                        AnyCrtController::Type2(crtc) => {
-                            (crtc.common.selected_register, crtc.common.registers)
-                        }
-                        AnyCrtController::Type4(crtc) => {
-                            (crtc.common.selected_register, crtc.common.registers)
-                        }
-                    };
+                    let after = dispatch!(crtc, crtc => (crtc.common.selected_register, crtc.common.registers));
 
                     assert_eq!(before, after);
                 }
@@ -923,20 +824,7 @@ mod tests {
 
             for crtc in &mut crtcs!(All) {
                 for register in [14, 16] {
-                    match crtc {
-                        AnyCrtController::Type0(crtc) => {
-                            crtc.common.registers[register as usize] = 0xff
-                        }
-                        AnyCrtController::Type1(crtc) => {
-                            crtc.common.registers[register as usize] = 0xff
-                        }
-                        AnyCrtController::Type2(crtc) => {
-                            crtc.common.registers[register as usize] = 0xff
-                        }
-                        AnyCrtController::Type4(crtc) => {
-                            crtc.common.registers[register as usize] = 0xff
-                        }
-                    }
+                    dispatch!(crtc, crtc => crtc.common.registers[register as usize] = 0xff);
 
                     crtc.write_byte(0xbc00, register);
                     let value = crtc.read_byte(0xbf00);
@@ -952,20 +840,7 @@ mod tests {
 
             for crtc in &mut crtcs!(Type0, Type1, Type2) {
                 for register in 0..=255 {
-                    match crtc {
-                        AnyCrtController::Type0(crtc) => {
-                            crtc.common.registers = std::array::from_fn(|i| i as u8);
-                        }
-                        AnyCrtController::Type1(crtc) => {
-                            crtc.common.registers = std::array::from_fn(|i| i as u8);
-                        }
-                        AnyCrtController::Type2(crtc) => {
-                            crtc.common.registers = std::array::from_fn(|i| i as u8);
-                        }
-                        AnyCrtController::Type4(crtc) => {
-                            crtc.common.registers = std::array::from_fn(|i| i as u8);
-                        }
-                    };
+                    dispatch!(crtc, crtc => crtc.common.registers = std::array::from_fn(|i| i as u8));
 
                     crtc.write_byte(0xbc00, register);
                     let value = crtc.read_byte(0xbf00);
