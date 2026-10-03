@@ -19,7 +19,7 @@ mod psg;
 pub mod screen; // TODO: refactor to not use pub
 mod tape;
 
-use crtc::CrtController;
+use crtc::CrtControllerInterface;
 use fdc::FloppyDiskController;
 use gate_array::GateArray;
 use keyboard::Keyboard;
