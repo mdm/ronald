@@ -9,7 +9,7 @@ use crate::debug::{DebugSource, Debuggable, Snapshottable};
 use crate::system::CrtcType;
 use crate::system::clock::MasterClockTick;
 
-pub trait CrtController: Default {
+pub trait CrtControllerInterface: Default {
     fn read_byte(&mut self, port: u16) -> u8;
     fn write_byte(&mut self, port: u16, value: u8);
     fn step(&mut self, master_clock: MasterClockTick);
@@ -129,12 +129,12 @@ impl From<u16> for Function {
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CommonCrtController<I>
+struct CrtController<I>
 where
     I: CrtControllerImpl,
 {
     registers: [u8; 18],
-    selected_register: Register,
+    selected_register: u8,
     horizontal_counter: u8,
     horizontal_sync_width_counter: u8,
     character_row_counter: u8,
@@ -148,82 +148,7 @@ where
     impl_: I,
 }
 
-impl<I> CommonCrtController<I>
-where
-    I: CrtControllerImpl,
-{
-    fn select_register(&mut self, register: usize) {
-        let Ok(register) = Register::try_from(register & 0x1f) else {
-            return;
-        };
-
-        self.selected_register = register;
-        self.emit_debug_event(
-            CrtcDebugEvent::RegisterSelected { register },
-            self.master_clock,
-        );
-    }
-
-    fn write_register(&mut self, value: u8) {
-        if matches!(
-            self.selected_register,
-            Register::LightPenAddressHigh | Register::LightPenAddressLow
-        ) {
-            return;
-        }
-
-        let was = self.registers[usize::from(self.selected_register)];
-
-        let truncated = match self.selected_register {
-            Register::HorizontalTotal => value,
-            Register::HorizontalDisplayed => value,
-            Register::HorizontalSyncPosition => value,
-            Register::HorizontalAndVerticalSyncWidths => value,
-            Register::VerticalTotal => value & 0x7f,
-            Register::VerticalTotalAdjust => value & 0x1f,
-            Register::VerticalDisplayed => value & 0x7f,
-            Register::VerticalSyncPosition => value & 0x7f,
-            Register::InterlaceAndSkew => value,
-            Register::MaximumRasterAddress => value & 0x1f,
-            Register::CursorStartRaster => value,
-            Register::CursorEndRaster => value,
-            Register::DisplayStartAddressHigh => value,
-            Register::DisplayStartAddressLow => value,
-            Register::CursorAddressHigh => value,
-            Register::CursorAddressLow => value,
-            Register::LightPenAddressHigh => value,
-            Register::LightPenAddressLow => value,
-            Register::Unused => value,
-            Register::Dummy => value,
-        };
-
-        self.registers[usize::from(self.selected_register)] = truncated;
-
-        self.emit_debug_event(
-            CrtcDebugEvent::RegisterWritten {
-                register: self.selected_register,
-                is: truncated,
-                was,
-            },
-            self.master_clock,
-        );
-    }
-
-    fn read_register(&self) -> u8 {
-        // TODO: restrict to readable registers
-        // TODO: handle type 4 reads (see https://www.cpcwiki.eu/index.php/Extra_CPC_Plus_Hardware_Information#CRTC)
-        if matches!(
-            self.selected_register,
-            Register::CursorAddressHigh | Register::LightPenAddressHigh
-        ) {
-            return self.registers[usize::from(self.selected_register)] & 0x3f;
-        }
-
-        self.registers[usize::from(self.selected_register)]
-    }
-}
-
-impl<I> Snapshottable for CommonCrtController<I>
+impl<I> Snapshottable for CrtController<I>
 where
     I: CrtControllerImpl,
 {
@@ -245,7 +170,7 @@ where
     }
 }
 
-impl<I> Debuggable for CommonCrtController<I>
+impl<I> Debuggable for CrtController<I>
 where
     I: CrtControllerImpl,
 {
@@ -253,21 +178,21 @@ where
     type Event = CrtcDebugEvent;
 }
 
-impl<I> CrtController for CommonCrtController<I>
+impl<I> CrtControllerInterface for CrtController<I>
 where
     I: CrtControllerImpl,
 {
     fn read_byte(&mut self, port: u16) -> u8 {
         match port.into() {
-            Function::Read => self.read_register(),
+            Function::Read => I::read_register(self),
             _ => 0xff, // TODO: properly emulate floating bus
         }
     }
 
     fn write_byte(&mut self, port: u16, value: u8) {
         match port.into() {
-            Function::Select => self.select_register(value as usize),
-            Function::Write => self.write_register(value),
+            Function::Select => I::select_register(self, value),
+            Function::Write => I::write_register(self, value),
             _ => (),
         }
     }
@@ -421,10 +346,10 @@ macro_rules! dispatch_mut {
 
 #[derive(Serialize, Deserialize)]
 enum AnyCrtControllerInner {
-    Type0(CommonCrtController<Type0>),
-    Type1(CommonCrtController<Type1>),
-    Type2(CommonCrtController<Type2>),
-    Type4(CommonCrtController<Type4>),
+    Type0(CrtController<Type0>),
+    Type1(CrtController<Type1>),
+    Type2(CrtController<Type2>),
+    Type4(CrtController<Type4>),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -435,18 +360,10 @@ pub struct AnyCrtController {
 impl AnyCrtController {
     pub fn new(type_: CrtcType) -> Self {
         let inner = match type_ {
-            CrtcType::Type0 => {
-                AnyCrtControllerInner::Type0(CommonCrtController::<Type0>::default())
-            }
-            CrtcType::Type1 => {
-                AnyCrtControllerInner::Type1(CommonCrtController::<Type1>::default())
-            }
-            CrtcType::Type2 => {
-                AnyCrtControllerInner::Type2(CommonCrtController::<Type2>::default())
-            }
-            CrtcType::Type4 => {
-                AnyCrtControllerInner::Type4(CommonCrtController::<Type4>::default())
-            }
+            CrtcType::Type0 => AnyCrtControllerInner::Type0(CrtController::<Type0>::default()),
+            CrtcType::Type1 => AnyCrtControllerInner::Type1(CrtController::<Type1>::default()),
+            CrtcType::Type2 => AnyCrtControllerInner::Type2(CrtController::<Type2>::default()),
+            CrtcType::Type4 => AnyCrtControllerInner::Type4(CrtController::<Type4>::default()),
         };
 
         Self { inner }
@@ -467,7 +384,7 @@ impl Snapshottable for AnyCrtController {
     }
 }
 
-impl CrtController for AnyCrtController {
+impl CrtControllerInterface for AnyCrtController {
     fn read_byte(&mut self, port: u16) -> u8 {
         dispatch_mut!(self, crtc => crtc.read_byte(port))
     }
@@ -497,9 +414,141 @@ impl CrtController for AnyCrtController {
     }
 }
 
-mod common {}
+trait CrtControllerImpl: Default {
+    fn select_register(crtc: &mut CrtController<Self>, register: u8) {
+        common::select_register(crtc, register)
+    }
 
-trait CrtControllerImpl: Default {}
+    fn resolve_selected_register_read(
+        crtc: &CrtController<Self>,
+    ) -> Result<Register, num_enum::TryFromPrimitiveError<Register>> {
+        common::resolve_selected_register_read(crtc)
+    }
+
+    fn read_register(crtc: &CrtController<Self>) -> u8 {
+        common::read_register(crtc)
+    }
+
+    fn resolve_selected_register_write(
+        crtc: &CrtController<Self>,
+    ) -> Result<Register, num_enum::TryFromPrimitiveError<Register>> {
+        common::resolve_selected_register_write(crtc)
+    }
+
+    fn write_register(crtc: &mut CrtController<Self>, value: u8) {
+        common::write_register(crtc, value);
+    }
+}
+
+mod common {
+    use super::*;
+
+    pub(super) fn select_register<I>(crtc: &mut CrtController<I>, register: u8)
+    where
+        I: CrtControllerImpl,
+    {
+        crtc.selected_register = register;
+        crtc.emit_debug_event(
+            CrtcDebugEvent::RegisterSelected { register },
+            crtc.master_clock,
+        );
+    }
+
+    pub(super) fn resolve_selected_register_read<I>(
+        crtc: &CrtController<I>,
+    ) -> Result<Register, num_enum::TryFromPrimitiveError<Register>>
+    where
+        I: CrtControllerImpl,
+    {
+        Register::try_from(crtc.selected_register as usize & 0x1f)
+    }
+
+    pub(super) fn read_register<I>(crtc: &CrtController<I>) -> u8
+    where
+        I: CrtControllerImpl,
+    {
+        // TODO: restrict to readable registers
+        // TODO: handle type 4 reads (see https://www.cpcwiki.eu/index.php/Extra_CPC_Plus_Hardware_Information#CRTC)
+
+        let Ok(register) = I::resolve_selected_register_read(crtc) else {
+            return 0xff; // TODO: properly emulate floating bus
+        };
+
+        if matches!(register, Register::Unused | Register::Dummy) {
+            return 0;
+        }
+
+        if matches!(
+            register,
+            Register::CursorAddressHigh | Register::LightPenAddressHigh
+        ) {
+            return crtc.registers[usize::from(register)] & 0x3f;
+        }
+
+        crtc.registers[usize::from(register)]
+    }
+
+    pub(super) fn resolve_selected_register_write<I>(
+        crtc: &CrtController<I>,
+    ) -> Result<Register, num_enum::TryFromPrimitiveError<Register>>
+    where
+        I: CrtControllerImpl,
+    {
+        Register::try_from(crtc.selected_register as usize & 0x1f)
+    }
+
+    pub(super) fn write_register<I>(crtc: &mut CrtController<I>, value: u8)
+    where
+        I: CrtControllerImpl,
+    {
+        let Ok(register) = I::resolve_selected_register_write(crtc) else {
+            return;
+        };
+
+        if matches!(
+            register,
+            Register::LightPenAddressHigh | Register::LightPenAddressLow
+        ) {
+            return;
+        }
+
+        let was = crtc.registers[usize::from(register)];
+
+        let truncated = match register {
+            Register::HorizontalTotal => value,
+            Register::HorizontalDisplayed => value,
+            Register::HorizontalSyncPosition => value,
+            Register::HorizontalAndVerticalSyncWidths => value,
+            Register::VerticalTotal => value & 0x7f,
+            Register::VerticalTotalAdjust => value & 0x1f,
+            Register::VerticalDisplayed => value & 0x7f,
+            Register::VerticalSyncPosition => value & 0x7f,
+            Register::InterlaceAndSkew => value,
+            Register::MaximumRasterAddress => value & 0x1f,
+            Register::CursorStartRaster => value,
+            Register::CursorEndRaster => value,
+            Register::DisplayStartAddressHigh => value,
+            Register::DisplayStartAddressLow => value,
+            Register::CursorAddressHigh => value,
+            Register::CursorAddressLow => value,
+            Register::LightPenAddressHigh => value,
+            Register::LightPenAddressLow => value,
+            Register::Unused => value,
+            Register::Dummy => value,
+        };
+
+        crtc.registers[usize::from(register)] = truncated;
+
+        crtc.emit_debug_event(
+            CrtcDebugEvent::RegisterWritten {
+                register,
+                is: truncated,
+                was,
+            },
+            crtc.master_clock,
+        );
+    }
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct Type0 {}
@@ -585,14 +634,18 @@ mod tests {
 
             for crtc in &mut crtcs!(All) {
                 for register in 0..=255 {
-                    crtc.write_byte(0xbc00, register);
-                    let selected_register = dispatch!(crtc, crtc => crtc.selected_register);
-
-                    if (19..31).contains(&(register & 0x1f)) {
-                        assert_eq!(usize::from(selected_register), 18);
-                    } else {
-                        assert_eq!(usize::from(selected_register), register as usize & 0x1f);
+                    if register & 0x1f >= 16 {
+                        continue; // Only R0-R15 are writable
                     }
+
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, 0xff);
+
+                    let value = dispatch!(crtc, crtc => crtc.registers[register as usize & 0x1f]);
+
+                    assert_ne!(value, 0x00);
+
+                    crtc.write_byte(0xbd00, 0x00);
                 }
             }
         }
@@ -723,9 +776,9 @@ mod tests {
             // ACCC 21.2.1, 21.2.2, 28.1.9: selecting register 108 and reading &BF00 is the same as reading R12.
 
             for crtc in &mut crtcs!(Type0, Type1, Type2) {
-                for register in 0..=255 {
-                    dispatch_mut!(crtc, crtc => crtc.registers = std::array::from_fn(|i| i as u8));
+                dispatch_mut!(crtc, crtc => crtc.registers = std::array::from_fn(|i| i as u8));
 
+                for register in 0..=255 {
                     crtc.write_byte(0xbc00, register);
                     let value = crtc.read_byte(0xbf00);
 
