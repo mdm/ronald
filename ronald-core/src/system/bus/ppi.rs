@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::system::bus::crtc::CrtController;
+use crate::system::bus::crtc::CrtControllerInterface;
 use crate::system::bus::keyboard::Keyboard;
 use crate::system::bus::psg::SoundGenerator;
 use crate::system::bus::tape::TapeController;
@@ -46,7 +46,7 @@ impl Default for PeripheralInterface {
 impl PeripheralInterface {
     pub fn read_byte(
         &self,
-        crtc: &impl CrtController,
+        crtc: &impl CrtControllerInterface,
         psg: &SoundGenerator,
         tape: &TapeController,
         port: u16,

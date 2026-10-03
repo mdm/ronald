@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use crate::system::{
-    bus::crtc::Register as CrtcRegister,
     bus::fdc::{Command as FdcCommand, CommandResult as FdcResult, Phase as FdcPhase},
     clock::MasterClockTick,
     instruction::InterruptMode,
@@ -82,7 +81,7 @@ pub struct GateArrayDebugView {
 #[derive(Debug, Clone)]
 pub struct CrtcDebugView {
     pub registers: [u8; 18],
-    pub selected_register: CrtcRegister,
+    pub selected_register: u8,
     pub horizontal_counter: u8,
     pub character_row_counter: u8,
     pub scan_line_counter: u8,

@@ -17,7 +17,7 @@ pub trait GateArray: Default {
     fn acknowledge_interrupt(&mut self);
     fn step(
         &mut self,
-        crtc: &impl crtc::CrtController,
+        crtc: &impl crtc::CrtControllerInterface,
         memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
@@ -41,7 +41,7 @@ pub struct Amstrad40007 {
 }
 
 impl Amstrad40007 {
-    fn update_interrupt_counter(&mut self, crtc: &impl crtc::CrtController) -> bool {
+    fn update_interrupt_counter(&mut self, crtc: &impl crtc::CrtControllerInterface) -> bool {
         let mut generate_interrupt = false;
         if self.hsync_active && !crtc.read_horizontal_sync() {
             self.interrupt_counter += 1;
@@ -71,7 +71,7 @@ impl Amstrad40007 {
         generate_interrupt
     }
 
-    fn update_screen_mode(&mut self, crtc: &impl crtc::CrtController) {
+    fn update_screen_mode(&mut self, crtc: &impl crtc::CrtControllerInterface) {
         if !self.hsync_active
             && crtc.read_horizontal_sync()
             && let Some(requested) = self.requested_screen_mode.take()
@@ -92,7 +92,7 @@ impl Amstrad40007 {
 
     fn write_to_screen(
         &self,
-        crtc: &impl crtc::CrtController,
+        crtc: &impl crtc::CrtControllerInterface,
         memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
@@ -234,7 +234,7 @@ impl GateArray for Amstrad40007 {
 
     fn step(
         &mut self,
-        crtc: &impl crtc::CrtController,
+        crtc: &impl crtc::CrtControllerInterface,
         memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,
@@ -302,7 +302,7 @@ impl GateArray for AnyGateArray {
 
     fn step(
         &mut self,
-        crtc: &impl crtc::CrtController,
+        crtc: &impl crtc::CrtControllerInterface,
         memory: &mut (impl MemRead + MemManage),
         screen: &mut screen::Screen,
         video: &mut impl VideoSink,

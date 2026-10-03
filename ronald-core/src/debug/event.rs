@@ -61,7 +61,7 @@ impl From<MemoryDebugEvent> for DebugEvent {
 #[derive(Debug, Clone)]
 pub enum CrtcDebugEvent {
     RegisterSelected {
-        register: CrtcRegister,
+        register: u8,
     },
     RegisterWritten {
         register: CrtcRegister,

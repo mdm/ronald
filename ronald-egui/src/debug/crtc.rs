@@ -88,7 +88,7 @@ impl CrtcDebugWindow {
             .show(ui, |ui| {
                 for (i, value) in crtc.registers.iter().enumerate() {
                     let register = CrtcRegister::try_from(i).unwrap();
-                    let is_selected = register == crtc.selected_register;
+                    let is_selected = usize::from(register) == crtc.selected_register as usize;
 
                     let label = format!("{}:", register);
                     if is_selected {
@@ -107,7 +107,7 @@ impl CrtcDebugWindow {
                 }
 
                 let register = CrtcRegister::Unused;
-                let is_selected = register == crtc.selected_register;
+                let is_selected = usize::from(register) == crtc.selected_register as usize;
 
                 let label = format!("{}:", register);
                 if is_selected {
@@ -120,7 +120,7 @@ impl CrtcDebugWindow {
                 ui.separator();
 
                 let register = CrtcRegister::Dummy;
-                let is_selected = register == crtc.selected_register;
+                let is_selected = usize::from(register) == crtc.selected_register as usize;
 
                 let label = format!("{}:", register);
                 if is_selected {
