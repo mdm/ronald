@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::debug::Snapshottable;
 use crate::debug::view::{CrtcDebugView, FdcDebugView, GateArrayDebugView};
+use crate::system::bus::crtc::AnyCrtController;
 use crate::system::clock::MasterClockTick;
 use crate::system::memory::{MemManage, MemRead};
 use crate::system::{CrtcType, DiskDrives};
@@ -52,12 +53,11 @@ pub trait Bus: Default {
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct StandardBus<C, G>
+pub struct StandardBus<G>
 where
-    C: CrtController,
     G: GateArray,
 {
-    crtc: C,
+    crtc: AnyCrtController,
     fdc: FloppyDiskController,
     gate_array: G,
     keyboard: Keyboard,
@@ -67,12 +67,12 @@ where
     tape: TapeController,
 }
 
-impl<C, G> StandardBus<C, G>
+impl<G> StandardBus<G>
 where
-    C: CrtController,
     G: GateArray,
 {
-    pub fn new(_crtc_type: CrtcType, disk_drives: DiskDrives) -> Self {
+    pub fn new(crtc_type: CrtcType, disk_drives: DiskDrives) -> Self {
+        let crtc = AnyCrtController::new(crtc_type);
         let fdc = match disk_drives {
             DiskDrives::None => FloppyDiskController::new(0),
             DiskDrives::One => FloppyDiskController::new(1),
@@ -80,15 +80,15 @@ where
         };
 
         Self {
+            crtc,
             fdc,
             ..Default::default()
         }
     }
 }
 
-impl<C, G> Bus for StandardBus<C, G>
+impl<G> Bus for StandardBus<G>
 where
-    C: CrtController,
     G: GateArray,
 {
     fn read_byte(&mut self, port: u16) -> u8 {
@@ -158,9 +158,8 @@ where
     }
 }
 
-impl<C, G> Snapshottable for StandardBus<C, G>
+impl<G> Snapshottable for StandardBus<G>
 where
-    C: CrtController + Snapshottable<View = CrtcDebugView>,
     G: GateArray + Snapshottable<View = GateArrayDebugView>,
 {
     type View = BusDebugView;
