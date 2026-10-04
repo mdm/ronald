@@ -415,6 +415,8 @@ impl CrtControllerInterface for AnyCrtController {
 }
 
 trait CrtControllerImpl: Default {
+    const READ_MASKS: [u8; 18] = common::generate_read_masks();
+
     fn select_register(crtc: &mut CrtController<Self>, register: u8) {
         common::select_register(crtc, register)
     }
@@ -443,6 +445,17 @@ trait CrtControllerImpl: Default {
 mod common {
     use super::*;
 
+    pub(super) const fn generate_read_masks() -> [u8; 18] {
+        let mut masks = [0x00; 18];
+        masks[14] = 0x3f; // Register::CursorAddressHigh
+        masks[15] = 0xff; // Register::CursorAddressLow
+
+        masks[16] = 0x3f; // Register::LightPenAddressHigh
+        masks[17] = 0xff; // Register::LightPenAddressLow
+
+        masks
+    }
+
     pub(super) fn select_register<I>(crtc: &mut CrtController<I>, register: u8)
     where
         I: CrtControllerImpl,
@@ -467,9 +480,6 @@ mod common {
     where
         I: CrtControllerImpl,
     {
-        // TODO: restrict to readable registers
-        // TODO: handle type 4 reads (see https://www.cpcwiki.eu/index.php/Extra_CPC_Plus_Hardware_Information#CRTC)
-
         let Ok(register) = I::resolve_selected_register_read(crtc) else {
             return 0xff; // TODO: properly emulate floating bus
         };
@@ -478,14 +488,7 @@ mod common {
             return 0;
         }
 
-        if matches!(
-            register,
-            Register::CursorAddressHigh | Register::LightPenAddressHigh
-        ) {
-            return crtc.registers[usize::from(register)] & 0x3f;
-        }
-
-        crtc.registers[usize::from(register)]
+        crtc.registers[usize::from(register)] & I::READ_MASKS[usize::from(register)]
     }
 
     pub(super) fn resolve_selected_register_write<I>(
@@ -553,7 +556,19 @@ mod common {
 #[derive(Default, Serialize, Deserialize)]
 struct Type0 {}
 
-impl CrtControllerImpl for Type0 {}
+impl Type0 {
+    const fn generate_read_masks() -> [u8; 18] {
+        let mut masks = common::generate_read_masks();
+        masks[12] = 0x3f; // Register::DisplayStartAddressHigh
+        masks[13] = 0xff; // Register::DisplayStartAddressLow
+
+        masks
+    }
+}
+
+impl CrtControllerImpl for Type0 {
+    const READ_MASKS: [u8; 18] = Type0::generate_read_masks();
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct Type1 {}
@@ -568,7 +583,19 @@ impl CrtControllerImpl for Type2 {}
 #[derive(Default, Serialize, Deserialize)]
 struct Type4 {}
 
-impl CrtControllerImpl for Type4 {}
+impl Type4 {
+    const fn generate_read_masks() -> [u8; 18] {
+        let mut masks = common::generate_read_masks();
+        masks[12] = 0x3f; // Register::DisplayStartAddressHigh
+        masks[13] = 0xff; // Register::DisplayStartAddressLow
+
+        masks
+    }
+}
+
+impl CrtControllerImpl for Type4 {
+    const READ_MASKS: [u8; 18] = Type0::generate_read_masks();
+}
 
 // Test suite derived from "The Amstrad CPC CRTC Compendium" (ACCC) v1.11 by Longshot / Logon System.
 // Section numbers in the comments refer to the compendium. One `step` is one CRTC character (1 µs).
@@ -791,178 +818,284 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_type_04_display_start_address_is_readable() {
             // ACCC 4.3, 21.2.1, 21.2.3: R12 and R13 can be read back.
-            todo!()
+
+            for crtc in &mut crtcs!(Type0, Type4) {
+                for register in [0x0c, 0x0d] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, 0xff);
+
+                    let value = crtc.read_byte(0xbf00);
+
+                    assert_ne!(value, 0);
+                }
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_04_display_start_address_high_reads_bits_6_and_7_as_zero() {
             // ACCC 21.2.1, 21.2.3: R12 only has 6 bits.
-            todo!()
+
+            for crtc in &mut crtcs!(Type0, Type4) {
+                crtc.write_byte(0xbc00, 0x0c);
+                crtc.write_byte(0xbd00, 0xff);
+
+                let value = crtc.read_byte(0xbf00);
+
+                assert_eq!(value, 0x3f);
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_12_display_start_address_reads_as_zero() {
             // ACCC 4.3, 21.2.2, 28.1.9: R12/R13 are write-only on types 1 and 2, so reading them returns 0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type1, Type2) {
+                crtc.write_byte(0xbc00, 0x0c);
+                crtc.write_byte(0xbd00, 0xff);
+
+                let value = crtc.read_byte(0xbf00);
+
+                assert_eq!(value, 0x00);
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_012_reading_write_only_registers_returns_zero() {
             // ACCC 21.2.1, 21.2.2: reading R0-R11 returns 0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type0) {
+                for register in 0..=0x0b {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, 0xff);
+
+                    let value = crtc.read_byte(0xbf00);
+
+                    assert_eq!(value, 0x00);
+                }
+            }
+
+            for crtc in &mut crtcs!(Type1, Type2) {
+                for register in 0..=0x0d {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, 0xff);
+
+                    let value = crtc.read_byte(0xbf00);
+
+                    assert_eq!(value, 0x00);
+                }
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_02_reading_undefined_registers_returns_zero() {
             // ACCC 21.2.1, 21.2.2, 21.4: reading R18-R31 returns 0; the "dummy" R31 does not exist.
-            todo!()
+
+            for crtc in &mut crtcs!(Type0, Type2) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_1_reading_register_31_returns_non_zero() {
             // ACCC 21.2.2, 21.4, 28.1.9: R31 (and any number whose bits 0-4 are all 1) reads as a non-zero value (127 or 255 observed).
-            todo!()
+
+            for crtc in &mut crtcs!(Type1) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_0_status_port_does_not_return_register_contents() {
             // ACCC 21.3.2: type 0 has no status register; the bus floats (255 or 127 observed).
-            todo!()
+
+            for crtc in &mut crtcs!(Type0) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_2_status_port_reads_255() {
             // ACCC 21.3.2: type 2 has no status register; &BE00 always read 255 on the test machine.
-            todo!()
+
+            for crtc in &mut crtcs!(Type2) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_1_status_register_unused_bits_read_as_zero() {
             // ACCC 21.3.3: bits 0-4 and 7 of the &BE00 status register read 0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type1) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_1_status_bit_5_reflects_r6_border_state_updated_at_c0_equal_r0() {
             // ACCC 21.3.3: bit 5 becomes 1 at C0=R0 of the line before C4=R6, C9=0 and becomes 0 at C0=R0 of the line before C4=C9=0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type1) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_1_status_bit_5_ignores_border_from_r6_zero() {
             // ACCC 21.3.3: setting R6=0 while C4>0 shows border but does not set bit 5.
-            todo!()
+
+            for crtc in &mut crtcs!(Type1) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_register_reads_use_only_three_bits_of_register_number() {
             // ACCC 21.2.3, 28.1.9: reads map numbers 0-7 to R16, R17, R10, R11, R12, R13, R14, R15, so reading R4 or R20 returns R12.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!("display this correctly in the debug window")
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_port_mirrors_read_port() {
             // ACCC 21.2.3, 21.3.1, 28.1.8: &BE00 behaves exactly like &BF00.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_1_bit_0_is_set_when_c0_equals_r0() {
             // ACCC 21.3.4.1: reading R10 returns status 1; bit 0 is 1 only while C0=R0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_1_bit_1_is_cleared_when_c0_equals_half_r0() {
             // ACCC 21.3.4.1: bit 1 is 0 only while C0=R0/2.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_1_bit_2_is_cleared_when_c0_equals_r1_minus_one() {
             // ACCC 21.3.4.1: bit 2 is 0 while C0=R1-1 (if R0>=R1).
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_1_bits_3_and_4_are_cleared_at_hsync_start_and_end() {
             // ACCC 21.3.4.1: bit 3 is 0 while C0=R2; bit 4 is 0 while C0=R2+R3.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_1_bit_5_tracks_last_vsync_line() {
             // ACCC 21.3.4.1: bit 5 is 0 on line R3h of the VSYNC (R3h>0), or 1 over 15 lines from the VSYNC start when R3h=0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_1_bit_6_is_always_set() {
             // ACCC 21.3.4.1.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_1_bit_7_is_cleared_before_vma_low_byte_resets() {
             // ACCC 21.3.4.1: bit 7 is 0 when VMA's low byte is &FF (C0<R0) or when VMA' low byte is &00 at C0=R0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_2_bits_0_to_2_flag_last_char_of_screen_display_and_before_vsync() {
             // ACCC 21.3.4.2: bit 0 is 0 at C4=R4,C9=R9,C0=R0; bit 1 at C4=R6-1,C9=R9,C0=R0; bit 2 at C4=R7-1,C9=R9,C0=R0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_2_bit_3_toggles_every_16_frames() {
             // ACCC 21.3.4.2: with line-to-line rupture it toggles every 16 lines.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_2_constant_bits() {
             // ACCC 21.3.4.2: bit 4 is always 1 and bit 6 is always 0.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_2_bit_5_is_cleared_on_last_raster_of_character() {
             // ACCC 21.3.4.2: bit 5 is 0 on every C0 of a line with C9=R9.
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
 
         #[test]
         #[ignore]
         fn test_type_4_status_2_bit_7_is_set_on_character_boundaries() {
             // ACCC 21.3.4.2: bit 7 is 1 when (C9=R9 and C0=R0) or (C9=0 and C0<R0).
-            todo!()
+
+            for crtc in &mut crtcs!(Type4) {
+                todo!()
+            }
         }
     }
 
