@@ -185,6 +185,7 @@ where
     fn read_byte(&mut self, port: u16) -> u8 {
         match port.into() {
             Function::Read => I::read_register(self),
+            Function::Status => I::read_status(self),
             _ => 0xff, // TODO: properly emulate floating bus
         }
     }
@@ -431,6 +432,10 @@ trait CrtControllerImpl: Default {
         common::read_register(crtc)
     }
 
+    fn read_status(crtc: &CrtController<Self>) -> u8 {
+        common::read_status(crtc)
+    }
+
     fn resolve_selected_register_write(
         crtc: &CrtController<Self>,
     ) -> Result<Register, num_enum::TryFromPrimitiveError<Register>> {
@@ -551,6 +556,13 @@ mod common {
             crtc.master_clock,
         );
     }
+
+    pub(super) fn read_status<I>(_crtc: &CrtController<I>) -> u8
+    where
+        I: CrtControllerImpl,
+    {
+        0xff
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -571,9 +583,34 @@ impl CrtControllerImpl for Type0 {
 }
 
 #[derive(Default, Serialize, Deserialize)]
-struct Type1 {}
+struct Type1 {
+    light_pen_status: bool,
+    border_r6_status: bool,
+}
 
-impl CrtControllerImpl for Type1 {}
+impl CrtControllerImpl for Type1 {
+    fn read_register(crtc: &CrtController<Self>) -> u8 {
+        if let Ok(Register::Dummy) = Self::resolve_selected_register_read(crtc) {
+            return 0xff;
+        };
+
+        common::read_register(crtc)
+    }
+
+    fn read_status(crtc: &CrtController<Self>) -> u8 {
+        let mut status = 0;
+
+        if crtc.impl_.light_pen_status {
+            status |= 0x40;
+        }
+
+        if crtc.impl_.border_r6_status {
+            status |= 0x20;
+        }
+
+        status
+    }
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct Type2 {}
@@ -586,6 +623,8 @@ struct Type4 {}
 impl Type4 {
     const fn generate_read_masks() -> [u8; 18] {
         let mut masks = common::generate_read_masks();
+        masks[10] = 0xff; // Register::CursorStartRaster
+        masks[11] = 0xff; // Register::CursorEndRaster
         masks[12] = 0x3f; // Register::DisplayStartAddressHigh
         masks[13] = 0xff; // Register::DisplayStartAddressLow
 
@@ -594,7 +633,19 @@ impl Type4 {
 }
 
 impl CrtControllerImpl for Type4 {
-    const READ_MASKS: [u8; 18] = Type0::generate_read_masks();
+    const READ_MASKS: [u8; 18] = Type4::generate_read_masks();
+
+    fn resolve_selected_register_read(
+        crtc: &CrtController<Self>,
+    ) -> Result<Register, num_enum::TryFromPrimitiveError<Register>> {
+        let selected_register = 10 + ((crtc.selected_register & 0x07) as i8 - 2).rem_euclid(8);
+
+        Register::try_from(selected_register as usize)
+    }
+
+    fn read_status(crtc: &CrtController<Self>) -> u8 {
+        Self::read_register(crtc)
+    }
 }
 
 // Test suite derived from "The Amstrad CPC CRTC Compendium" (ACCC) v1.11 by Longshot / Logon System.
@@ -889,53 +940,73 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_type_02_reading_undefined_registers_returns_zero() {
             // ACCC 21.2.1, 21.2.2, 21.4: reading R18-R31 returns 0; the "dummy" R31 does not exist.
 
             for crtc in &mut crtcs!(Type0, Type2) {
-                todo!()
+                for register in 0x12..=0x1f {
+                    dispatch_mut!(crtc, crtc => crtc.registers = [0xff; 18]);
+
+                    crtc.write_byte(0xbc00, register);
+
+                    let value = crtc.read_byte(0xbf00);
+
+                    assert_eq!(value, 0x00);
+                }
             }
         }
 
         #[test]
-        #[ignore]
         fn test_type_1_reading_register_31_returns_non_zero() {
             // ACCC 21.2.2, 21.4, 28.1.9: R31 (and any number whose bits 0-4 are all 1) reads as a non-zero value (127 or 255 observed).
 
-            for crtc in &mut crtcs!(Type1) {
-                todo!()
+            let mut crtc = CrtController::<Type1>::default();
+            for register in 0..=0xff {
+                if register & 0x1f != 0x1f {
+                    continue;
+                }
+
+                crtc.write_byte(0xbc00, register);
+
+                let value = crtc.read_byte(0xbf00);
+
+                assert_eq!(value, 0xff);
             }
         }
 
         #[test]
-        #[ignore]
         fn test_type_0_status_port_does_not_return_register_contents() {
             // ACCC 21.3.2: type 0 has no status register; the bus floats (255 or 127 observed).
 
-            for crtc in &mut crtcs!(Type0) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type0>::default();
+
+            let status = crtc.read_byte(0xbe00);
+
+            assert_eq!(status, 0xff); // TODO: properly emulate floating bus
         }
 
         #[test]
-        #[ignore]
         fn test_type_2_status_port_reads_255() {
             // ACCC 21.3.2: type 2 has no status register; &BE00 always read 255 on the test machine.
 
-            for crtc in &mut crtcs!(Type2) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type2>::default();
+
+            let status = crtc.read_byte(0xbe00);
+
+            assert_eq!(status, 0xff);
         }
 
         #[test]
-        #[ignore]
         fn test_type_1_status_register_unused_bits_read_as_zero() {
             // ACCC 21.3.3: bits 0-4 and 7 of the &BE00 status register read 0.
 
-            for crtc in &mut crtcs!(Type1) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type1>::default();
+            crtc.impl_.light_pen_status = true;
+            crtc.impl_.border_r6_status = true;
+
+            let status = crtc.read_byte(0xbe00);
+
+            assert_eq!(status & !0x60, 0);
         }
 
         #[test]
@@ -943,9 +1014,8 @@ mod tests {
         fn test_type_1_status_bit_5_reflects_r6_border_state_updated_at_c0_equal_r0() {
             // ACCC 21.3.3: bit 5 becomes 1 at C0=R0 of the line before C4=R6, C9=0 and becomes 0 at C0=R0 of the line before C4=C9=0.
 
-            for crtc in &mut crtcs!(Type1) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type1>::default();
+            todo!()
         }
 
         #[test]
@@ -953,28 +1023,48 @@ mod tests {
         fn test_type_1_status_bit_5_ignores_border_from_r6_zero() {
             // ACCC 21.3.3: setting R6=0 while C4>0 shows border but does not set bit 5.
 
-            for crtc in &mut crtcs!(Type1) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type1>::default();
+            todo!()
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_register_reads_use_only_three_bits_of_register_number() {
             // ACCC 21.2.3, 28.1.9: reads map numbers 0-7 to R16, R17, R10, R11, R12, R13, R14, R15, so reading R4 or R20 returns R12.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!("display this correctly in the debug window")
+            let mut crtc = CrtController::<Type4> {
+                registers: std::array::from_fn(|i| i as u8),
+                ..Default::default()
+            };
+            for register in 0..=255 {
+                crtc.write_byte(0xbc00, register);
+
+                match register & 0x07 {
+                    0 => assert_eq!(crtc.read_byte(0xbf00), 16),
+                    1 => assert_eq!(crtc.read_byte(0xbf00), 17),
+                    2 => assert_eq!(crtc.read_byte(0xbf00), 10),
+                    3 => assert_eq!(crtc.read_byte(0xbf00), 11),
+                    4 => assert_eq!(crtc.read_byte(0xbf00), 12),
+                    5 => assert_eq!(crtc.read_byte(0xbf00), 13),
+                    6 => assert_eq!(crtc.read_byte(0xbf00), 14),
+                    7 => assert_eq!(crtc.read_byte(0xbf00), 15),
+                    _ => unreachable!(),
+                }
             }
+            todo!("display this correctly in the debug window")
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_status_port_mirrors_read_port() {
             // ACCC 21.2.3, 21.3.1, 28.1.8: &BE00 behaves exactly like &BF00.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
+            let mut crtc = CrtController::<Type4> {
+                registers: std::array::from_fn(|i| i as u8),
+                ..Default::default()
+            };
+            for register in 0..=255 {
+                crtc.write_byte(0xbc00, register);
+
+                assert_eq!(crtc.read_byte(0xbe00), crtc.read_byte(0xbf00));
             }
         }
 
@@ -983,9 +1073,8 @@ mod tests {
         fn test_type_4_status_1_bit_0_is_set_when_c0_equals_r0() {
             // ACCC 21.3.4.1: reading R10 returns status 1; bit 0 is 1 only while C0=R0.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -993,9 +1082,8 @@ mod tests {
         fn test_type_4_status_1_bit_1_is_cleared_when_c0_equals_half_r0() {
             // ACCC 21.3.4.1: bit 1 is 0 only while C0=R0/2.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1003,9 +1091,8 @@ mod tests {
         fn test_type_4_status_1_bit_2_is_cleared_when_c0_equals_r1_minus_one() {
             // ACCC 21.3.4.1: bit 2 is 0 while C0=R1-1 (if R0>=R1).
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1013,9 +1100,8 @@ mod tests {
         fn test_type_4_status_1_bits_3_and_4_are_cleared_at_hsync_start_and_end() {
             // ACCC 21.3.4.1: bit 3 is 0 while C0=R2; bit 4 is 0 while C0=R2+R3.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1023,9 +1109,8 @@ mod tests {
         fn test_type_4_status_1_bit_5_tracks_last_vsync_line() {
             // ACCC 21.3.4.1: bit 5 is 0 on line R3h of the VSYNC (R3h>0), or 1 over 15 lines from the VSYNC start when R3h=0.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1033,9 +1118,8 @@ mod tests {
         fn test_type_4_status_1_bit_6_is_always_set() {
             // ACCC 21.3.4.1.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1043,9 +1127,8 @@ mod tests {
         fn test_type_4_status_1_bit_7_is_cleared_before_vma_low_byte_resets() {
             // ACCC 21.3.4.1: bit 7 is 0 when VMA's low byte is &FF (C0<R0) or when VMA' low byte is &00 at C0=R0.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1053,9 +1136,8 @@ mod tests {
         fn test_type_4_status_2_bits_0_to_2_flag_last_char_of_screen_display_and_before_vsync() {
             // ACCC 21.3.4.2: bit 0 is 0 at C4=R4,C9=R9,C0=R0; bit 1 at C4=R6-1,C9=R9,C0=R0; bit 2 at C4=R7-1,C9=R9,C0=R0.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1063,9 +1145,8 @@ mod tests {
         fn test_type_4_status_2_bit_3_toggles_every_16_frames() {
             // ACCC 21.3.4.2: with line-to-line rupture it toggles every 16 lines.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1073,9 +1154,8 @@ mod tests {
         fn test_type_4_status_2_constant_bits() {
             // ACCC 21.3.4.2: bit 4 is always 1 and bit 6 is always 0.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1083,9 +1163,8 @@ mod tests {
         fn test_type_4_status_2_bit_5_is_cleared_on_last_raster_of_character() {
             // ACCC 21.3.4.2: bit 5 is 0 on every C0 of a line with C9=R9.
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
 
         #[test]
@@ -1093,9 +1172,8 @@ mod tests {
         fn test_type_4_status_2_bit_7_is_set_on_character_boundaries() {
             // ACCC 21.3.4.2: bit 7 is 1 when (C9=R9 and C0=R0) or (C9=0 and C0<R0).
 
-            for crtc in &mut crtcs!(Type4) {
-                todo!()
-            }
+            let mut crtc = CrtController::<Type4>::default();
+            todo!()
         }
     }
 
