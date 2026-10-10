@@ -135,10 +135,10 @@ where
 {
     registers: [u8; 18],
     selected_register: u8,
-    horizontal_counter: u8,
-    horizontal_sync_width_counter: u8,
-    character_row_counter: u8,
-    scan_line_counter: u8,
+    c0_horizontal_counter: u8,
+    c3l_horizontal_sync_width_counter: u8,
+    c4_character_row_counter: u8,
+    c9_scan_line_counter: u8,
     display_start_address: u16,
     master_clock: MasterClockTick,
     previous_hsync: bool,
@@ -158,9 +158,9 @@ where
         CrtcDebugView {
             registers: self.registers,
             selected_register: self.selected_register,
-            horizontal_counter: self.horizontal_counter,
-            character_row_counter: self.character_row_counter,
-            scan_line_counter: self.scan_line_counter,
+            horizontal_counter: self.c0_horizontal_counter,
+            character_row_counter: self.c4_character_row_counter,
+            scan_line_counter: self.c9_scan_line_counter,
             display_start_address: self.display_start_address,
             hsync_active: self.read_horizontal_sync(),
             vsync_active: self.read_vertical_sync(),
@@ -201,40 +201,40 @@ where
     fn step(&mut self, master_clock: MasterClockTick) {
         self.master_clock = master_clock;
 
-        let horizontal_counter_was = self.horizontal_counter;
-        let scan_line_was = self.scan_line_counter;
-        let character_row_was = self.character_row_counter;
+        let horizontal_counter_was = self.c0_horizontal_counter;
+        let scan_line_was = self.c9_scan_line_counter;
+        let character_row_was = self.c4_character_row_counter;
 
-        self.horizontal_counter += 1;
+        self.c0_horizontal_counter += 1;
 
-        if self.horizontal_counter > self.registers[Register::HorizontalTotal as usize] {
-            self.scan_line_counter += 1;
-            self.horizontal_counter = 0;
+        if self.c0_horizontal_counter > self.registers[Register::HorizontalTotal as usize] {
+            self.c9_scan_line_counter += 1;
+            self.c0_horizontal_counter = 0;
         }
 
-        if self.scan_line_counter > self.registers[Register::MaximumRasterAddress as usize] {
-            self.character_row_counter += 1;
-            self.scan_line_counter = 0;
+        if self.c9_scan_line_counter > self.registers[Register::MaximumRasterAddress as usize] {
+            self.c4_character_row_counter += 1;
+            self.c9_scan_line_counter = 0;
         }
 
-        if self.character_row_counter > self.registers[Register::VerticalTotal as usize] {
+        if self.c4_character_row_counter > self.registers[Register::VerticalTotal as usize] {
             // TODO: take VerticalTotalAdjust into account
-            self.character_row_counter = 0;
+            self.c4_character_row_counter = 0;
         }
 
         self.emit_debug_event(
             CrtcDebugEvent::CountersChanged {
-                character_row_is: self.character_row_counter,
+                character_row_is: self.c4_character_row_counter,
                 character_row_was,
-                scan_line_is: self.scan_line_counter,
+                scan_line_is: self.c9_scan_line_counter,
                 scan_line_was,
-                horizontal_counter_is: self.horizontal_counter,
+                horizontal_counter_is: self.c0_horizontal_counter,
                 horizontal_counter_was,
             },
             master_clock,
         );
 
-        if self.horizontal_counter == 0 && self.character_row_counter == 0 {
+        if self.c0_horizontal_counter == 0 && self.c4_character_row_counter == 0 {
             self.display_start_address =
                 ((self.registers[Register::DisplayStartAddressHigh as usize] as u16) << 8)
                     + self.registers[Register::DisplayStartAddressLow as usize] as u16;
@@ -282,24 +282,26 @@ where
             );
             self.previous_address = new_address;
         }
+
+        I::update_status(self);
     }
 
     fn read_address(&self) -> usize {
         let refresh_memory_address = self.display_start_address
             + self.registers[Register::HorizontalDisplayed as usize] as u16
-                * self.character_row_counter as u16
-            + self.horizontal_counter as u16;
+                * self.c4_character_row_counter as u16
+            + self.c0_horizontal_counter as u16;
 
         let bits_14_and_15 = (refresh_memory_address & (0b11 << 12)) << 2;
-        let bits_11_to_13 = ((self.scan_line_counter & 0b111) as u16) << 11;
+        let bits_11_to_13 = ((self.c9_scan_line_counter & 0b111) as u16) << 11;
         let bits_0_to_10 = (refresh_memory_address & 0b11_1111_1111) << 1;
 
         (bits_14_and_15 | bits_11_to_13 | bits_0_to_10) as usize
     }
 
     fn read_display_enabled(&self) -> bool {
-        self.horizontal_counter < self.registers[Register::HorizontalDisplayed as usize]
-            && self.character_row_counter < self.registers[Register::VerticalDisplayed as usize]
+        self.c0_horizontal_counter < self.registers[Register::HorizontalDisplayed as usize]
+            && self.c4_character_row_counter < self.registers[Register::VerticalDisplayed as usize]
     }
 
     fn read_horizontal_sync(&self) -> bool {
@@ -307,18 +309,18 @@ where
         let sync_start = self.registers[Register::HorizontalSyncPosition as usize];
         let sync_end = self.registers[Register::HorizontalSyncPosition as usize]
             + (self.registers[Register::HorizontalAndVerticalSyncWidths as usize] & 0b1111);
-        self.horizontal_counter >= sync_start && self.horizontal_counter < sync_end
+        self.c0_horizontal_counter >= sync_start && self.c0_horizontal_counter < sync_end
         // this results in NO sync if the horizontal sync width is 0
     }
 
     fn read_vertical_sync(&self) -> bool {
         // TODO: what happens before registers are initialized?
         let sync_start = self.registers[Register::VerticalSyncPosition as usize] as i32;
-        let character_rows_since_start = self.character_row_counter as i32 - sync_start;
+        let character_rows_since_start = self.c4_character_row_counter as i32 - sync_start;
         let scan_lines_since_start =
             (self.registers[Register::MaximumRasterAddress as usize] as i32 + 1)
                 * character_rows_since_start
-                + self.scan_line_counter as i32;
+                + self.c9_scan_line_counter as i32;
         (0..16).contains(&scan_lines_since_start)
     }
 }
@@ -434,6 +436,22 @@ trait CrtControllerImpl: Default {
 
     fn read_status(crtc: &CrtController<Self>) -> u8 {
         common::read_status(crtc)
+    }
+
+    fn update_status(crtc: &CrtController<Self>) {
+        common::update_status(crtc)
+    }
+
+    fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
+        if crtc.c4_character_row_counter == crtc.registers[Register::VerticalDisplayed] {
+            self.border_r6_condition = true;
+        }
+
+        if crtc.c0_horizontal_counter == crtc.c4_character_row_counter
+            && crtc.c4_character_row_counter == crtc.c9_scan_line_counter
+        {
+            self.border_r6_condition = false;
+        }
     }
 
     fn resolve_selected_register_write(
@@ -563,6 +581,13 @@ mod common {
     {
         0xff
     }
+
+    pub(super) fn update_status<I>(crtc: &CrtController<I>)
+    where
+        I: CrtControllerImpl,
+    {
+        I::update_border_r6_condition(crtc);
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -610,6 +635,8 @@ impl CrtControllerImpl for Type1 {
 
         status
     }
+
+    fn update_status(crtc: &CrtController<Self>) {}
 }
 
 #[derive(Default, Serialize, Deserialize)]
