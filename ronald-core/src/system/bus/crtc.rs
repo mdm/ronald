@@ -145,6 +145,8 @@ where
     previous_vsync: bool,
     previous_display_enabled: bool,
     previous_address: usize,
+    border_r1_condition: bool,
+    border_r6_condition: bool,
     impl_: I,
 }
 
@@ -199,6 +201,9 @@ where
     }
 
     fn step(&mut self, master_clock: MasterClockTick) {
+        // TODO: make sure this is stepped in increments of 0.5 usecs (i.e. 8 MasterClockTicks not 16),
+        // so we can correctly emulate the 2-phase clock of the CRTC. This will allow us to cancel
+        // the border_r6_condition at the right time.
         self.master_clock = master_clock;
 
         let horizontal_counter_was = self.c0_horizontal_counter;
@@ -239,6 +244,9 @@ where
                 ((self.registers[Register::DisplayStartAddressHigh as usize] as u16) << 8)
                     + self.registers[Register::DisplayStartAddressLow as usize] as u16;
         }
+
+        // TODO: I::update_border_r1_condition(self);
+        I::update_border_r6_condition(self);
 
         // Check for sync state changes
         let new_hsync = self.read_horizontal_sync();
@@ -282,8 +290,6 @@ where
             );
             self.previous_address = new_address;
         }
-
-        I::update_status(self);
     }
 
     fn read_address(&self) -> usize {
@@ -300,6 +306,7 @@ where
     }
 
     fn read_display_enabled(&self) -> bool {
+        // TODO: self.border_r6_condition || self.border_r1_condition
         self.c0_horizontal_counter < self.registers[Register::HorizontalDisplayed as usize]
             && self.c4_character_row_counter < self.registers[Register::VerticalDisplayed as usize]
     }
@@ -438,20 +445,8 @@ trait CrtControllerImpl: Default {
         common::read_status(crtc)
     }
 
-    fn update_status(crtc: &CrtController<Self>) {
-        common::update_status(crtc)
-    }
-
     fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
-        if crtc.c4_character_row_counter == crtc.registers[Register::VerticalDisplayed] {
-            self.border_r6_condition = true;
-        }
-
-        if crtc.c0_horizontal_counter == crtc.c4_character_row_counter
-            && crtc.c4_character_row_counter == crtc.c9_scan_line_counter
-        {
-            self.border_r6_condition = false;
-        }
+        common::update_border_r6_condition(crtc);
     }
 
     fn resolve_selected_register_write(
@@ -582,11 +577,32 @@ mod common {
         0xff
     }
 
-    pub(super) fn update_status<I>(crtc: &CrtController<I>)
+    pub(super) fn update_border_r6_condition<I>(crtc: &mut CrtController<I>)
     where
         I: CrtControllerImpl,
     {
-        I::update_border_r6_condition(crtc);
+        if crtc.c0_horizontal_counter == crtc.c4_character_row_counter
+            && crtc.c4_character_row_counter == crtc.c9_scan_line_counter
+        {
+            crtc.border_r6_condition = false;
+        }
+
+        if crtc.border_r6_condition {
+            return;
+        }
+
+        if crtc.c4_character_row_counter == crtc.registers[usize::from(Register::VerticalDisplayed)]
+        {
+            if crtc.c4_character_row_counter != 0
+                || crtc.c9_scan_line_counter != 0
+                || crtc.c0_horizontal_counter
+                    == crtc.registers[usize::from(Register::HorizontalDisplayed)]
+            {
+                crtc.border_r6_condition = true;
+            } else if !crtc.border_r1_condition {
+                crtc.border_r6_condition = false; // TODO: toggle on after 8 MasterClockTicks (0.5 µs) when we emulate the 2-phase clock of the CRTC
+            }
+        }
     }
 }
 
@@ -610,7 +626,6 @@ impl CrtControllerImpl for Type0 {
 #[derive(Default, Serialize, Deserialize)]
 struct Type1 {
     light_pen_status: bool,
-    border_r6_status: bool,
 }
 
 impl CrtControllerImpl for Type1 {
@@ -629,14 +644,12 @@ impl CrtControllerImpl for Type1 {
             status |= 0x40;
         }
 
-        if crtc.impl_.border_r6_status {
+        if crtc.border_r6_condition {
             status |= 0x20;
         }
 
         status
     }
-
-    fn update_status(crtc: &CrtController<Self>) {}
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -1029,7 +1042,7 @@ mod tests {
 
             let mut crtc = CrtController::<Type1>::default();
             crtc.impl_.light_pen_status = true;
-            crtc.impl_.border_r6_status = true;
+            crtc.border_r6_condition = true;
 
             let status = crtc.read_byte(0xbe00);
 
