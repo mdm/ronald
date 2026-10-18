@@ -445,9 +445,7 @@ trait CrtControllerImpl: Default {
         common::read_status(crtc)
     }
 
-    fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
-        common::update_border_r6_condition(crtc);
-    }
+    fn update_border_r6_condition(crtc: &mut CrtController<Self>);
 
     fn resolve_selected_register_write(
         crtc: &CrtController<Self>,
@@ -577,12 +575,13 @@ mod common {
         0xff
     }
 
-    pub(super) fn update_border_r6_condition<I>(crtc: &mut CrtController<I>)
+    pub(super) fn update_border_r6_condition_type_02<I>(crtc: &mut CrtController<I>)
     where
         I: CrtControllerImpl,
     {
         if crtc.c0_horizontal_counter == crtc.c4_character_row_counter
             && crtc.c4_character_row_counter == crtc.c9_scan_line_counter
+            && crtc.c9_scan_line_counter == 0
         {
             crtc.border_r6_condition = false;
         }
@@ -621,10 +620,15 @@ impl Type0 {
 
 impl CrtControllerImpl for Type0 {
     const READ_MASKS: [u8; 18] = Type0::generate_read_masks();
+
+    fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
+        common::update_border_r6_condition_type_02(crtc);
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
 struct Type1 {
+    border_cancellable: bool,
     light_pen_status: bool,
 }
 
@@ -650,12 +654,47 @@ impl CrtControllerImpl for Type1 {
 
         status
     }
+
+    fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
+        if crtc.c0_horizontal_counter == crtc.c4_character_row_counter
+            && crtc.c4_character_row_counter == crtc.c9_scan_line_counter
+            && crtc.c9_scan_line_counter == 0
+        {
+            crtc.border_r6_condition = false;
+        }
+
+        if crtc.border_r6_condition && !crtc.impl_.border_cancellable {
+            return;
+        }
+
+        if crtc.c4_character_row_counter == crtc.registers[usize::from(Register::VerticalDisplayed)]
+            || crtc.registers[usize::from(Register::VerticalDisplayed)] == 0
+        {
+            crtc.border_r6_condition = true;
+            let definite = crtc.c4_character_row_counter
+                == crtc.registers[usize::from(Register::VerticalDisplayed)]
+                || crtc.registers[usize::from(Register::VerticalDisplayed)] == 0;
+            let exception = crtc.c0_horizontal_counter
+                == crtc.registers[usize::from(Register::HorizontalTotal)]
+                && crtc.c9_scan_line_counter
+                    == crtc.registers[usize::from(Register::MaximumRasterAddress)]
+                && crtc.c4_character_row_counter
+                    == crtc.registers[usize::from(Register::VerticalTotal)];
+            crtc.impl_.border_cancellable = !definite || exception;
+        } else if crtc.impl_.border_cancellable {
+            crtc.border_r6_condition = false;
+        }
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
 struct Type2 {}
 
-impl CrtControllerImpl for Type2 {}
+impl CrtControllerImpl for Type2 {
+    fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
+        common::update_border_r6_condition_type_02(crtc);
+    }
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct Type4 {}
@@ -685,6 +724,10 @@ impl CrtControllerImpl for Type4 {
 
     fn read_status(crtc: &CrtController<Self>) -> u8 {
         Self::read_register(crtc)
+    }
+
+    fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
+        todo!()
     }
 }
 
