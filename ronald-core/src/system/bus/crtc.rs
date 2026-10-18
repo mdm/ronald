@@ -727,7 +727,19 @@ impl CrtControllerImpl for Type4 {
     }
 
     fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
-        todo!()
+        if crtc.c0_horizontal_counter == crtc.c4_character_row_counter
+            && crtc.c4_character_row_counter == crtc.c9_scan_line_counter
+            && crtc.c9_scan_line_counter == 0
+        {
+            crtc.border_r6_condition = false;
+        }
+
+        if crtc.c0_horizontal_counter == 0
+            && crtc.c4_character_row_counter
+                == crtc.registers[usize::from(Register::VerticalDisplayed)]
+        {
+            crtc.border_r6_condition = true;
+        }
     }
 }
 
