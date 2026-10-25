@@ -629,6 +629,7 @@ impl CrtControllerImpl for Type0 {
 #[derive(Default, Serialize, Deserialize)]
 struct Type1 {
     border_cancellable: bool,
+    border_r6_status: bool,
     light_pen_status: bool,
 }
 
@@ -648,7 +649,7 @@ impl CrtControllerImpl for Type1 {
             status |= 0x40;
         }
 
-        if crtc.border_r6_condition {
+        if crtc.impl_.border_r6_status {
             status |= 0x20;
         }
 
@@ -661,6 +662,23 @@ impl CrtControllerImpl for Type1 {
             && crtc.c9_scan_line_counter == 0
         {
             crtc.border_r6_condition = false;
+            crtc.impl_.border_cancellable = false;
+        }
+
+        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::HorizontalTotal)]
+            && crtc.c9_scan_line_counter
+                == crtc.registers[usize::from(Register::MaximumRasterAddress)]
+        {
+            if crtc.c4_character_row_counter
+                == crtc.registers[usize::from(Register::VerticalDisplayed)]
+            {
+                crtc.impl_.border_r6_status = true;
+            }
+
+            if crtc.c4_character_row_counter == crtc.registers[usize::from(Register::VerticalTotal)]
+            {
+                crtc.impl_.border_r6_status = false;
+            }
         }
 
         if crtc.border_r6_condition && !crtc.impl_.border_cancellable {
@@ -774,6 +792,8 @@ mod tests {
     }
 
     mod register_access {
+        use crate::system::clock::MasterClock;
+
         #[allow(unused_imports)]
         use super::*;
 
@@ -1105,21 +1125,98 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_type_1_status_bit_5_reflects_r6_border_state_updated_at_c0_equal_r0() {
             // ACCC 21.3.3: bit 5 becomes 1 at C0=R0 of the line before C4=R6, C9=0 and becomes 0 at C0=R0 of the line before C4=C9=0.
 
             let mut crtc = CrtController::<Type1>::default();
-            todo!()
+            assert!(
+                !crtc.impl_.border_r6_status,
+                "BORDER R6 status should be false initially"
+            );
+            let mut clock = MasterClock::default();
+
+            crtc.registers[usize::from(Register::HorizontalTotal)] = 0x3f;
+            crtc.registers[usize::from(Register::VerticalTotal)] = 0x26;
+            crtc.registers[usize::from(Register::VerticalDisplayed)] = 0x19;
+            crtc.registers[usize::from(Register::MaximumRasterAddress)] = 0x07;
+
+            let mut intermediate_states = Vec::new();
+            while crtc.c0_horizontal_counter
+                != crtc.registers[usize::from(Register::HorizontalTotal)]
+                || crtc.c4_character_row_counter
+                    != crtc.registers[usize::from(Register::VerticalDisplayed)]
+                || crtc.c9_scan_line_counter
+                    != crtc.registers[usize::from(Register::MaximumRasterAddress)]
+            {
+                intermediate_states.push(crtc.impl_.border_r6_status);
+                crtc.step(clock.current());
+                clock.step(16);
+            }
+
+            assert!(
+                intermediate_states.iter().all(|&status| !status),
+                "BORDER R6 status should be false until the last line before C4=R6, C9=0"
+            );
+            assert!(
+                crtc.impl_.border_r6_status,
+                "BORDER R6 status should be true"
+            );
+
+            let mut intermediate_states = Vec::new();
+            while crtc.c0_horizontal_counter
+                != crtc.registers[usize::from(Register::HorizontalTotal)]
+                || crtc.c4_character_row_counter
+                    != crtc.registers[usize::from(Register::VerticalTotal)]
+                || crtc.c9_scan_line_counter
+                    != crtc.registers[usize::from(Register::MaximumRasterAddress)]
+            {
+                intermediate_states.push(crtc.impl_.border_r6_status);
+                crtc.step(clock.current());
+                clock.step(16);
+            }
+
+            assert!(
+                intermediate_states.iter().all(|&status| status),
+                "BORDER R6 status should be true until the last line before C4=C9=0"
+            );
+            assert!(
+                !crtc.impl_.border_r6_status,
+                "BORDER R6 status should be false"
+            );
         }
 
         #[test]
-        #[ignore]
         fn test_type_1_status_bit_5_ignores_border_from_r6_zero() {
             // ACCC 21.3.3: setting R6=0 while C4>0 shows border but does not set bit 5.
 
             let mut crtc = CrtController::<Type1>::default();
-            todo!()
+            let mut clock = MasterClock::default();
+
+            crtc.registers[usize::from(Register::HorizontalTotal)] = 0x3f;
+            crtc.registers[usize::from(Register::VerticalTotal)] = 0x26;
+            crtc.registers[usize::from(Register::VerticalDisplayed)] = 0x19;
+            crtc.registers[usize::from(Register::MaximumRasterAddress)] = 0x07;
+
+            crtc.step(clock.current());
+            clock.step(16);
+
+            assert!(
+                !crtc.border_r6_condition,
+                "BORDER R6 condition should be false initially"
+            );
+
+            crtc.registers[usize::from(Register::VerticalDisplayed)] = 0x00;
+            crtc.step(clock.current());
+            clock.step(16);
+
+            assert!(
+                crtc.border_r6_condition,
+                "BORDER R6 condition should be true"
+            );
+            assert!(
+                !crtc.impl_.border_r6_status,
+                "BORDER R6 status should be false"
+            );
         }
 
         #[test]
