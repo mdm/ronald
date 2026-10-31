@@ -159,7 +159,10 @@ where
     fn debug_view(&self) -> Self::View {
         CrtcDebugView {
             registers: self.registers,
-            selected_register: self.selected_register,
+            selected_register_read: I::resolve_selected_register_read(self)
+                .expect("masked register index is always valid"),
+            selected_register_write: I::resolve_selected_register_write(self)
+                .expect("masked register index is always valid"),
             horizontal_counter: self.c0_horizontal_counter,
             character_row_counter: self.c4_character_row_counter,
             scan_line_counter: self.c9_scan_line_counter,
@@ -1242,7 +1245,6 @@ mod tests {
                     _ => unreachable!(),
                 }
             }
-            todo!("display this correctly in the debug window")
         }
 
         #[test]
