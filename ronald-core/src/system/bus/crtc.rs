@@ -250,6 +250,7 @@ where
 
         // TODO: I::update_border_r1_condition(self);
         I::update_border_r6_condition(self);
+        I::update_status(self);
 
         // Check for sync state changes
         let new_hsync = self.read_horizontal_sync();
@@ -446,6 +447,10 @@ trait CrtControllerImpl: Default {
 
     fn read_status(crtc: &CrtController<Self>) -> u8 {
         common::read_status(crtc)
+    }
+
+    fn update_status(_crtc: &mut CrtController<Self>) {
+        // Default implementation does nothing
     }
 
     fn update_border_r6_condition(crtc: &mut CrtController<Self>);
@@ -659,15 +664,7 @@ impl CrtControllerImpl for Type1 {
         status
     }
 
-    fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
-        if crtc.c0_horizontal_counter == crtc.c4_character_row_counter
-            && crtc.c4_character_row_counter == crtc.c9_scan_line_counter
-            && crtc.c9_scan_line_counter == 0
-        {
-            crtc.border_r6_condition = false;
-            crtc.impl_.border_cancellable = false;
-        }
-
+    fn update_status(crtc: &mut CrtController<Self>) {
         if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::HorizontalTotal)]
             && crtc.c9_scan_line_counter
                 == crtc.registers[usize::from(Register::MaximumRasterAddress)]
@@ -682,6 +679,16 @@ impl CrtControllerImpl for Type1 {
             {
                 crtc.impl_.border_r6_status = false;
             }
+        }
+    }
+
+    fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
+        if crtc.c0_horizontal_counter == crtc.c4_character_row_counter
+            && crtc.c4_character_row_counter == crtc.c9_scan_line_counter
+            && crtc.c9_scan_line_counter == 0
+        {
+            crtc.border_r6_condition = false;
+            crtc.impl_.border_cancellable = false;
         }
 
         if crtc.border_r6_condition && !crtc.impl_.border_cancellable {
@@ -745,6 +752,56 @@ impl CrtControllerImpl for Type4 {
 
     fn read_status(crtc: &CrtController<Self>) -> u8 {
         Self::read_register(crtc)
+    }
+
+    fn update_status(crtc: &mut CrtController<Self>) {
+        let status1 = usize::from(Register::CursorStartRaster);
+
+        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::HorizontalTotal)] {
+            crtc.registers[status1] |= 0x01;
+        }
+
+        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::HorizontalTotal)] / 2
+        {
+            crtc.registers[status1] &= !(0x01 << 1);
+        }
+
+        if crtc.c0_horizontal_counter
+            == crtc.registers[usize::from(Register::HorizontalDisplayed)].saturating_sub(1)
+            && crtc.registers[usize::from(Register::HorizontalTotal)]
+                >= crtc.registers[usize::from(Register::HorizontalDisplayed)]
+        {
+            crtc.registers[status1] &= !(0x01 << 2);
+        }
+
+        if crtc.c0_horizontal_counter
+            == crtc.registers[usize::from(Register::HorizontalSyncPosition)]
+        {
+            crtc.registers[status1] &= !(0x01 << 3);
+        }
+
+        if crtc.c0_horizontal_counter
+            == crtc.registers[usize::from(Register::HorizontalSyncPosition)]
+                + crtc.registers[usize::from(Register::HorizontalAndVerticalSyncWidths)]
+        {
+            crtc.registers[status1] &= !(0x01 << 4);
+        }
+
+        // TODO: fix this
+        if (crtc.registers[usize::from(Register::HorizontalAndVerticalSyncWidths)] >> 4) > 0 {
+            crtc.registers[status1] &= !(0x01 << 5);
+        } else {
+            crtc.registers[status1] |= 0x01 << 5;
+        }
+
+        crtc.registers[status1] |= 0x01 << 6;
+
+        // TODO: fix this
+        if crtc.c0_horizontal_counter < crtc.registers[usize::from(Register::HorizontalTotal)] {
+            crtc.registers[status1] &= !(0x01 << 7);
+        } else {
+            crtc.registers[status1] &= !(0x01 << 7);
+        }
     }
 
     fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
