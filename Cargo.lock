@@ -4139,7 +4139,7 @@ dependencies = [
 
 [[package]]
 name = "ronald-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "criterion",
  "log",
@@ -4152,7 +4152,7 @@ dependencies = [
 
 [[package]]
 name = "ronald-egui"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
