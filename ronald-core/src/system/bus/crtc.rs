@@ -177,6 +177,7 @@ where
     master_clock: MasterClockTick,
     previous_hsync: bool,
     previous_vsync: bool,
+    active_vsync_scanlines: u8,
     previous_display_enabled: bool,
     previous_address: usize,
     border_r1_condition: bool,
@@ -262,6 +263,19 @@ where
         if self.c4_character_row_counter > self.registers[Register::R4VerticalTotal] {
             // TODO: take VerticalTotalAdjust into account
             self.c4_character_row_counter = 0;
+        }
+
+        if self.c0_horizontal_counter == 0 {
+            if self.active_vsync_scanlines > 0 {
+                self.active_vsync_scanlines += 1;
+                if self.active_vsync_scanlines > I::vsync_length(self) {
+                    self.active_vsync_scanlines = 0;
+                }
+            } else if self.c9_scan_line_counter == 0
+                && self.c4_character_row_counter == self.registers[Register::R7VerticalSyncPosition]
+            {
+                self.active_vsync_scanlines = 1;
+            }
         }
 
         self.emit_debug_event(
@@ -352,20 +366,14 @@ where
     fn read_horizontal_sync(&self) -> bool {
         // TODO: what happens before registers are initialized?
         let sync_start = self.registers[Register::R2HorizontalSyncPosition];
-        let sync_end = self.registers[Register::R2HorizontalSyncPosition]
-            + (self.registers[Register::R3HorizontalAndVerticalSyncWidths] & 0b1111);
+        let sync_end = self.registers[Register::R2HorizontalSyncPosition] + I::hsync_width(self);
         self.c0_horizontal_counter >= sync_start && self.c0_horizontal_counter < sync_end
         // this results in NO sync if the horizontal sync width is 0
     }
 
     fn read_vertical_sync(&self) -> bool {
         // TODO: what happens before registers are initialized?
-        let sync_start = self.registers[Register::R7VerticalSyncPosition] as i32;
-        let character_rows_since_start = self.c4_character_row_counter as i32 - sync_start;
-        let scan_lines_since_start = (self.registers[Register::R9MaximumRasterAddress] as i32 + 1)
-            * character_rows_since_start
-            + self.c9_scan_line_counter as i32;
-        (0..16).contains(&scan_lines_since_start)
+        self.active_vsync_scanlines != 0
     }
 }
 
@@ -497,6 +505,10 @@ trait CrtControllerImpl: Default {
     fn write_register(crtc: &mut CrtController<Self>, value: u8) {
         common::write_register(crtc, value);
     }
+
+    fn hsync_width(crtc: &CrtController<Self>) -> u8;
+
+    fn vsync_length(crtc: &CrtController<Self>) -> u8;
 }
 
 mod common {
@@ -663,6 +675,18 @@ impl CrtControllerImpl for Type0 {
     fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
         common::update_border_r6_condition_type_02(crtc);
     }
+
+    fn hsync_width(crtc: &CrtController<Self>) -> u8 {
+        crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] & 0x0f
+    }
+
+    fn vsync_length(crtc: &CrtController<Self>) -> u8 {
+        if (crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4) == 0 {
+            16
+        } else {
+            crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4
+        }
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -738,6 +762,14 @@ impl CrtControllerImpl for Type1 {
             crtc.border_r6_condition = false;
         }
     }
+
+    fn hsync_width(crtc: &CrtController<Self>) -> u8 {
+        crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] & 0x0f
+    }
+
+    fn vsync_length(_crtc: &CrtController<Self>) -> u8 {
+        16
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -746,6 +778,18 @@ struct Type2 {}
 impl CrtControllerImpl for Type2 {
     fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
         common::update_border_r6_condition_type_02(crtc);
+    }
+
+    fn hsync_width(crtc: &CrtController<Self>) -> u8 {
+        if (crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] & 0x0f) == 0 {
+            16
+        } else {
+            crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] & 0x0f
+        }
+    }
+
+    fn vsync_length(_crtc: &CrtController<Self>) -> u8 {
+        16
     }
 }
 
@@ -803,8 +847,7 @@ impl CrtControllerImpl for Type4 {
         }
 
         if crtc.c0_horizontal_counter
-            == crtc.registers[Register::R2HorizontalSyncPosition]
-                + crtc.registers[Register::R3HorizontalAndVerticalSyncWidths]
+            == crtc.registers[Register::R2HorizontalSyncPosition] + Self::hsync_width(crtc)
         {
             crtc.registers[status1] &= !(0x01 << 4);
         }
@@ -838,6 +881,22 @@ impl CrtControllerImpl for Type4 {
             && crtc.c4_character_row_counter == crtc.registers[Register::R6VerticalDisplayed]
         {
             crtc.border_r6_condition = true;
+        }
+    }
+
+    fn hsync_width(crtc: &CrtController<Self>) -> u8 {
+        if (crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] & 0x0f) == 0 {
+            16
+        } else {
+            crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] & 0x0f
+        }
+    }
+
+    fn vsync_length(crtc: &CrtController<Self>) -> u8 {
+        if (crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4) == 0 {
+            16
+        } else {
+            crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4
         }
     }
 }
@@ -2161,6 +2220,8 @@ mod tests {
     }
 
     mod horizontal_sync {
+        use crate::system::clock::MasterClock;
+
         #[allow(unused_imports)]
         use super::*;
 
@@ -2179,24 +2240,76 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_type_all_hsync_lasts_r3_low_nibble_characters() {
             // ACCC 14.1: HSYNC lasts R3l µs; the high nibble does not change the HSYNC width.
-            todo!()
+
+            for crtc in &mut crtcs!(All) {
+                let mut clock = MasterClock::default();
+
+                for (register, value) in [(0, 63), (2, 46), (3, 0xff)] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, value);
+                }
+
+                let mut hsync_width = 0;
+                for _ in 0..=63 {
+                    if crtc.read_horizontal_sync() {
+                        hsync_width += 1;
+                    }
+                    crtc.step(clock.current());
+                    clock.step(16);
+                }
+
+                assert_eq!(hsync_width, 0x0f);
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_01_hsync_width_zero_produces_no_hsync() {
             // ACCC 14.1, 14.6, 27.6.3, 28.1.5: with R3l=0 no HSYNC is generated.
-            todo!()
+
+            for crtc in &mut crtcs!(Type0, Type1) {
+                let mut clock = MasterClock::default();
+
+                for (register, value) in [(0, 63), (2, 46), (3, 0x00)] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, value);
+                }
+
+                let mut hsync_seen = false;
+                for _ in 0..=63 {
+                    hsync_seen |= crtc.read_horizontal_sync();
+                    crtc.step(clock.current());
+                    clock.step(16);
+                }
+
+                assert!(!hsync_seen, "HSYNC should never be active when R3l=0");
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_24_hsync_width_zero_produces_sixteen_character_hsync() {
             // ACCC 14.6, 27.6.4, 27.6.5, 28.1.5: R3l=0 gives a 16 µs HSYNC.
-            todo!()
+
+            for crtc in &mut crtcs!(Type2, Type4) {
+                let mut clock = MasterClock::default();
+
+                for (register, value) in [(0, 63), (2, 46), (3, 0x00)] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, value);
+                }
+
+                let mut hsync_width = 0;
+                for _ in 0..=63 {
+                    if crtc.read_horizontal_sync() {
+                        hsync_width += 1;
+                    }
+                    crtc.step(clock.current());
+                    clock.step(16);
+                }
+
+                assert_eq!(hsync_width, 16);
+            }
         }
 
         #[test]
@@ -2302,6 +2415,8 @@ mod tests {
     }
 
     mod vertical_sync {
+        use crate::system::clock::MasterClock;
+
         #[allow(unused_imports)]
         use super::*;
 
@@ -2327,24 +2442,78 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_type_04_vsync_lasts_r3_high_nibble_lines() {
             // ACCC 14.1, 14.2: R3h sets the VSYNC length in lines (ROM default R3h=8).
-            todo!()
+
+            for crtc in &mut crtcs!(Type0, Type4) {
+                let mut clock = MasterClock::default();
+
+                for (register, value) in [(4, 38), (7, 30), (3, 0xff)] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, value);
+                }
+
+                let mut vsync_length = 0;
+                for _ in 0..=(30 + 0x10 + 1) {
+                    if crtc.read_vertical_sync() {
+                        vsync_length += 1;
+                    }
+                    crtc.step(clock.current());
+                    clock.step(16);
+                }
+
+                assert_eq!(vsync_length, 0x0f);
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_04_vsync_width_zero_means_sixteen_lines() {
             // ACCC 14.1, 14.2: R3h=0 gives a 16-line VSYNC.
-            todo!()
+
+            for crtc in &mut crtcs!(Type0, Type4) {
+                let mut clock = MasterClock::default();
+
+                for (register, value) in [(4, 38), (7, 30), (3, 0x00)] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, value);
+                }
+
+                let mut vsync_length = 0;
+                for _ in 0..=(30 + 0x10 + 1) {
+                    if crtc.read_vertical_sync() {
+                        vsync_length += 1;
+                    }
+                    crtc.step(clock.current());
+                    clock.step(16);
+                }
+
+                assert_eq!(vsync_length, 16);
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_12_vsync_always_lasts_sixteen_lines() {
             // ACCC 14.1, 14.2, 28.1.4: R3h is ignored.
-            todo!()
+
+            for crtc in &mut crtcs!(Type1, Type2) {
+                let mut clock = MasterClock::default();
+
+                for (register, value) in [(4, 38), (7, 30), (3, 0xff)] {
+                    crtc.write_byte(0xbc00, register);
+                    crtc.write_byte(0xbd00, value);
+                }
+
+                let mut vsync_length = 0;
+                for _ in 0..=(30 + 0x10 + 1) {
+                    if crtc.read_vertical_sync() {
+                        vsync_length += 1;
+                    }
+                    crtc.step(clock.current());
+                    clock.step(16);
+                }
+
+                assert_eq!(vsync_length, 16);
+            }
         }
 
         #[test]
