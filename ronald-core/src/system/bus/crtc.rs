@@ -852,11 +852,22 @@ impl CrtControllerImpl for Type4 {
             crtc.registers[status1] &= !(0x01 << 4);
         }
 
-        // TODO: fix this
         if (crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4) > 0 {
-            crtc.registers[status1] &= !(0x01 << 5);
+            if crtc.active_vsync_scanlines == Self::vsync_length(crtc) {
+                crtc.registers[status1] &= !(0x01 << 5);
+            } else {
+                crtc.registers[status1] |= 0x01 << 5;
+            }
         } else {
-            crtc.registers[status1] |= 0x01 << 5;
+            if crtc.active_vsync_scanlines > 15
+                || (crtc.active_vsync_scanlines == 0
+                    && crtc.c4_character_row_counter
+                        >= crtc.registers[Register::R7VerticalSyncPosition])
+            {
+                crtc.registers[status1] |= 0x01 << 5;
+            } else {
+                crtc.registers[status1] &= !(0x01 << 5);
+            }
         }
 
         crtc.registers[status1] |= 0x01 << 6;
