@@ -101,7 +101,7 @@ impl CrtcDebugWindow {
                 Self::render_register(ui, CrtcRegister::Unused, "-", crtc);
                 ui.separator();
 
-                Self::render_register(ui, CrtcRegister::Dummy, "-", crtc);
+                Self::render_register(ui, CrtcRegister::R31Dummy, "-", crtc);
                 ui.end_row();
             });
 
@@ -245,7 +245,7 @@ impl CrtcDebugWindow {
                                     Some(reg),
                                     format!("{}", reg),
                                 );
-                                let reg = CrtcRegister::Dummy;
+                                let reg = CrtcRegister::R31Dummy;
                                 ui.selectable_value(
                                     &mut self.register_write_register,
                                     Some(reg),
@@ -818,7 +818,7 @@ mod gui_tests {
                     matches!(
                         bp,
                         AnyBreakpoint::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint {
-                            register: Some(CrtcRegister::VerticalTotal),
+                            register: Some(CrtcRegister::R4VerticalTotal),
                             value: None,
                             ..
                         })

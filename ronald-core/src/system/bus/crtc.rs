@@ -34,73 +34,81 @@ pub trait CrtControllerInterface: Default {
 #[repr(usize)]
 pub enum Register {
     #[default]
-    HorizontalTotal,
-    HorizontalDisplayed,
-    HorizontalSyncPosition,
-    HorizontalAndVerticalSyncWidths,
-    VerticalTotal,
-    VerticalTotalAdjust,
-    VerticalDisplayed,
-    VerticalSyncPosition,
-    InterlaceAndSkew,
-    MaximumRasterAddress,
-    CursorStartRaster,
-    CursorEndRaster,
-    DisplayStartAddressHigh,
-    DisplayStartAddressLow,
-    CursorAddressHigh,
-    CursorAddressLow,
-    LightPenAddressHigh,
-    LightPenAddressLow,
+    R0HorizontalTotal,
+    R1HorizontalDisplayed,
+    R2HorizontalSyncPosition,
+    R3HorizontalAndVerticalSyncWidths,
+    R4VerticalTotal,
+    R5VerticalTotalAdjust,
+    R6VerticalDisplayed,
+    R7VerticalSyncPosition,
+    R8InterlaceAndSkew,
+    R9MaximumRasterAddress,
+    R10CursorStartRaster,
+    R11CursorEndRaster,
+    R12DisplayStartAddressHigh,
+    R13DisplayStartAddressLow,
+    R14CursorAddressHigh,
+    R15CursorAddressLow,
+    R16LightPenAddressHigh,
+    R17LightPenAddressLow,
     #[num_enum(alternatives = [19..31])]
     Unused,
-    Dummy = 31,
+    R31Dummy = 31,
 }
 
 impl fmt::Display for Register {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Register::HorizontalTotal => write!(f, "R{} (Horizontal Total)", usize::from(*self)),
-            Register::HorizontalDisplayed => {
+            Register::R0HorizontalTotal => write!(f, "R{} (Horizontal Total)", usize::from(*self)),
+            Register::R1HorizontalDisplayed => {
                 write!(f, "R{} (Horizontal Displayed)", usize::from(*self))
             }
-            Register::HorizontalSyncPosition => {
+            Register::R2HorizontalSyncPosition => {
                 write!(f, "R{} (H. Sync Position)", usize::from(*self))
             }
-            Register::HorizontalAndVerticalSyncWidths => {
+            Register::R3HorizontalAndVerticalSyncWidths => {
                 write!(f, "R{} (H/V Sync Widths)", usize::from(*self))
             }
-            Register::VerticalTotal => write!(f, "R{} (Vertical Total)", usize::from(*self)),
-            Register::VerticalTotalAdjust => write!(f, "R{} (V. Total Adjust)", usize::from(*self)),
-            Register::VerticalDisplayed => {
+            Register::R4VerticalTotal => write!(f, "R{} (Vertical Total)", usize::from(*self)),
+            Register::R5VerticalTotalAdjust => {
+                write!(f, "R{} (V. Total Adjust)", usize::from(*self))
+            }
+            Register::R6VerticalDisplayed => {
                 write!(f, "R{} (Vertical Displayed)", usize::from(*self))
             }
-            Register::VerticalSyncPosition => {
+            Register::R7VerticalSyncPosition => {
                 write!(f, "R{} (V. Sync Position)", usize::from(*self))
             }
-            Register::InterlaceAndSkew => write!(f, "R{} (Interlace/Skew)", usize::from(*self)),
-            Register::MaximumRasterAddress => {
+            Register::R8InterlaceAndSkew => write!(f, "R{} (Interlace/Skew)", usize::from(*self)),
+            Register::R9MaximumRasterAddress => {
                 write!(f, "R{} (Max Raster Address)", usize::from(*self))
             }
-            Register::CursorStartRaster => write!(f, "R{} (Cursor Start)", usize::from(*self)),
-            Register::CursorEndRaster => write!(f, "R{} (Cursor End)", usize::from(*self)),
-            Register::DisplayStartAddressHigh => {
+            Register::R10CursorStartRaster => write!(f, "R{} (Cursor Start)", usize::from(*self)),
+            Register::R11CursorEndRaster => write!(f, "R{} (Cursor End)", usize::from(*self)),
+            Register::R12DisplayStartAddressHigh => {
                 write!(f, "R{} (Display Start High)", usize::from(*self))
             }
-            Register::DisplayStartAddressLow => {
+            Register::R13DisplayStartAddressLow => {
                 write!(f, "R{} (Display Start Low)", usize::from(*self))
             }
-            Register::CursorAddressHigh => {
+            Register::R14CursorAddressHigh => {
                 write!(f, "R{} (Cursor Address High)", usize::from(*self))
             }
-            Register::CursorAddressLow => write!(f, "R{} (Cursor Address Low)", usize::from(*self)),
-            Register::LightPenAddressHigh => write!(f, "R{} (Light Pen High)", usize::from(*self)),
-            Register::LightPenAddressLow => write!(f, "R{} (Light Pen Low)", usize::from(*self)),
+            Register::R15CursorAddressLow => {
+                write!(f, "R{} (Cursor Address Low)", usize::from(*self))
+            }
+            Register::R16LightPenAddressHigh => {
+                write!(f, "R{} (Light Pen High)", usize::from(*self))
+            }
+            Register::R17LightPenAddressLow => write!(f, "R{} (Light Pen Low)", usize::from(*self)),
             Register::Unused => write!(f, "R18-R30 (Unused)"),
-            Register::Dummy => write!(f, "R{} (Dummy)", usize::from(*self)),
+            Register::R31Dummy => write!(f, "R{} (Dummy)", usize::from(*self)),
         }
     }
 }
+
+struct RegisterFile([u8; 18]);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Function {
@@ -215,17 +223,17 @@ where
 
         self.c0_horizontal_counter += 1;
 
-        if self.c0_horizontal_counter > self.registers[Register::HorizontalTotal as usize] {
+        if self.c0_horizontal_counter > self.registers[Register::R0HorizontalTotal as usize] {
             self.c9_scan_line_counter += 1;
             self.c0_horizontal_counter = 0;
         }
 
-        if self.c9_scan_line_counter > self.registers[Register::MaximumRasterAddress as usize] {
+        if self.c9_scan_line_counter > self.registers[Register::R9MaximumRasterAddress as usize] {
             self.c4_character_row_counter += 1;
             self.c9_scan_line_counter = 0;
         }
 
-        if self.c4_character_row_counter > self.registers[Register::VerticalTotal as usize] {
+        if self.c4_character_row_counter > self.registers[Register::R4VerticalTotal as usize] {
             // TODO: take VerticalTotalAdjust into account
             self.c4_character_row_counter = 0;
         }
@@ -244,8 +252,8 @@ where
 
         if self.c0_horizontal_counter == 0 && self.c4_character_row_counter == 0 {
             self.display_start_address =
-                ((self.registers[Register::DisplayStartAddressHigh as usize] as u16) << 8)
-                    + self.registers[Register::DisplayStartAddressLow as usize] as u16;
+                ((self.registers[Register::R12DisplayStartAddressHigh as usize] as u16) << 8)
+                    + self.registers[Register::R13DisplayStartAddressLow as usize] as u16;
         }
 
         // TODO: I::update_border_r1_condition(self);
@@ -298,7 +306,7 @@ where
 
     fn read_address(&self) -> usize {
         let refresh_memory_address = self.display_start_address
-            + self.registers[Register::HorizontalDisplayed as usize] as u16
+            + self.registers[Register::R1HorizontalDisplayed as usize] as u16
                 * self.c4_character_row_counter as u16
             + self.c0_horizontal_counter as u16;
 
@@ -311,25 +319,26 @@ where
 
     fn read_display_enabled(&self) -> bool {
         // TODO: self.border_r6_condition || self.border_r1_condition
-        self.c0_horizontal_counter < self.registers[Register::HorizontalDisplayed as usize]
-            && self.c4_character_row_counter < self.registers[Register::VerticalDisplayed as usize]
+        self.c0_horizontal_counter < self.registers[Register::R1HorizontalDisplayed as usize]
+            && self.c4_character_row_counter
+                < self.registers[Register::R6VerticalDisplayed as usize]
     }
 
     fn read_horizontal_sync(&self) -> bool {
         // TODO: what happens before registers are initialized?
-        let sync_start = self.registers[Register::HorizontalSyncPosition as usize];
-        let sync_end = self.registers[Register::HorizontalSyncPosition as usize]
-            + (self.registers[Register::HorizontalAndVerticalSyncWidths as usize] & 0b1111);
+        let sync_start = self.registers[Register::R2HorizontalSyncPosition as usize];
+        let sync_end = self.registers[Register::R2HorizontalSyncPosition as usize]
+            + (self.registers[Register::R3HorizontalAndVerticalSyncWidths as usize] & 0b1111);
         self.c0_horizontal_counter >= sync_start && self.c0_horizontal_counter < sync_end
         // this results in NO sync if the horizontal sync width is 0
     }
 
     fn read_vertical_sync(&self) -> bool {
         // TODO: what happens before registers are initialized?
-        let sync_start = self.registers[Register::VerticalSyncPosition as usize] as i32;
+        let sync_start = self.registers[Register::R7VerticalSyncPosition as usize] as i32;
         let character_rows_since_start = self.c4_character_row_counter as i32 - sync_start;
         let scan_lines_since_start =
-            (self.registers[Register::MaximumRasterAddress as usize] as i32 + 1)
+            (self.registers[Register::R9MaximumRasterAddress as usize] as i32 + 1)
                 * character_rows_since_start
                 + self.c9_scan_line_counter as i32;
         (0..16).contains(&scan_lines_since_start)
@@ -508,7 +517,7 @@ mod common {
             return 0xff; // TODO: properly emulate floating bus
         };
 
-        if matches!(register, Register::Unused | Register::Dummy) {
+        if matches!(register, Register::Unused | Register::R31Dummy) {
             return 0;
         }
 
@@ -534,7 +543,7 @@ mod common {
 
         if matches!(
             register,
-            Register::LightPenAddressHigh | Register::LightPenAddressLow
+            Register::R16LightPenAddressHigh | Register::R17LightPenAddressLow
         ) {
             return;
         }
@@ -542,26 +551,26 @@ mod common {
         let was = crtc.registers[usize::from(register)];
 
         let truncated = match register {
-            Register::HorizontalTotal => value,
-            Register::HorizontalDisplayed => value,
-            Register::HorizontalSyncPosition => value,
-            Register::HorizontalAndVerticalSyncWidths => value,
-            Register::VerticalTotal => value & 0x7f,
-            Register::VerticalTotalAdjust => value & 0x1f,
-            Register::VerticalDisplayed => value & 0x7f,
-            Register::VerticalSyncPosition => value & 0x7f,
-            Register::InterlaceAndSkew => value,
-            Register::MaximumRasterAddress => value & 0x1f,
-            Register::CursorStartRaster => value,
-            Register::CursorEndRaster => value,
-            Register::DisplayStartAddressHigh => value,
-            Register::DisplayStartAddressLow => value,
-            Register::CursorAddressHigh => value,
-            Register::CursorAddressLow => value,
-            Register::LightPenAddressHigh => value,
-            Register::LightPenAddressLow => value,
+            Register::R0HorizontalTotal => value,
+            Register::R1HorizontalDisplayed => value,
+            Register::R2HorizontalSyncPosition => value,
+            Register::R3HorizontalAndVerticalSyncWidths => value,
+            Register::R4VerticalTotal => value & 0x7f,
+            Register::R5VerticalTotalAdjust => value & 0x1f,
+            Register::R6VerticalDisplayed => value & 0x7f,
+            Register::R7VerticalSyncPosition => value & 0x7f,
+            Register::R8InterlaceAndSkew => value,
+            Register::R9MaximumRasterAddress => value & 0x1f,
+            Register::R10CursorStartRaster => value,
+            Register::R11CursorEndRaster => value,
+            Register::R12DisplayStartAddressHigh => value,
+            Register::R13DisplayStartAddressLow => value,
+            Register::R14CursorAddressHigh => value,
+            Register::R15CursorAddressLow => value,
+            Register::R16LightPenAddressHigh => value,
+            Register::R17LightPenAddressLow => value,
             Register::Unused => value,
-            Register::Dummy => value,
+            Register::R31Dummy => value,
         };
 
         crtc.registers[usize::from(register)] = truncated;
@@ -598,12 +607,13 @@ mod common {
             return;
         }
 
-        if crtc.c4_character_row_counter == crtc.registers[usize::from(Register::VerticalDisplayed)]
+        if crtc.c4_character_row_counter
+            == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
         {
             if crtc.c4_character_row_counter != 0
                 || crtc.c9_scan_line_counter != 0
                 || crtc.c0_horizontal_counter
-                    == crtc.registers[usize::from(Register::HorizontalDisplayed)]
+                    == crtc.registers[usize::from(Register::R1HorizontalDisplayed)]
             {
                 crtc.border_r6_condition = true;
             } else if !crtc.border_r1_condition {
@@ -643,7 +653,7 @@ struct Type1 {
 
 impl CrtControllerImpl for Type1 {
     fn read_register(crtc: &CrtController<Self>) -> u8 {
-        if let Ok(Register::Dummy) = Self::resolve_selected_register_read(crtc) {
+        if let Ok(Register::R31Dummy) = Self::resolve_selected_register_read(crtc) {
             return 0xff;
         };
 
@@ -665,17 +675,18 @@ impl CrtControllerImpl for Type1 {
     }
 
     fn update_status(crtc: &mut CrtController<Self>) {
-        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::HorizontalTotal)]
+        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::R0HorizontalTotal)]
             && crtc.c9_scan_line_counter
-                == crtc.registers[usize::from(Register::MaximumRasterAddress)]
+                == crtc.registers[usize::from(Register::R9MaximumRasterAddress)]
         {
             if crtc.c4_character_row_counter
-                == crtc.registers[usize::from(Register::VerticalDisplayed)]
+                == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
             {
                 crtc.impl_.border_r6_status = true;
             }
 
-            if crtc.c4_character_row_counter == crtc.registers[usize::from(Register::VerticalTotal)]
+            if crtc.c4_character_row_counter
+                == crtc.registers[usize::from(Register::R4VerticalTotal)]
             {
                 crtc.impl_.border_r6_status = false;
             }
@@ -695,19 +706,20 @@ impl CrtControllerImpl for Type1 {
             return;
         }
 
-        if crtc.c4_character_row_counter == crtc.registers[usize::from(Register::VerticalDisplayed)]
-            || crtc.registers[usize::from(Register::VerticalDisplayed)] == 0
+        if crtc.c4_character_row_counter
+            == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
+            || crtc.registers[usize::from(Register::R6VerticalDisplayed)] == 0
         {
             crtc.border_r6_condition = true;
             let definite = crtc.c4_character_row_counter
-                == crtc.registers[usize::from(Register::VerticalDisplayed)]
-                || crtc.registers[usize::from(Register::VerticalDisplayed)] == 0;
+                == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
+                || crtc.registers[usize::from(Register::R6VerticalDisplayed)] == 0;
             let exception = crtc.c0_horizontal_counter
-                == crtc.registers[usize::from(Register::HorizontalTotal)]
+                == crtc.registers[usize::from(Register::R0HorizontalTotal)]
                 && crtc.c9_scan_line_counter
-                    == crtc.registers[usize::from(Register::MaximumRasterAddress)]
+                    == crtc.registers[usize::from(Register::R9MaximumRasterAddress)]
                 && crtc.c4_character_row_counter
-                    == crtc.registers[usize::from(Register::VerticalTotal)];
+                    == crtc.registers[usize::from(Register::R4VerticalTotal)];
             crtc.impl_.border_cancellable = !definite || exception;
         } else if crtc.impl_.border_cancellable {
             crtc.border_r6_condition = false;
@@ -755,40 +767,41 @@ impl CrtControllerImpl for Type4 {
     }
 
     fn update_status(crtc: &mut CrtController<Self>) {
-        let status1 = usize::from(Register::CursorStartRaster);
+        let status1 = usize::from(Register::R10CursorStartRaster);
 
-        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::HorizontalTotal)] {
+        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::R0HorizontalTotal)] {
             crtc.registers[status1] |= 0x01;
         }
 
-        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::HorizontalTotal)] / 2
+        if crtc.c0_horizontal_counter
+            == crtc.registers[usize::from(Register::R0HorizontalTotal)] / 2
         {
             crtc.registers[status1] &= !(0x01 << 1);
         }
 
         if crtc.c0_horizontal_counter
-            == crtc.registers[usize::from(Register::HorizontalDisplayed)].saturating_sub(1)
-            && crtc.registers[usize::from(Register::HorizontalTotal)]
-                >= crtc.registers[usize::from(Register::HorizontalDisplayed)]
+            == crtc.registers[usize::from(Register::R1HorizontalDisplayed)].saturating_sub(1)
+            && crtc.registers[usize::from(Register::R0HorizontalTotal)]
+                >= crtc.registers[usize::from(Register::R1HorizontalDisplayed)]
         {
             crtc.registers[status1] &= !(0x01 << 2);
         }
 
         if crtc.c0_horizontal_counter
-            == crtc.registers[usize::from(Register::HorizontalSyncPosition)]
+            == crtc.registers[usize::from(Register::R2HorizontalSyncPosition)]
         {
             crtc.registers[status1] &= !(0x01 << 3);
         }
 
         if crtc.c0_horizontal_counter
-            == crtc.registers[usize::from(Register::HorizontalSyncPosition)]
-                + crtc.registers[usize::from(Register::HorizontalAndVerticalSyncWidths)]
+            == crtc.registers[usize::from(Register::R2HorizontalSyncPosition)]
+                + crtc.registers[usize::from(Register::R3HorizontalAndVerticalSyncWidths)]
         {
             crtc.registers[status1] &= !(0x01 << 4);
         }
 
         // TODO: fix this
-        if (crtc.registers[usize::from(Register::HorizontalAndVerticalSyncWidths)] >> 4) > 0 {
+        if (crtc.registers[usize::from(Register::R3HorizontalAndVerticalSyncWidths)] >> 4) > 0 {
             crtc.registers[status1] &= !(0x01 << 5);
         } else {
             crtc.registers[status1] |= 0x01 << 5;
@@ -797,7 +810,7 @@ impl CrtControllerImpl for Type4 {
         crtc.registers[status1] |= 0x01 << 6;
 
         // TODO: fix this
-        if crtc.c0_horizontal_counter < crtc.registers[usize::from(Register::HorizontalTotal)] {
+        if crtc.c0_horizontal_counter < crtc.registers[usize::from(Register::R0HorizontalTotal)] {
             crtc.registers[status1] &= !(0x01 << 7);
         } else {
             crtc.registers[status1] &= !(0x01 << 7);
@@ -814,7 +827,7 @@ impl CrtControllerImpl for Type4 {
 
         if crtc.c0_horizontal_counter == 0
             && crtc.c4_character_row_counter
-                == crtc.registers[usize::from(Register::VerticalDisplayed)]
+                == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
         {
             crtc.border_r6_condition = true;
         }
@@ -1195,18 +1208,18 @@ mod tests {
             );
             let mut clock = MasterClock::default();
 
-            crtc.registers[usize::from(Register::HorizontalTotal)] = 0x3f;
-            crtc.registers[usize::from(Register::VerticalTotal)] = 0x26;
-            crtc.registers[usize::from(Register::VerticalDisplayed)] = 0x19;
-            crtc.registers[usize::from(Register::MaximumRasterAddress)] = 0x07;
+            crtc.registers[usize::from(Register::R0HorizontalTotal)] = 0x3f;
+            crtc.registers[usize::from(Register::R4VerticalTotal)] = 0x26;
+            crtc.registers[usize::from(Register::R6VerticalDisplayed)] = 0x19;
+            crtc.registers[usize::from(Register::R9MaximumRasterAddress)] = 0x07;
 
             let mut intermediate_states = Vec::new();
             while crtc.c0_horizontal_counter
-                != crtc.registers[usize::from(Register::HorizontalTotal)]
+                != crtc.registers[usize::from(Register::R0HorizontalTotal)]
                 || crtc.c4_character_row_counter
-                    != crtc.registers[usize::from(Register::VerticalDisplayed)]
+                    != crtc.registers[usize::from(Register::R6VerticalDisplayed)]
                 || crtc.c9_scan_line_counter
-                    != crtc.registers[usize::from(Register::MaximumRasterAddress)]
+                    != crtc.registers[usize::from(Register::R9MaximumRasterAddress)]
             {
                 intermediate_states.push(crtc.impl_.border_r6_status);
                 crtc.step(clock.current());
@@ -1224,11 +1237,11 @@ mod tests {
 
             let mut intermediate_states = Vec::new();
             while crtc.c0_horizontal_counter
-                != crtc.registers[usize::from(Register::HorizontalTotal)]
+                != crtc.registers[usize::from(Register::R0HorizontalTotal)]
                 || crtc.c4_character_row_counter
-                    != crtc.registers[usize::from(Register::VerticalTotal)]
+                    != crtc.registers[usize::from(Register::R4VerticalTotal)]
                 || crtc.c9_scan_line_counter
-                    != crtc.registers[usize::from(Register::MaximumRasterAddress)]
+                    != crtc.registers[usize::from(Register::R9MaximumRasterAddress)]
             {
                 intermediate_states.push(crtc.impl_.border_r6_status);
                 crtc.step(clock.current());
@@ -1252,10 +1265,10 @@ mod tests {
             let mut crtc = CrtController::<Type1>::default();
             let mut clock = MasterClock::default();
 
-            crtc.registers[usize::from(Register::HorizontalTotal)] = 0x3f;
-            crtc.registers[usize::from(Register::VerticalTotal)] = 0x26;
-            crtc.registers[usize::from(Register::VerticalDisplayed)] = 0x19;
-            crtc.registers[usize::from(Register::MaximumRasterAddress)] = 0x07;
+            crtc.registers[usize::from(Register::R0HorizontalTotal)] = 0x3f;
+            crtc.registers[usize::from(Register::R4VerticalTotal)] = 0x26;
+            crtc.registers[usize::from(Register::R6VerticalDisplayed)] = 0x19;
+            crtc.registers[usize::from(Register::R9MaximumRasterAddress)] = 0x07;
 
             crtc.step(clock.current());
             clock.step(16);
@@ -1265,7 +1278,7 @@ mod tests {
                 "BORDER R6 condition should be false initially"
             );
 
-            crtc.registers[usize::from(Register::VerticalDisplayed)] = 0x00;
+            crtc.registers[usize::from(Register::R6VerticalDisplayed)] = 0x00;
             crtc.step(clock.current());
             clock.step(16);
 
