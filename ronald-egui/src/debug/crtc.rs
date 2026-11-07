@@ -87,8 +87,9 @@ impl CrtcDebugWindow {
             .num_columns(7)
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
-                for (i, value) in crtc.registers.iter().enumerate() {
+                for i in 0..18 {
                     let register = CrtcRegister::try_from(i).unwrap();
+                    let value = crtc.registers[register];
                     Self::render_register(ui, register, &format!("{:02X}", value), crtc);
 
                     if (i + 1) % 2 == 0 {

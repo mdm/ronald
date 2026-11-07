@@ -1,4 +1,5 @@
 use std::fmt;
+use std::ops::{Index, IndexMut};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
@@ -108,7 +109,32 @@ impl fmt::Display for Register {
     }
 }
 
-struct RegisterFile([u8; 18]);
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct RegisterFile([u8; 20]);
+
+impl RegisterFile {
+    fn lookup(&self, register: Register) -> usize {
+        match register {
+            Register::Unused => 18,
+            Register::R31Dummy => 19,
+            _ => usize::from(register),
+        }
+    }
+}
+
+impl Index<Register> for RegisterFile {
+    type Output = u8;
+
+    fn index(&self, index: Register) -> &Self::Output {
+        &self.0[self.lookup(index)]
+    }
+}
+
+impl IndexMut<Register> for RegisterFile {
+    fn index_mut(&mut self, index: Register) -> &mut Self::Output {
+        &mut self.0[self.lookup(index)]
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Function {
@@ -141,7 +167,7 @@ struct CrtController<I>
 where
     I: CrtControllerImpl,
 {
-    registers: [u8; 18],
+    registers: RegisterFile,
     selected_register: u8,
     c0_horizontal_counter: u8,
     c3l_horizontal_sync_width_counter: u8,
@@ -166,7 +192,7 @@ where
 
     fn debug_view(&self) -> Self::View {
         CrtcDebugView {
-            registers: self.registers,
+            registers: self.registers.clone(),
             selected_register_read: I::resolve_selected_register_read(self)
                 .expect("masked register index is always valid"),
             selected_register_write: I::resolve_selected_register_write(self)
@@ -223,17 +249,17 @@ where
 
         self.c0_horizontal_counter += 1;
 
-        if self.c0_horizontal_counter > self.registers[Register::R0HorizontalTotal as usize] {
+        if self.c0_horizontal_counter > self.registers[Register::R0HorizontalTotal] {
             self.c9_scan_line_counter += 1;
             self.c0_horizontal_counter = 0;
         }
 
-        if self.c9_scan_line_counter > self.registers[Register::R9MaximumRasterAddress as usize] {
+        if self.c9_scan_line_counter > self.registers[Register::R9MaximumRasterAddress] {
             self.c4_character_row_counter += 1;
             self.c9_scan_line_counter = 0;
         }
 
-        if self.c4_character_row_counter > self.registers[Register::R4VerticalTotal as usize] {
+        if self.c4_character_row_counter > self.registers[Register::R4VerticalTotal] {
             // TODO: take VerticalTotalAdjust into account
             self.c4_character_row_counter = 0;
         }
@@ -252,8 +278,8 @@ where
 
         if self.c0_horizontal_counter == 0 && self.c4_character_row_counter == 0 {
             self.display_start_address =
-                ((self.registers[Register::R12DisplayStartAddressHigh as usize] as u16) << 8)
-                    + self.registers[Register::R13DisplayStartAddressLow as usize] as u16;
+                ((self.registers[Register::R12DisplayStartAddressHigh] as u16) << 8)
+                    + self.registers[Register::R13DisplayStartAddressLow] as u16;
         }
 
         // TODO: I::update_border_r1_condition(self);
@@ -306,7 +332,7 @@ where
 
     fn read_address(&self) -> usize {
         let refresh_memory_address = self.display_start_address
-            + self.registers[Register::R1HorizontalDisplayed as usize] as u16
+            + self.registers[Register::R1HorizontalDisplayed] as u16
                 * self.c4_character_row_counter as u16
             + self.c0_horizontal_counter as u16;
 
@@ -319,28 +345,26 @@ where
 
     fn read_display_enabled(&self) -> bool {
         // TODO: self.border_r6_condition || self.border_r1_condition
-        self.c0_horizontal_counter < self.registers[Register::R1HorizontalDisplayed as usize]
-            && self.c4_character_row_counter
-                < self.registers[Register::R6VerticalDisplayed as usize]
+        self.c0_horizontal_counter < self.registers[Register::R1HorizontalDisplayed]
+            && self.c4_character_row_counter < self.registers[Register::R6VerticalDisplayed]
     }
 
     fn read_horizontal_sync(&self) -> bool {
         // TODO: what happens before registers are initialized?
-        let sync_start = self.registers[Register::R2HorizontalSyncPosition as usize];
-        let sync_end = self.registers[Register::R2HorizontalSyncPosition as usize]
-            + (self.registers[Register::R3HorizontalAndVerticalSyncWidths as usize] & 0b1111);
+        let sync_start = self.registers[Register::R2HorizontalSyncPosition];
+        let sync_end = self.registers[Register::R2HorizontalSyncPosition]
+            + (self.registers[Register::R3HorizontalAndVerticalSyncWidths] & 0b1111);
         self.c0_horizontal_counter >= sync_start && self.c0_horizontal_counter < sync_end
         // this results in NO sync if the horizontal sync width is 0
     }
 
     fn read_vertical_sync(&self) -> bool {
         // TODO: what happens before registers are initialized?
-        let sync_start = self.registers[Register::R7VerticalSyncPosition as usize] as i32;
+        let sync_start = self.registers[Register::R7VerticalSyncPosition] as i32;
         let character_rows_since_start = self.c4_character_row_counter as i32 - sync_start;
-        let scan_lines_since_start =
-            (self.registers[Register::R9MaximumRasterAddress as usize] as i32 + 1)
-                * character_rows_since_start
-                + self.c9_scan_line_counter as i32;
+        let scan_lines_since_start = (self.registers[Register::R9MaximumRasterAddress] as i32 + 1)
+            * character_rows_since_start
+            + self.c9_scan_line_counter as i32;
         (0..16).contains(&scan_lines_since_start)
     }
 }
@@ -521,7 +545,7 @@ mod common {
             return 0;
         }
 
-        crtc.registers[usize::from(register)] & I::READ_MASKS[usize::from(register)]
+        crtc.registers[register] & I::READ_MASKS[usize::from(register)]
     }
 
     pub(super) fn resolve_selected_register_write<I>(
@@ -548,7 +572,7 @@ mod common {
             return;
         }
 
-        let was = crtc.registers[usize::from(register)];
+        let was = crtc.registers[register];
 
         let truncated = match register {
             Register::R0HorizontalTotal => value,
@@ -573,7 +597,7 @@ mod common {
             Register::R31Dummy => value,
         };
 
-        crtc.registers[usize::from(register)] = truncated;
+        crtc.registers[register] = truncated;
 
         crtc.emit_debug_event(
             CrtcDebugEvent::RegisterWritten {
@@ -607,13 +631,10 @@ mod common {
             return;
         }
 
-        if crtc.c4_character_row_counter
-            == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
-        {
+        if crtc.c4_character_row_counter == crtc.registers[Register::R6VerticalDisplayed] {
             if crtc.c4_character_row_counter != 0
                 || crtc.c9_scan_line_counter != 0
-                || crtc.c0_horizontal_counter
-                    == crtc.registers[usize::from(Register::R1HorizontalDisplayed)]
+                || crtc.c0_horizontal_counter == crtc.registers[Register::R1HorizontalDisplayed]
             {
                 crtc.border_r6_condition = true;
             } else if !crtc.border_r1_condition {
@@ -675,19 +696,14 @@ impl CrtControllerImpl for Type1 {
     }
 
     fn update_status(crtc: &mut CrtController<Self>) {
-        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::R0HorizontalTotal)]
-            && crtc.c9_scan_line_counter
-                == crtc.registers[usize::from(Register::R9MaximumRasterAddress)]
+        if crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal]
+            && crtc.c9_scan_line_counter == crtc.registers[Register::R9MaximumRasterAddress]
         {
-            if crtc.c4_character_row_counter
-                == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
-            {
+            if crtc.c4_character_row_counter == crtc.registers[Register::R6VerticalDisplayed] {
                 crtc.impl_.border_r6_status = true;
             }
 
-            if crtc.c4_character_row_counter
-                == crtc.registers[usize::from(Register::R4VerticalTotal)]
-            {
+            if crtc.c4_character_row_counter == crtc.registers[Register::R4VerticalTotal] {
                 crtc.impl_.border_r6_status = false;
             }
         }
@@ -706,20 +722,17 @@ impl CrtControllerImpl for Type1 {
             return;
         }
 
-        if crtc.c4_character_row_counter
-            == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
-            || crtc.registers[usize::from(Register::R6VerticalDisplayed)] == 0
+        if crtc.c4_character_row_counter == crtc.registers[Register::R6VerticalDisplayed]
+            || crtc.registers[Register::R6VerticalDisplayed] == 0
         {
             crtc.border_r6_condition = true;
             let definite = crtc.c4_character_row_counter
-                == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
-                || crtc.registers[usize::from(Register::R6VerticalDisplayed)] == 0;
+                == crtc.registers[Register::R6VerticalDisplayed]
+                || crtc.registers[Register::R6VerticalDisplayed] == 0;
             let exception = crtc.c0_horizontal_counter
-                == crtc.registers[usize::from(Register::R0HorizontalTotal)]
-                && crtc.c9_scan_line_counter
-                    == crtc.registers[usize::from(Register::R9MaximumRasterAddress)]
-                && crtc.c4_character_row_counter
-                    == crtc.registers[usize::from(Register::R4VerticalTotal)];
+                == crtc.registers[Register::R0HorizontalTotal]
+                && crtc.c9_scan_line_counter == crtc.registers[Register::R9MaximumRasterAddress]
+                && crtc.c4_character_row_counter == crtc.registers[Register::R4VerticalTotal];
             crtc.impl_.border_cancellable = !definite || exception;
         } else if crtc.impl_.border_cancellable {
             crtc.border_r6_condition = false;
@@ -767,41 +780,37 @@ impl CrtControllerImpl for Type4 {
     }
 
     fn update_status(crtc: &mut CrtController<Self>) {
-        let status1 = usize::from(Register::R10CursorStartRaster);
+        let status1 = Register::R10CursorStartRaster;
 
-        if crtc.c0_horizontal_counter == crtc.registers[usize::from(Register::R0HorizontalTotal)] {
+        if crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal] {
             crtc.registers[status1] |= 0x01;
         }
 
-        if crtc.c0_horizontal_counter
-            == crtc.registers[usize::from(Register::R0HorizontalTotal)] / 2
-        {
+        if crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal] / 2 {
             crtc.registers[status1] &= !(0x01 << 1);
         }
 
         if crtc.c0_horizontal_counter
-            == crtc.registers[usize::from(Register::R1HorizontalDisplayed)].saturating_sub(1)
-            && crtc.registers[usize::from(Register::R0HorizontalTotal)]
-                >= crtc.registers[usize::from(Register::R1HorizontalDisplayed)]
+            == crtc.registers[Register::R1HorizontalDisplayed].saturating_sub(1)
+            && crtc.registers[Register::R0HorizontalTotal]
+                >= crtc.registers[Register::R1HorizontalDisplayed]
         {
             crtc.registers[status1] &= !(0x01 << 2);
         }
 
-        if crtc.c0_horizontal_counter
-            == crtc.registers[usize::from(Register::R2HorizontalSyncPosition)]
-        {
+        if crtc.c0_horizontal_counter == crtc.registers[Register::R2HorizontalSyncPosition] {
             crtc.registers[status1] &= !(0x01 << 3);
         }
 
         if crtc.c0_horizontal_counter
-            == crtc.registers[usize::from(Register::R2HorizontalSyncPosition)]
-                + crtc.registers[usize::from(Register::R3HorizontalAndVerticalSyncWidths)]
+            == crtc.registers[Register::R2HorizontalSyncPosition]
+                + crtc.registers[Register::R3HorizontalAndVerticalSyncWidths]
         {
             crtc.registers[status1] &= !(0x01 << 4);
         }
 
         // TODO: fix this
-        if (crtc.registers[usize::from(Register::R3HorizontalAndVerticalSyncWidths)] >> 4) > 0 {
+        if (crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4) > 0 {
             crtc.registers[status1] &= !(0x01 << 5);
         } else {
             crtc.registers[status1] |= 0x01 << 5;
@@ -810,7 +819,7 @@ impl CrtControllerImpl for Type4 {
         crtc.registers[status1] |= 0x01 << 6;
 
         // TODO: fix this
-        if crtc.c0_horizontal_counter < crtc.registers[usize::from(Register::R0HorizontalTotal)] {
+        if crtc.c0_horizontal_counter < crtc.registers[Register::R0HorizontalTotal] {
             crtc.registers[status1] &= !(0x01 << 7);
         } else {
             crtc.registers[status1] &= !(0x01 << 7);
@@ -826,8 +835,7 @@ impl CrtControllerImpl for Type4 {
         }
 
         if crtc.c0_horizontal_counter == 0
-            && crtc.c4_character_row_counter
-                == crtc.registers[usize::from(Register::R6VerticalDisplayed)]
+            && crtc.c4_character_row_counter == crtc.registers[Register::R6VerticalDisplayed]
         {
             crtc.border_r6_condition = true;
         }
@@ -907,7 +915,8 @@ mod tests {
                     crtc.write_byte(0xbc00, register);
                     crtc.write_byte(0xbd00, 0xff);
 
-                    let value = dispatch!(crtc, crtc => crtc.registers[register as usize & 0x1f]);
+                    let value =
+                        dispatch!(crtc, crtc => crtc.registers.0[usize::from(register) & 0x1f]);
 
                     assert_ne!(value, 0x00);
 
@@ -924,7 +933,7 @@ mod tests {
                 crtc.write_byte(0xbc00, 9);
                 crtc.write_byte(0xbd00, 0x27);
 
-                let r9_value = dispatch!(crtc, crtc => crtc.registers[9]);
+                let r9_value = dispatch!(crtc, crtc => crtc.registers.0[9]);
 
                 assert_eq!(r9_value, 7);
             }
@@ -940,7 +949,7 @@ mod tests {
                 crtc.write_byte(0xbc00, 5);
                 crtc.write_byte(0xbd00, 0x27);
 
-                let r5_value = dispatch!(crtc, crtc => crtc.registers[5]);
+                let r5_value = dispatch!(crtc, crtc => crtc.registers.0[5]);
 
                 assert_eq!(r5_value, 7);
             }
@@ -955,7 +964,7 @@ mod tests {
                     crtc.write_byte(0xbc00, register);
                     crtc.write_byte(0xbd00, 0xff);
 
-                    let value = dispatch!(crtc, crtc => crtc.registers[register as usize]);
+                    let value = dispatch!(crtc, crtc => crtc.registers.0[usize::from(register)]);
 
                     assert_eq!(value, 0x7f);
                 }
@@ -973,16 +982,17 @@ mod tests {
 
                 assert_ne!(before, after);
 
-                let before = dispatch!(crtc, crtc => crtc.registers);
+                let before = dispatch!(crtc, crtc => crtc.registers.0);
                 crtc.write_byte(0xbd00, 0x42);
-                let after = dispatch!(crtc, crtc => crtc.registers);
+                let after = dispatch!(crtc, crtc => crtc.registers.0);
 
                 assert_ne!(before, after);
 
                 for port in [0xbe00, 0xbf00] {
-                    let before = dispatch!(crtc, crtc => (crtc.selected_register, crtc.registers));
+                    let before =
+                        dispatch!(crtc, crtc => (crtc.selected_register, crtc.registers.0));
                     crtc.write_byte(port, 0x42);
-                    let after = dispatch!(crtc, crtc => (crtc.selected_register, crtc.registers));
+                    let after = dispatch!(crtc, crtc => (crtc.selected_register, crtc.registers.0));
 
                     assert_eq!(before, after);
                 }
@@ -1027,7 +1037,7 @@ mod tests {
 
             for crtc in &mut crtcs!(All) {
                 for register in [14, 16] {
-                    dispatch_mut!(crtc, crtc => crtc.registers[register as usize] = 0xff);
+                    dispatch_mut!(crtc, crtc => crtc.registers.0[usize::from(register)] = 0xff);
 
                     crtc.write_byte(0xbc00, register);
                     let value = crtc.read_byte(0xbf00);
@@ -1042,7 +1052,7 @@ mod tests {
             // ACCC 21.2.1, 21.2.2, 28.1.9: selecting register 108 and reading &BF00 is the same as reading R12.
 
             for crtc in &mut crtcs!(Type0, Type1, Type2) {
-                dispatch_mut!(crtc, crtc => crtc.registers = std::array::from_fn(|i| i as u8));
+                dispatch_mut!(crtc, crtc => crtc.registers.0 = std::array::from_fn(|i| i as u8));
 
                 for register in 0..=255 {
                     crtc.write_byte(0xbc00, register);
@@ -1133,7 +1143,7 @@ mod tests {
 
             for crtc in &mut crtcs!(Type0, Type2) {
                 for register in 0x12..=0x1f {
-                    dispatch_mut!(crtc, crtc => crtc.registers = [0xff; 18]);
+                    dispatch_mut!(crtc, crtc => crtc.registers.0 = [0xff; 20]);
 
                     crtc.write_byte(0xbc00, register);
 
@@ -1208,18 +1218,15 @@ mod tests {
             );
             let mut clock = MasterClock::default();
 
-            crtc.registers[usize::from(Register::R0HorizontalTotal)] = 0x3f;
-            crtc.registers[usize::from(Register::R4VerticalTotal)] = 0x26;
-            crtc.registers[usize::from(Register::R6VerticalDisplayed)] = 0x19;
-            crtc.registers[usize::from(Register::R9MaximumRasterAddress)] = 0x07;
+            crtc.registers[Register::R0HorizontalTotal] = 0x3f;
+            crtc.registers[Register::R4VerticalTotal] = 0x26;
+            crtc.registers[Register::R6VerticalDisplayed] = 0x19;
+            crtc.registers[Register::R9MaximumRasterAddress] = 0x07;
 
             let mut intermediate_states = Vec::new();
-            while crtc.c0_horizontal_counter
-                != crtc.registers[usize::from(Register::R0HorizontalTotal)]
-                || crtc.c4_character_row_counter
-                    != crtc.registers[usize::from(Register::R6VerticalDisplayed)]
-                || crtc.c9_scan_line_counter
-                    != crtc.registers[usize::from(Register::R9MaximumRasterAddress)]
+            while crtc.c0_horizontal_counter != crtc.registers[Register::R0HorizontalTotal]
+                || crtc.c4_character_row_counter != crtc.registers[Register::R6VerticalDisplayed]
+                || crtc.c9_scan_line_counter != crtc.registers[Register::R9MaximumRasterAddress]
             {
                 intermediate_states.push(crtc.impl_.border_r6_status);
                 crtc.step(clock.current());
@@ -1236,12 +1243,9 @@ mod tests {
             );
 
             let mut intermediate_states = Vec::new();
-            while crtc.c0_horizontal_counter
-                != crtc.registers[usize::from(Register::R0HorizontalTotal)]
-                || crtc.c4_character_row_counter
-                    != crtc.registers[usize::from(Register::R4VerticalTotal)]
-                || crtc.c9_scan_line_counter
-                    != crtc.registers[usize::from(Register::R9MaximumRasterAddress)]
+            while crtc.c0_horizontal_counter != crtc.registers[Register::R0HorizontalTotal]
+                || crtc.c4_character_row_counter != crtc.registers[Register::R4VerticalTotal]
+                || crtc.c9_scan_line_counter != crtc.registers[Register::R9MaximumRasterAddress]
             {
                 intermediate_states.push(crtc.impl_.border_r6_status);
                 crtc.step(clock.current());
@@ -1265,10 +1269,10 @@ mod tests {
             let mut crtc = CrtController::<Type1>::default();
             let mut clock = MasterClock::default();
 
-            crtc.registers[usize::from(Register::R0HorizontalTotal)] = 0x3f;
-            crtc.registers[usize::from(Register::R4VerticalTotal)] = 0x26;
-            crtc.registers[usize::from(Register::R6VerticalDisplayed)] = 0x19;
-            crtc.registers[usize::from(Register::R9MaximumRasterAddress)] = 0x07;
+            crtc.registers[Register::R0HorizontalTotal] = 0x3f;
+            crtc.registers[Register::R4VerticalTotal] = 0x26;
+            crtc.registers[Register::R6VerticalDisplayed] = 0x19;
+            crtc.registers[Register::R9MaximumRasterAddress] = 0x07;
 
             crtc.step(clock.current());
             clock.step(16);
@@ -1278,7 +1282,7 @@ mod tests {
                 "BORDER R6 condition should be false initially"
             );
 
-            crtc.registers[usize::from(Register::R6VerticalDisplayed)] = 0x00;
+            crtc.registers[Register::R6VerticalDisplayed] = 0x00;
             crtc.step(clock.current());
             clock.step(16);
 
@@ -1297,7 +1301,7 @@ mod tests {
             // ACCC 21.2.3, 28.1.9: reads map numbers 0-7 to R16, R17, R10, R11, R12, R13, R14, R15, so reading R4 or R20 returns R12.
 
             let mut crtc = CrtController::<Type4> {
-                registers: std::array::from_fn(|i| i as u8),
+                registers: RegisterFile(std::array::from_fn(|i| i as u8)),
                 ..Default::default()
             };
             for register in 0..=255 {
@@ -1322,7 +1326,7 @@ mod tests {
             // ACCC 21.2.3, 21.3.1, 28.1.8: &BE00 behaves exactly like &BF00.
 
             let mut crtc = CrtController::<Type4> {
-                registers: std::array::from_fn(|i| i as u8),
+                registers: RegisterFile(std::array::from_fn(|i| i as u8)),
                 ..Default::default()
             };
             for register in 0..=255 {
