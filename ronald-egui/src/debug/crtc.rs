@@ -146,8 +146,12 @@ impl CrtcDebugWindow {
             .num_columns(2)
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
-                ui.label("Display Start Address:");
-                ui.monospace(format!("{:04X}", crtc.display_start_address));
+                ui.label("Video Memory Address:");
+                ui.monospace(format!("{:04X}", crtc.video_memory_address));
+                ui.end_row();
+
+                ui.label("Video Memory Address':");
+                ui.monospace(format!("{:04X}", crtc.video_memory_address_initial));
                 ui.end_row();
 
                 ui.label("Current Address:");

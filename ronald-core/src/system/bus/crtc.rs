@@ -173,7 +173,8 @@ where
     c3l_horizontal_sync_width_counter: u8,
     c4_character_row_counter: u8,
     c9_scan_line_counter: u8,
-    display_start_address: u16,
+    video_memory_address: u16,
+    video_memory_address_initial: u16,
     master_clock: MasterClockTick,
     previous_hsync: bool,
     previous_vsync: bool,
@@ -201,7 +202,8 @@ where
             horizontal_counter: self.c0_horizontal_counter,
             character_row_counter: self.c4_character_row_counter,
             scan_line_counter: self.c9_scan_line_counter,
-            display_start_address: self.display_start_address,
+            video_memory_address: self.video_memory_address,
+            video_memory_address_initial: self.video_memory_address_initial,
             hsync_active: self.read_horizontal_sync(),
             vsync_active: self.read_vertical_sync(),
             display_enabled: self.read_display_enabled(),
@@ -290,11 +292,7 @@ where
             master_clock,
         );
 
-        if self.c0_horizontal_counter == 0 && self.c4_character_row_counter == 0 {
-            self.display_start_address =
-                ((self.registers[Register::R12DisplayStartAddressHigh] as u16) << 8)
-                    + self.registers[Register::R13DisplayStartAddressLow] as u16;
-        }
+        I::update_video_memory_address(self);
 
         // TODO: I::update_border_r1_condition(self);
         I::update_border_r6_condition(self);
@@ -345,14 +343,9 @@ where
     }
 
     fn read_address(&self) -> usize {
-        let refresh_memory_address = self.display_start_address
-            + self.registers[Register::R1HorizontalDisplayed] as u16
-                * self.c4_character_row_counter as u16
-            + self.c0_horizontal_counter as u16;
-
-        let bits_14_and_15 = (refresh_memory_address & (0b11 << 12)) << 2;
+        let bits_14_and_15 = (self.video_memory_address & (0b11 << 12)) << 2;
         let bits_11_to_13 = ((self.c9_scan_line_counter & 0b111) as u16) << 11;
-        let bits_0_to_10 = (refresh_memory_address & 0b11_1111_1111) << 1;
+        let bits_0_to_10 = (self.video_memory_address & 0b11_1111_1111) << 1;
 
         (bits_14_and_15 | bits_11_to_13 | bits_0_to_10) as usize
     }
@@ -509,6 +502,8 @@ trait CrtControllerImpl: Default {
     fn hsync_width(crtc: &CrtController<Self>) -> u8;
 
     fn vsync_length(crtc: &CrtController<Self>) -> u8;
+
+    fn update_video_memory_address(crtc: &mut CrtController<Self>);
 }
 
 mod common {
@@ -654,6 +649,34 @@ mod common {
             }
         }
     }
+
+    pub(super) fn update_video_memory_address_type_04<I>(crtc: &mut CrtController<I>)
+    where
+        I: CrtControllerImpl,
+    {
+        crtc.video_memory_address += 1;
+
+        if crtc.c0_horizontal_counter == crtc.registers[Register::R1HorizontalDisplayed]
+            && crtc.c9_scan_line_counter == crtc.registers[Register::R9MaximumRasterAddress]
+        {
+            crtc.video_memory_address_initial = crtc.video_memory_address;
+        }
+
+        if crtc.c0_horizontal_counter == 0
+            && crtc.c4_character_row_counter == 0
+            && crtc.c9_scan_line_counter == 0
+        {
+            let display_start_address =
+                ((crtc.registers[Register::R12DisplayStartAddressHigh] as u16) << 8)
+                    + crtc.registers[Register::R13DisplayStartAddressLow] as u16;
+
+            crtc.video_memory_address_initial = display_start_address;
+        }
+
+        if crtc.c0_horizontal_counter == 0 {
+            crtc.video_memory_address = crtc.video_memory_address_initial;
+        }
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -686,6 +709,10 @@ impl CrtControllerImpl for Type0 {
         } else {
             crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4
         }
+    }
+
+    fn update_video_memory_address(crtc: &mut CrtController<Self>) {
+        common::update_video_memory_address_type_04(crtc);
     }
 }
 
@@ -770,6 +797,25 @@ impl CrtControllerImpl for Type1 {
     fn vsync_length(_crtc: &CrtController<Self>) -> u8 {
         16
     }
+
+    fn update_video_memory_address(crtc: &mut CrtController<Self>) {
+        crtc.video_memory_address += 1;
+
+        if crtc.c0_horizontal_counter == crtc.registers[Register::R1HorizontalDisplayed]
+            && crtc.c9_scan_line_counter == crtc.registers[Register::R9MaximumRasterAddress]
+        {
+            crtc.video_memory_address_initial = crtc.video_memory_address;
+        }
+
+        if crtc.c0_horizontal_counter == 0 {
+            crtc.video_memory_address = if crtc.c4_character_row_counter == 0 {
+                ((crtc.registers[Register::R12DisplayStartAddressHigh] as u16) << 8)
+                    + crtc.registers[Register::R13DisplayStartAddressLow] as u16
+            } else {
+                crtc.video_memory_address_initial
+            };
+        }
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -790,6 +836,36 @@ impl CrtControllerImpl for Type2 {
 
     fn vsync_length(_crtc: &CrtController<Self>) -> u8 {
         16
+    }
+
+    fn update_video_memory_address(crtc: &mut CrtController<Self>) {
+        crtc.video_memory_address += 1;
+
+        if crtc.c0_horizontal_counter == crtc.registers[Register::R1HorizontalDisplayed]
+            && crtc.c9_scan_line_counter == crtc.registers[Register::R9MaximumRasterAddress]
+        {
+            crtc.video_memory_address_initial =
+                if crtc.c4_character_row_counter == crtc.registers[Register::R4VerticalTotal] {
+                    let display_start_address =
+                        ((crtc.registers[Register::R12DisplayStartAddressHigh] as u16) << 8)
+                            + crtc.registers[Register::R13DisplayStartAddressLow] as u16;
+
+                    let video_memory_address_initial =
+                        crtc.video_memory_address_initial & display_start_address;
+
+                    if crtc.registers[Register::R1HorizontalDisplayed] == 0 {
+                        video_memory_address_initial
+                    } else {
+                        video_memory_address_initial | display_start_address
+                    }
+                } else {
+                    crtc.video_memory_address
+                };
+        }
+
+        if crtc.c0_horizontal_counter == 0 {
+            crtc.video_memory_address = crtc.video_memory_address_initial;
+        }
     }
 }
 
@@ -909,6 +985,10 @@ impl CrtControllerImpl for Type4 {
         } else {
             crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4
         }
+    }
+
+    fn update_video_memory_address(crtc: &mut CrtController<Self>) {
+        common::update_video_memory_address_type_04(crtc);
     }
 }
 
