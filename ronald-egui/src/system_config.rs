@@ -827,21 +827,25 @@ impl SystemConfigModal {
                             continue;
                         }
 
-                        if !file.name().to_lowercase().ends_with(".rom") {
-                            log::info!("Skipping non-ROM file in ZIP: {}", file.name());
+                        let Ok(name) = file.name().map(|f| f.to_string()) else {
+                            continue;
+                        };
+
+                        if !name.to_lowercase().ends_with(".rom") {
+                            log::info!("Skipping non-ROM file in ZIP: {}", name);
                             continue;
                         }
 
                         let mut image = Vec::new();
                         if file.read_to_end(&mut image).is_ok() {
                             let rom_file = File {
-                                path_buf: PathBuf::from(file.name()),
+                                path_buf: PathBuf::from(name),
                                 image,
                             };
 
                             self.import_rom_file(&rom_file, true);
                         } else {
-                            log::warn!("Failed to read ROM file from ZIP: {}", file.name());
+                            log::warn!("Failed to read ROM file from ZIP: {}", name);
                         }
                     }
                 }
