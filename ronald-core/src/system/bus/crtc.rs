@@ -900,39 +900,37 @@ impl CrtControllerImpl for Type4 {
     }
 
     fn update_status(crtc: &mut CrtController<Self>) {
-        let status1 = Register::R10CursorStartRaster;
+        let mut status1 = 0;
 
         if crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal] {
-            crtc.registers[status1] |= 0x01;
+            status1 |= 0x01;
         }
 
-        if crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal] / 2 {
-            crtc.registers[status1] &= !(0x01 << 1);
+        if !(crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal] / 2) {
+            status1 |= 0x01 << 1;
         }
 
-        if crtc.c0_horizontal_counter
+        if !(crtc.c0_horizontal_counter
             == crtc.registers[Register::R1HorizontalDisplayed].saturating_sub(1)
             && crtc.registers[Register::R0HorizontalTotal]
-                >= crtc.registers[Register::R1HorizontalDisplayed]
+                >= crtc.registers[Register::R1HorizontalDisplayed])
         {
-            crtc.registers[status1] &= !(0x01 << 2);
+            status1 |= 0x01 << 2;
         }
 
-        if crtc.c0_horizontal_counter == crtc.registers[Register::R2HorizontalSyncPosition] {
-            crtc.registers[status1] &= !(0x01 << 3);
+        if !(crtc.c0_horizontal_counter == crtc.registers[Register::R2HorizontalSyncPosition]) {
+            status1 |= 0x01 << 3;
         }
 
-        if crtc.c0_horizontal_counter
-            == crtc.registers[Register::R2HorizontalSyncPosition] + Self::hsync_width(crtc)
+        if !(crtc.c0_horizontal_counter
+            == crtc.registers[Register::R2HorizontalSyncPosition] + Self::hsync_width(crtc))
         {
-            crtc.registers[status1] &= !(0x01 << 4);
+            status1 |= 0x01 << 4;
         }
 
         if (crtc.registers[Register::R3HorizontalAndVerticalSyncWidths] >> 4) > 0 {
-            if crtc.active_vsync_scanlines == Self::vsync_length(crtc) {
-                crtc.registers[status1] &= !(0x01 << 5);
-            } else {
-                crtc.registers[status1] |= 0x01 << 5;
+            if !(crtc.active_vsync_scanlines == Self::vsync_length(crtc)) {
+                status1 |= 0x01 << 5;
             }
         } else {
             if crtc.active_vsync_scanlines > 15
@@ -940,20 +938,23 @@ impl CrtControllerImpl for Type4 {
                     && crtc.c4_character_row_counter
                         >= crtc.registers[Register::R7VerticalSyncPosition])
             {
-                crtc.registers[status1] |= 0x01 << 5;
-            } else {
-                crtc.registers[status1] &= !(0x01 << 5);
+                status1 |= 0x01 << 5;
             }
         }
 
-        crtc.registers[status1] |= 0x01 << 6;
+        status1 |= 0x01 << 6;
 
-        // TODO: fix this
         if crtc.c0_horizontal_counter < crtc.registers[Register::R0HorizontalTotal] {
-            crtc.registers[status1] &= !(0x01 << 7);
+            if !(crtc.video_memory_address & 0x00ff == 0xff) {
+                status1 |= 0x01 << 7;
+            }
         } else {
-            crtc.registers[status1] &= !(0x01 << 7);
+            if !(crtc.video_memory_address_initial & 0x00ff == 0x00) {
+                status1 |= 0x01 << 7;
+            }
         }
+
+        crtc.registers[Register::R10CursorStartRaster] = status1;
     }
 
     fn update_border_r6_condition(crtc: &mut CrtController<Self>) {
