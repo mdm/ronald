@@ -1023,6 +1023,19 @@ mod tests {
         };
     }
 
+    // (register, value)
+    const CPC_DEFAULTS: &[(u8, u8)] = &[
+        (0, 63),
+        (1, 40),
+        (2, 46),
+        (3, 128 + 14),
+        (4, 38),
+        (6, 25),
+        (7, 30),
+        (9, 7),
+        (12, 48),
+    ];
+
     mod register_access {
         use crate::system::clock::MasterClock;
 
@@ -1488,66 +1501,388 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_status_1_bit_0_is_set_when_c0_equals_r0() {
             // ACCC 21.3.4.1: reading R10 returns status 1; bit 0 is 1 only while C0=R0.
 
             let mut crtc = CrtController::<Type4>::default();
-            todo!()
+            let mut clock = MasterClock::default();
+
+            for (register, value) in CPC_DEFAULTS.iter() {
+                crtc.write_byte(0xbc00, *register);
+                crtc.write_byte(0xbd00, *value);
+            }
+
+            let mut samples = Vec::new();
+            loop {
+                crtc.step(clock.current());
+                clock.step(16);
+
+                crtc.write_byte(0xbc00, 10);
+                let status1 = crtc.read_byte(0xbf00);
+
+                let condition =
+                    crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal];
+
+                samples.push((status1, condition));
+
+                if crtc.c0_horizontal_counter == 0
+                    && crtc.c4_character_row_counter == 0
+                    && crtc.c9_scan_line_counter == 0
+                {
+                    break;
+                }
+            }
+
+            assert!(
+                samples
+                    .iter()
+                    .all(|(status1, condition)| (status1 & 0x01 != 0) == *condition)
+            );
+
+            assert_eq!(
+                samples
+                    .iter()
+                    .filter(|(status1, _)| status1 & 0x01 != 0)
+                    .count(),
+                (crtc.registers[Register::R4VerticalTotal] as usize + 1)
+                    * (crtc.registers[Register::R9MaximumRasterAddress] as usize + 1)
+            );
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_status_1_bit_1_is_cleared_when_c0_equals_half_r0() {
             // ACCC 21.3.4.1: bit 1 is 0 only while C0=R0/2.
 
             let mut crtc = CrtController::<Type4>::default();
-            todo!()
+            let mut clock = MasterClock::default();
+
+            for (register, value) in CPC_DEFAULTS.iter() {
+                crtc.write_byte(0xbc00, *register);
+                crtc.write_byte(0xbd00, *value);
+            }
+
+            let mut samples = Vec::new();
+            loop {
+                crtc.step(clock.current());
+                clock.step(16);
+
+                // sample after stepping to ignore uninitialized status registers
+                crtc.write_byte(0xbc00, 10);
+                let status1 = crtc.read_byte(0xbf00);
+
+                let condition =
+                    crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal] / 2;
+
+                samples.push((status1, condition));
+
+                if crtc.c0_horizontal_counter == 0
+                    && crtc.c4_character_row_counter == 0
+                    && crtc.c9_scan_line_counter == 0
+                {
+                    break;
+                }
+            }
+
+            assert!(
+                samples
+                    .iter()
+                    .all(|(status1, condition)| (status1 & (0x01 << 1) == 0) == *condition)
+            );
+
+            assert_eq!(
+                samples
+                    .iter()
+                    .filter(|(status1, _)| status1 & (0x01 << 1) == 0)
+                    .count(),
+                (crtc.registers[Register::R4VerticalTotal] as usize + 1)
+                    * (crtc.registers[Register::R9MaximumRasterAddress] as usize + 1)
+            );
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_status_1_bit_2_is_cleared_when_c0_equals_r1_minus_one() {
             // ACCC 21.3.4.1: bit 2 is 0 while C0=R1-1 (if R0>=R1).
 
             let mut crtc = CrtController::<Type4>::default();
-            todo!()
+            let mut clock = MasterClock::default();
+
+            for (register, value) in CPC_DEFAULTS.iter() {
+                crtc.write_byte(0xbc00, *register);
+                crtc.write_byte(0xbd00, *value);
+            }
+
+            let mut samples = Vec::new();
+            loop {
+                crtc.step(clock.current());
+                clock.step(16);
+
+                // sample after stepping to ignore uninitialized status registers
+                crtc.write_byte(0xbc00, 10);
+                let status1 = crtc.read_byte(0xbf00);
+
+                let condition = crtc.c0_horizontal_counter
+                    == crtc.registers[Register::R1HorizontalDisplayed].saturating_sub(1)
+                    && crtc.registers[Register::R0HorizontalTotal]
+                        >= crtc.registers[Register::R1HorizontalDisplayed];
+
+                samples.push((status1, condition));
+
+                if crtc.c0_horizontal_counter == 0
+                    && crtc.c4_character_row_counter == 0
+                    && crtc.c9_scan_line_counter == 0
+                {
+                    break;
+                }
+            }
+
+            assert!(
+                samples
+                    .iter()
+                    .all(|(status1, condition)| (status1 & (0x01 << 2) == 0) == *condition)
+            );
+
+            assert_eq!(
+                samples
+                    .iter()
+                    .filter(|(status1, _)| status1 & (0x01 << 2) == 0)
+                    .count(),
+                (crtc.registers[Register::R4VerticalTotal] as usize + 1)
+                    * (crtc.registers[Register::R9MaximumRasterAddress] as usize + 1)
+            );
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_status_1_bits_3_and_4_are_cleared_at_hsync_start_and_end() {
             // ACCC 21.3.4.1: bit 3 is 0 while C0=R2; bit 4 is 0 while C0=R2+R3.
 
             let mut crtc = CrtController::<Type4>::default();
-            todo!()
+            let mut clock = MasterClock::default();
+
+            for (register, value) in CPC_DEFAULTS.iter() {
+                crtc.write_byte(0xbc00, *register);
+                crtc.write_byte(0xbd00, *value);
+            }
+
+            let mut samples = Vec::new();
+            loop {
+                crtc.step(clock.current());
+                clock.step(16);
+
+                // sample after stepping to ignore uninitialized status registers
+                crtc.write_byte(0xbc00, 10);
+                let status1 = crtc.read_byte(0xbf00);
+
+                let condition = crtc.read_horizontal_sync();
+
+                samples.push((status1, condition));
+
+                if crtc.c0_horizontal_counter == 0
+                    && crtc.c4_character_row_counter == 0
+                    && crtc.c9_scan_line_counter == 0
+                {
+                    break;
+                }
+            }
+
+            assert!(samples.windows(2).all(|window| {
+                let (_, before) = window[0];
+                let (status1, condition) = window[1];
+
+                match (before, condition) {
+                    (false, true) => status1 & (0x01 << 3) == 0 && status1 & (0x01 << 4) != 0,
+                    (true, false) => status1 & (0x01 << 3) != 0 && status1 & (0x01 << 4) == 0,
+                    _ => status1 & (0x01 << 3) != 0 && status1 & (0x01 << 4) != 0,
+                }
+            }));
+
+            assert_eq!(
+                samples
+                    .iter()
+                    .filter(|(status1, _)| status1 & (0x01 << 3) == 0)
+                    .count(),
+                (crtc.registers[Register::R4VerticalTotal] as usize + 1)
+                    * (crtc.registers[Register::R9MaximumRasterAddress] as usize + 1)
+            );
+
+            assert_eq!(
+                samples
+                    .iter()
+                    .filter(|(status1, _)| status1 & (0x01 << 4) == 0)
+                    .count(),
+                (crtc.registers[Register::R4VerticalTotal] as usize + 1)
+                    * (crtc.registers[Register::R9MaximumRasterAddress] as usize + 1)
+            );
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_status_1_bit_5_tracks_last_vsync_line() {
             // ACCC 21.3.4.1: bit 5 is 0 on line R3h of the VSYNC (R3h>0), or 1 over 15 lines from the VSYNC start when R3h=0.
 
             let mut crtc = CrtController::<Type4>::default();
-            todo!()
+            let mut clock = MasterClock::default();
+
+            for (register, value) in CPC_DEFAULTS.iter() {
+                crtc.write_byte(0xbc00, *register);
+                crtc.write_byte(0xbd00, *value);
+            }
+
+            let mut samples = Vec::new();
+            loop {
+                crtc.step(clock.current());
+                clock.step(16);
+
+                // sample after stepping to ignore uninitialized status registers
+                crtc.write_byte(0xbc00, 10);
+                let status1 = crtc.read_byte(0xbf00);
+
+                let condition = crtc.active_vsync_scanlines == Type4::vsync_length(&crtc);
+
+                samples.push((status1, condition));
+
+                if crtc.c0_horizontal_counter == 0
+                    && crtc.c4_character_row_counter == 0
+                    && crtc.c9_scan_line_counter == 0
+                {
+                    break;
+                }
+            }
+
+            assert!(
+                samples
+                    .iter()
+                    .all(|(status1, condition)| (status1 & (0x01 << 5) == 0) == *condition)
+            );
+
+            assert_eq!(
+                samples
+                    .iter()
+                    .filter(|(status1, _)| status1 & (0x01 << 5) == 0)
+                    .count(),
+                (crtc.registers[Register::R0HorizontalTotal] as usize + 1)
+            );
+
+            // special case VSYNC length == 16
+            crtc.write_byte(0xbc00, 3);
+            crtc.write_byte(0xbd00, 14);
+
+            let mut samples = Vec::new();
+            loop {
+                crtc.step(clock.current());
+                clock.step(16);
+
+                // sample after stepping to ignore uninitialized status registers
+                crtc.write_byte(0xbc00, 10);
+                let status1 = crtc.read_byte(0xbf00);
+
+                let condition = crtc.active_vsync_scanlines >= Type4::vsync_length(&crtc)
+                    || (crtc.active_vsync_scanlines == 0
+                        && crtc.c4_character_row_counter
+                            >= crtc.registers[Register::R7VerticalSyncPosition]);
+
+                samples.push((status1, condition));
+
+                if crtc.c0_horizontal_counter == 0
+                    && crtc.c4_character_row_counter == 0
+                    && crtc.c9_scan_line_counter == 0
+                {
+                    break;
+                }
+            }
+
+            assert!(
+                samples
+                    .iter()
+                    .all(|(status1, condition)| (status1 & (0x01 << 5) != 0) == *condition)
+            );
+
+            let chars_per_line = crtc.registers[Register::R0HorizontalTotal] as usize + 1;
+            let rows_per_vsync = crtc.registers[Register::R4VerticalTotal] as usize
+                - crtc.registers[Register::R7VerticalSyncPosition] as usize
+                + 1;
+            let lines_per_row = crtc.registers[Register::R9MaximumRasterAddress] as usize + 1;
+            assert_eq!(
+                samples
+                    .iter()
+                    .filter(|(status1, _)| status1 & (0x01 << 5) != 0)
+                    .count(),
+                chars_per_line * (rows_per_vsync * lines_per_row - 15)
+            );
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_status_1_bit_6_is_always_set() {
             // ACCC 21.3.4.1.
 
             let mut crtc = CrtController::<Type4>::default();
-            todo!()
+            let mut clock = MasterClock::default();
+
+            for (register, value) in CPC_DEFAULTS.iter() {
+                crtc.write_byte(0xbc00, *register);
+                crtc.write_byte(0xbd00, *value);
+            }
+
+            loop {
+                crtc.step(clock.current());
+                clock.step(16);
+
+                // sample after stepping to ignore uninitialized status registers
+                crtc.write_byte(0xbc00, 10);
+                let status1 = crtc.read_byte(0xbf00);
+
+                assert!(status1 & (0x01 << 6) != 0);
+
+                if crtc.c0_horizontal_counter == 0
+                    && crtc.c4_character_row_counter == 0
+                    && crtc.c9_scan_line_counter == 0
+                {
+                    break;
+                }
+            }
         }
 
         #[test]
-        #[ignore]
         fn test_type_4_status_1_bit_7_is_cleared_before_vma_low_byte_resets() {
             // ACCC 21.3.4.1: bit 7 is 0 when VMA's low byte is &FF (C0<R0) or when VMA' low byte is &00 at C0=R0.
 
             let mut crtc = CrtController::<Type4>::default();
-            todo!()
+            let mut clock = MasterClock::default();
+
+            for (register, value) in CPC_DEFAULTS.iter() {
+                crtc.write_byte(0xbc00, *register);
+                crtc.write_byte(0xbd00, *value);
+            }
+
+            let mut samples = Vec::new();
+            loop {
+                crtc.step(clock.current());
+                clock.step(16);
+
+                // sample after stepping to ignore uninitialized status registers
+                crtc.write_byte(0xbc00, 10);
+                let status1 = crtc.read_byte(0xbf00);
+
+                let condition =
+                    if crtc.c0_horizontal_counter < crtc.registers[Register::R0HorizontalTotal] {
+                        crtc.video_memory_address & 0x00ff == 0xff
+                    } else {
+                        crtc.video_memory_address_initial & 0x00ff == 0x00
+                    };
+
+                samples.push((status1, condition));
+
+                if crtc.c0_horizontal_counter == 0
+                    && crtc.c4_character_row_counter == 0
+                    && crtc.c9_scan_line_counter == 0
+                {
+                    break;
+                }
+            }
+
+            assert!(
+                samples
+                    .iter()
+                    .all(|(status1, condition)| (status1 & (0x01 << 7) == 0) == *condition)
+            );
         }
 
         #[test]
