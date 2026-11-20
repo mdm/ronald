@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use constants::KeyDefinition;
 use debug::{Snapshottable, breakpoint::BreakpointManager, view::SystemDebugView};
-use system::bus::{StandardBus, crtc::AnyCrtController, gate_array::AnyGateArray};
+use system::bus::{StandardBus, gate_array::AnyGateArray};
 use system::cpu::ZilogZ80;
 use system::instruction::AlgorithmicDecoder;
 use system::memory::AnyMemory;
@@ -27,11 +27,7 @@ pub trait AudioSink {
 }
 
 pub struct Driver {
-    system: AmstradCpc<
-        ZilogZ80<AlgorithmicDecoder>,
-        AnyMemory,
-        StandardBus<AnyCrtController, AnyGateArray>,
-    >,
+    system: AmstradCpc<ZilogZ80<AlgorithmicDecoder>, AnyMemory, StandardBus<AnyGateArray>>,
     keys: HashMap<&'static str, KeyDefinition>,
     breakpoint_manager: BreakpointManager,
     cached_debug_view: Option<SystemDebugView>,
