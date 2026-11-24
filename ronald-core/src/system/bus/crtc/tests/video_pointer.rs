@@ -444,52 +444,299 @@ fn test_type_all_vma_carry_changes_page_when_r12_bits_2_and_3_are_set() {
 }
 
 #[test]
-#[ignore]
 fn test_type_024_r12_r13_update_mid_frame_takes_effect_on_next_frame() {
     // ACCC 20.3.1, 20.3.3, 20.3.4: the pointer is only reloaded when C4=C9=C0=0.
-    todo!()
+
+    for crtc in &mut crtcs!(Type0, Type2, Type4) {
+        let mut clock = MasterClock::default();
+
+        for (register, value) in CPC_DEFAULTS.iter() {
+            crtc.write_byte(0xbc00, *register);
+            crtc.write_byte(0xbd00, *value);
+        }
+
+        loop {
+            crtc.step(clock.current());
+            clock.step(16);
+
+            for (register, value) in [(12, 0xbe), (13, 0xef)].iter() {
+                crtc.write_byte(0xbc00, *register);
+                crtc.write_byte(0xbd00, *value);
+            }
+
+            assert_eq!(
+                dispatch!(crtc, crtc => crtc.video_memory_address == 0xbeef),
+                dispatch!(crtc, crtc => crtc.c0_horizontal_counter == 0
+                        && crtc.c4_character_row_counter == 0
+                        && crtc.c9_scan_line_counter == 0),
+            );
+
+            if dispatch!(crtc, crtc => crtc.c0_horizontal_counter == 0
+                        && crtc.c4_character_row_counter == 0
+                        && crtc.c9_scan_line_counter == 0)
+            {
+                break;
+            }
+        }
+    }
 }
 
 #[test]
-#[ignore]
 fn test_type_014_r12_r13_update_just_before_frame_start_is_used_for_new_frame() {
     // ACCC 20.3.1, 20.3.2, 20.3.4: R12/R13 changes are taken into account immediately; a write before C0=0 of the new frame applies.
-    todo!()
+
+    for crtc in &mut crtcs!(Type0, Type1, Type4) {
+        let mut clock = MasterClock::default();
+
+        for (register, value) in CPC_DEFAULTS.iter() {
+            crtc.write_byte(0xbc00, *register);
+            crtc.write_byte(0xbd00, *value);
+        }
+
+        loop {
+            crtc.step(clock.current());
+            clock.step(16);
+
+            if dispatch!(crtc, crtc => crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal]
+                        && crtc.c4_character_row_counter == crtc.registers[Register::R4VerticalTotal]
+                        && crtc.c9_scan_line_counter == crtc.registers[Register::R9MaximumRasterAddress])
+            {
+                break;
+            }
+        }
+
+        for (register, value) in [(12, 0xbe), (13, 0xef)].iter() {
+            crtc.write_byte(0xbc00, *register);
+            crtc.write_byte(0xbd00, *value);
+        }
+
+        crtc.step(clock.current());
+        clock.step(16);
+
+        assert!(dispatch!(crtc, crtc => crtc.video_memory_address == 0xbeef));
+    }
 }
 
 #[test]
-#[ignore]
 fn test_type_014_r1_above_r0_still_starts_frame_at_r12_r13() {
     // ACCC 17.4.1, 17.4.2: the first line of the frame starts at R12/R13 whatever R1.
-    todo!()
+
+    for crtc in &mut crtcs!(Type0, Type1, Type4) {
+        let mut clock = MasterClock::default();
+
+        for (register, value) in CPC_DEFAULTS
+            .iter()
+            .chain([(1, 64), (12, 0xbe), (13, 0xef)].iter())
+        {
+            crtc.write_byte(0xbc00, *register);
+            crtc.write_byte(0xbd00, *value);
+        }
+
+        loop {
+            crtc.step(clock.current());
+            clock.step(16);
+
+            if dispatch!(crtc, crtc => crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal]
+                        && crtc.c4_character_row_counter == crtc.registers[Register::R4VerticalTotal]
+                        && crtc.c9_scan_line_counter == crtc.registers[Register::R9MaximumRasterAddress])
+            {
+                break;
+            }
+        }
+
+        crtc.step(clock.current());
+        clock.step(16);
+
+        assert!(dispatch!(crtc, crtc => crtc.video_memory_address == 0xbeef));
+    }
 }
 
 #[test]
-#[ignore]
 fn test_type_1_vma_is_loaded_from_r12_r13_on_every_line_while_c4_is_zero() {
     // ACCC 17.4.2, 20.3.2: VMA (not VMA') is reloaded from R12/R13 at each C0=0 of character row 0, whatever C9.
-    todo!()
+
+    let mut crtc = CrtController::<Type1>::default();
+    let mut clock = MasterClock::default();
+
+    for (register, value) in CPC_DEFAULTS.iter() {
+        crtc.write_byte(0xbc00, *register);
+        crtc.write_byte(0xbd00, *value);
+    }
+
+    let mut r13 = 1;
+    crtc.write_byte(0xbc00, 13);
+    crtc.write_byte(0xbd00, r13);
+    loop {
+        crtc.step(clock.current());
+        clock.step(16);
+
+        if crtc.c0_horizontal_counter == 0
+            && crtc.c4_character_row_counter == 0
+            && crtc.c9_scan_line_counter == 0
+        {
+            break;
+        }
+    }
+
+    loop {
+        crtc.step(clock.current());
+        clock.step(16);
+
+        if crtc.c0_horizontal_counter == 0 && crtc.c4_character_row_counter == 0 {
+            assert_eq!(crtc.video_memory_address, 0x3000 | r13 as u16);
+
+            r13 += 1;
+            crtc.write_byte(0xbc00, 13);
+            crtc.write_byte(0xbd00, r13);
+        }
+
+        if crtc.c0_horizontal_counter == 0
+            && crtc.c4_character_row_counter == 0
+            && crtc.c9_scan_line_counter == 0
+        {
+            break;
+        }
+    }
 }
 
 #[test]
-#[ignore]
 fn test_type_1_r12_r13_can_change_on_every_one_us_line_while_c4_is_zero() {
     // ACCC 20.3.2: with R0=0, the offset can change on each 1 µs line.
-    todo!()
+
+    let mut crtc = CrtController::<Type1>::default();
+    let mut clock = MasterClock::default();
+
+    for (register, value) in CPC_DEFAULTS.iter().chain([(0, 0), (1, 0)].iter()) {
+        crtc.write_byte(0xbc00, *register);
+        crtc.write_byte(0xbd00, *value);
+    }
+
+    let mut r13 = 1;
+    crtc.write_byte(0xbc00, 13);
+    crtc.write_byte(0xbd00, r13);
+    loop {
+        crtc.step(clock.current());
+        clock.step(16);
+
+        if crtc.c0_horizontal_counter == 0
+            && crtc.c4_character_row_counter == 0
+            && crtc.c9_scan_line_counter == 0
+        {
+            break;
+        }
+    }
+
+    loop {
+        crtc.step(clock.current());
+        clock.step(16);
+
+        if crtc.c4_character_row_counter == 0 {
+            assert_eq!(crtc.video_memory_address, 0x3000 | r13 as u16);
+
+            r13 += 1;
+            crtc.write_byte(0xbc00, 13);
+            crtc.write_byte(0xbd00, r13);
+        }
+
+        if crtc.c0_horizontal_counter == 0
+            && crtc.c4_character_row_counter == 0
+            && crtc.c9_scan_line_counter == 0
+        {
+            break;
+        }
+    }
 }
 
 #[test]
-#[ignore]
 fn test_type_1_r1_above_r0_repeats_last_latched_row_after_first_row() {
     // ACCC 17.4.2: row 0 comes from R12/R13, all later rows repeat the frozen VMA'.
-    todo!()
+
+    let mut crtc = CrtController::<Type1>::default();
+    let mut clock = MasterClock::default();
+
+    for (register, value) in CPC_DEFAULTS
+        .iter()
+        .chain([(1, 63 + 1), (12, 0xbe), (13, 0xef)].iter())
+    {
+        crtc.write_byte(0xbc00, *register);
+        crtc.write_byte(0xbd00, *value);
+    }
+
+    let mut latched_row = None;
+    loop {
+        crtc.step(clock.current());
+        clock.step(16);
+
+        if crtc.c0_horizontal_counter == crtc.registers[Register::R0HorizontalTotal]
+            && crtc.c4_character_row_counter == 0
+        {
+            latched_row = Some(crtc.video_memory_address_initial);
+        }
+
+        if crtc.c0_horizontal_counter == 0 {
+            if crtc.c4_character_row_counter == 0 {
+                assert_eq!(crtc.video_memory_address, 0xbeef)
+            } else {
+                assert_eq!(
+                    crtc.video_memory_address,
+                    latched_row.expect("should have been latched after first row (i.e. C4 > 0)")
+                )
+            }
+        }
+
+        if crtc.c0_horizontal_counter == 0
+            && crtc.c4_character_row_counter == 0
+            && crtc.c9_scan_line_counter == 0
+        {
+            break;
+        }
+    }
 }
 
 #[test]
-#[ignore]
 fn test_type_1_r1_raised_above_r0_exactly_at_c0_equal_r1_skips_latch() {
     // ACCC 17.4.2: an R1 update landing exactly on C0=R1 cancels that C0=R1 event; one character later it still latches.
-    todo!()
+
+    // TODO: with better accuracy the register write should be scheduled at exactly C0=R1,
+    // not C0=R1-1. See timing diagrams at the end of ACCC 17.4.2.
+    for (write_at_c0, expected_latched_row) in [(40 - 1, 0x3000 + 40), (40, 0x3000 + 2 * 40)] {
+        let mut crtc = CrtController::<Type1>::default();
+        let mut clock = MasterClock::default();
+
+        for (register, value) in CPC_DEFAULTS.iter() {
+            crtc.write_byte(0xbc00, *register);
+            crtc.write_byte(0xbd00, *value);
+        }
+
+        loop {
+            crtc.step(clock.current());
+            clock.step(16);
+
+            if crtc.c0_horizontal_counter == write_at_c0
+                && crtc.c4_character_row_counter == 1
+                && crtc.c9_scan_line_counter == crtc.registers[Register::R9MaximumRasterAddress]
+            {
+                break;
+            }
+        }
+
+        crtc.write_byte(0xbc00, 1);
+        crtc.write_byte(0xbd00, 63 + 1);
+
+        loop {
+            crtc.step(clock.current());
+            clock.step(16);
+
+            if crtc.c0_horizontal_counter == 0 {
+                if crtc.c4_character_row_counter == 0 {
+                    assert_eq!(crtc.video_memory_address, 0x3000);
+                    break;
+                }
+
+                assert_eq!(crtc.video_memory_address, expected_latched_row);
+            }
+        }
+    }
 }
 
 #[test]
