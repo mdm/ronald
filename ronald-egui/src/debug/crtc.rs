@@ -2,6 +2,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 
 use ronald_core::debug::breakpoint::{AnyBreakpoint, Breakpoint};
+use ronald_core::debug::view::CrtcDebugView;
 use ronald_core::system::bus::crtc::Register as CrtcRegister;
 
 use crate::colors;
@@ -65,7 +66,7 @@ impl CrtcDebugWindow {
     pub fn ui(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         let mut open = self.show;
         egui::Window::new("CRTC Internals")
-            .auto_sized()
+            .resizable(false)
             .open(&mut open)
             .show(ui, |ui| {
                 self.render_crtc_state(ui, debugger);
@@ -83,21 +84,13 @@ impl CrtcDebugWindow {
         ui.heading("CRTC Registers");
 
         egui::Grid::new("crtc_registers_grid")
-            .num_columns(4)
+            .num_columns(7)
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
-                for (i, value) in crtc.registers.iter().enumerate() {
+                for i in 0..18 {
                     let register = CrtcRegister::try_from(i).unwrap();
-                    let is_selected = register == crtc.selected_register;
-
-                    let label = format!("{}:", register);
-                    if is_selected {
-                        ui.colored_label(colors::DARK_YELLOW_GOLD, label);
-                    } else {
-                        ui.label(label);
-                    }
-
-                    ui.monospace(format!("{:02X}", value));
+                    let value = crtc.registers[register];
+                    Self::render_register(ui, register, &format!("{:02X}", value), crtc);
 
                     if (i + 1) % 2 == 0 {
                         ui.end_row();
@@ -106,32 +99,23 @@ impl CrtcDebugWindow {
                     }
                 }
 
-                let register = CrtcRegister::Unused;
-                let is_selected = register == crtc.selected_register;
-
-                let label = format!("{}:", register);
-                if is_selected {
-                    ui.colored_label(colors::DARK_YELLOW_GOLD, label);
-                } else {
-                    ui.label(label);
-                }
-
-                ui.monospace("-");
+                Self::render_register(ui, CrtcRegister::Unused, "-", crtc);
                 ui.separator();
 
-                let register = CrtcRegister::Dummy;
-                let is_selected = register == crtc.selected_register;
-
-                let label = format!("{}:", register);
-                if is_selected {
-                    ui.colored_label(colors::DARK_YELLOW_GOLD, label);
-                } else {
-                    ui.label(label);
-                }
-
-                ui.monospace("-");
+                Self::render_register(ui, CrtcRegister::R31Dummy, "-", crtc);
                 ui.end_row();
             });
+
+        ui.horizontal(|ui| {
+            ui.colored_label(colors::DARK_YELLOW_GOLD, "W");
+            ui.label("write target");
+            ui.separator();
+            ui.colored_label(colors::DODGER_BLUE, "R");
+            ui.label("read target");
+            ui.separator();
+            ui.colored_label(colors::FORREST_GREEN, "RW");
+            ui.label("both");
+        });
 
         ui.add_space(8.0);
 
@@ -162,8 +146,12 @@ impl CrtcDebugWindow {
             .num_columns(2)
             .spacing([10.0, 4.0])
             .show(ui, |ui| {
-                ui.label("Display Start Address:");
-                ui.monospace(format!("{:04X}", crtc.display_start_address));
+                ui.label("Video Memory Address:");
+                ui.monospace(format!("{:04X}", crtc.video_memory_address));
+                ui.end_row();
+
+                ui.label("Video Memory Address':");
+                ui.monospace(format!("{:04X}", crtc.video_memory_address_initial));
                 ui.end_row();
 
                 ui.label("Current Address:");
@@ -203,6 +191,33 @@ impl CrtcDebugWindow {
         });
     }
 
+    fn render_register(
+        ui: &mut egui::Ui,
+        register: CrtcRegister,
+        value: &str,
+        crtc: &CrtcDebugView,
+    ) {
+        let is_read = crtc.selected_register_read == register;
+        let is_write = crtc.selected_register_write == register;
+
+        let label = format!("{}:", register);
+        let (color, tag) = match (is_read, is_write) {
+            (true, true) => (colors::FORREST_GREEN, "RW"),
+            (false, true) => (colors::DARK_YELLOW_GOLD, "W"),
+            (true, false) => (colors::DODGER_BLUE, "R"),
+            (false, false) => {
+                ui.label(label);
+                ui.monospace(value);
+                ui.label("");
+                return;
+            }
+        };
+
+        ui.colored_label(color, label);
+        ui.monospace(value);
+        ui.colored_label(color, tag);
+    }
+
     fn render_breakpoints_section(&mut self, ui: &mut egui::Ui, debugger: &mut impl Debugger) {
         ui.heading("CRTC Breakpoints");
 
@@ -235,7 +250,7 @@ impl CrtcDebugWindow {
                                     Some(reg),
                                     format!("{}", reg),
                                 );
-                                let reg = CrtcRegister::Dummy;
+                                let reg = CrtcRegister::R31Dummy;
                                 ui.selectable_value(
                                     &mut self.register_write_register,
                                     Some(reg),
@@ -808,7 +823,7 @@ mod gui_tests {
                     matches!(
                         bp,
                         AnyBreakpoint::CrtcRegisterWrite(CrtcRegisterWriteBreakpoint {
-                            register: Some(CrtcRegister::VerticalTotal),
+                            register: Some(CrtcRegister::R4VerticalTotal),
                             value: None,
                             ..
                         })
